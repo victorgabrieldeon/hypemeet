@@ -21,6 +21,8 @@
   --color-soft: #a0a2b8;
   /* Functional only: leave, mute, errors, LIVE. */
   --color-danger: #f0384c;
+  /* Functional only: degraded state (poor connection). */
+  --color-warn: #f5a524;
 
   --radius-xs: 6px;
   --radius-sm: 10px;
@@ -159,6 +161,39 @@
 @keyframes horizon-drift {
   from { transform: rotate(-17deg); }
   to { transform: rotate(-14deg) translateY(-2%); }
+}
+
+/*
+ * Floating reactions: the outer box rises through the tile (cqh = tile height; the layer is a size
+ * container) and the inner one sways side to side. Duration is set inline per emoji.
+ */
+@utility reaction-rise {
+  animation: reaction-rise 2800ms linear forwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation-name: reaction-fade;
+  }
+}
+@utility reaction-sway {
+  animation: reaction-sway 900ms ease-in-out infinite alternate;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes reaction-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.3); }
+  8% { opacity: 1; transform: translateY(-6cqh) scale(1.2); }
+  16% { transform: translateY(-12cqh) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-80cqh) scale(0.85); }
+}
+@keyframes reaction-fade {
+  0%, 100% { opacity: 0; }
+  10%, 70% { opacity: 1; }
+}
+@keyframes reaction-sway {
+  from { transform: translateX(calc(var(--sway) * -1)) rotate(-6deg); }
+  to { transform: translateX(var(--sway)) rotate(6deg); }
 }
 
 @utility scrollbar-thin {

@@ -3,7 +3,15 @@ import { useEffect, useRef } from "react";
 import { volumeKey } from "./model";
 import { useVolumes } from "./volume";
 
-export function VideoView({ track, mirror, fit }: { track: Track; mirror?: boolean; fit: "cover" | "contain" }) {
+interface VideoViewProps {
+  track: Track;
+  mirror?: boolean;
+  fit: "cover" | "contain";
+  /** Called with the picture's width/height when its first frame arrives and whenever it changes. */
+  onAspect?: (aspect: number) => void;
+}
+
+export function VideoView({ track, mirror, fit, onAspect }: VideoViewProps) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const el = ref.current!;
@@ -12,6 +20,14 @@ export function VideoView({ track, mirror, fit }: { track: Track; mirror?: boole
       track.detach(el);
     };
   }, [track]);
+  useEffect(() => {
+    if (!onAspect) return;
+    const el = ref.current!;
+    const update = () => el.videoWidth && el.videoHeight && onAspect(el.videoWidth / el.videoHeight);
+    update();
+    el.addEventListener("resize", update);
+    return () => el.removeEventListener("resize", update);
+  }, [onAspect]);
   return (
     <video
       ref={ref}

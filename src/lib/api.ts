@@ -11,6 +11,14 @@ export interface JoinGrant {
   room: RoomInfo;
 }
 
+export interface PresentPerson {
+  identity: string;
+  name: string;
+}
+
+/** Room code → people connected right now. Empty rooms are absent. */
+export type Presence = Record<string, PresentPerson[]>;
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -39,6 +47,7 @@ export const api = {
   createRoom: (name: string) =>
     request<RoomInfo>("/api/rooms", { method: "POST", body: JSON.stringify({ name }) }),
   getRoom: (code: string) => request<RoomInfo>(`/api/rooms/${encodeURIComponent(code)}`),
+  presence: (codes: string[]) => request<Presence>(`/api/presence?codes=${codes.map(encodeURIComponent).join(",")}`),
   joinRoom: (code: string, nickname: string) =>
     request<JoinGrant>("/api/token", { method: "POST", body: JSON.stringify({ code, nickname }) }),
 };

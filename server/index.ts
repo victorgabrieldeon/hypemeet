@@ -1,5 +1,6 @@
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, ParticipantInfo_State, RoomServiceClient } from "livekit-server-sdk";
 import { join } from "node:path";
+import { createLinkPreviews } from "./preview";
 import { NAME_MAX, openRoomStore } from "./rooms";
 
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -16,8 +17,14 @@ if (PRODUCTION) {
 const LIVEKIT_URL = process.env.LIVEKIT_URL ?? null;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY ?? "devkey";
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? "secret";
+// Server → LiveKit API (presence). Defaults to the public URL; set it to skip the proxy (e.g. http://livekit:7880).
+const LIVEKIT_HOST = process.env.LIVEKIT_HOST ?? LIVEKIT_URL ?? "http://localhost:7880";
+const PRESENCE_MAX_ROOMS = 30;
+
+const livekit = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
 const rooms = openRoomStore(DB_PATH);
+const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: rooms.get });
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -35,11 +42,12 @@ function cleanText(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
 }
 
-async function serveStatic(pathname: string): Promise<Response> {
+async function serveStatic(req: Request): Promise<Response> {
+  const { pathname } = new URL(req.url);
   const file = Bun.file(join(DIST_DIR, pathname));
   // Path traversal guard: resolved path must stay inside dist.
   if (pathname !== "/" && !pathname.includes("..") && (await file.exists())) return new Response(file);
-  return new Response(Bun.file(join(DIST_DIR, "index.html")));
+  return previews.homePage(req);
 }
 
 Bun.serve({
@@ -57,6 +65,37 @@ Bun.serve({
       GET(req) {
         const room = rooms.get(req.params.code);
         return room ? json(room) : error("Sala não encontrada", 404);
+      },
+    },
+    // Who is in each room right now, keyed by code. Rooms with nobody inside are omitted.
+    "/api/presence": {
+      async GET(req) {
+        const codes = [
+          ...new Set(
+            (new URL(req.url).searchParams.get("codes") ?? "")
+              .split(",")
+              .map((c) => rooms.get(c)?.code)
+              .filter((c): c is string => !!c),
+          ),
+        ].slice(0, PRESENCE_MAX_ROOMS);
+        if (!codes.length) return json({});
+        try {
+          // One call finds the live rooms; participants are only fetched for those with someone inside.
+          const live = (await livekit.listRooms(codes)).filter((r) => r.numParticipants > 0);
+          const entries = await Promise.all(
+            live.map(async (r) => {
+              const people = (await livekit.listParticipants(r.name))
+                .filter((p) => p.state !== ParticipantInfo_State.DISCONNECTED)
+                .sort((a, b) => Number(a.joinedAt - b.joinedAt))
+                .map((p) => ({ identity: p.identity, name: p.name || p.identity.split("#")[0] }));
+              return [r.name, people] as const;
+            }),
+          );
+          return json(Object.fromEntries(entries.filter(([, people]) => people.length)));
+        } catch (err) {
+          console.error("presence lookup failed:", err);
+          return error("LiveKit indisponível", 502);
+        }
       },
     },
     "/api/token": {
@@ -79,15 +118,21 @@ Bun.serve({
           canPublish: true,
           canSubscribe: true,
           canPublishData: true,
+          // Participant attributes carry shared state (the watch party lives on its host's).
+          canUpdateOwnMetadata: true,
         });
         return json({ token: await token.toJwt(), url: LIVEKIT_URL, room });
       },
     },
     "/api/*": () => error("Not found", 404),
+    // Link previews (Open Graph). The images also work in dev, straight from this port.
+    "/og.png": () => previews.homeImage(),
+    "/r/:code/og.png": (req) => previews.roomImage(req.params.code),
+    "/r/:code": (req) => (PRODUCTION ? previews.roomPage(req, req.params.code) : error("Not found", 404)),
   },
   fetch(req) {
     if (!PRODUCTION) return error("Not found", 404);
-    return serveStatic(new URL(req.url).pathname);
+    return serveStatic(req);
   },
 });
 

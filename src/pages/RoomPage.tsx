@@ -7,6 +7,7 @@ import { api, type JoinGrant, type RoomInfo } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
 import { loadNickname, rememberRoom, saveNickname } from "../lib/storage";
 import { deviceRoomOptions } from "../room/devices";
+import { RoomChat } from "../room/chat";
 import { RoomView } from "../room/RoomView";
 import { VolumeProvider } from "../room/volume";
 import { playCue } from "../room/sounds";
@@ -191,7 +192,7 @@ function LiveRoom({
   onLeave: () => void;
   onRejoin: () => void;
 }) {
-  const [room, setRoom] = useState<Room | null>(null);
+  const [session, setSession] = useState<{ room: Room; chat: RoomChat } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -201,19 +202,21 @@ function LiveRoom({
       webAudioMix: true, // routes audio through a GainNode so per-listener volume can go above 100%
       ...deviceRoomOptions(), // start on the mic/camera/speaker picked last time
     });
+    const chat = new RoomChat(instance);
     let cancelled = false;
     instance
       // Screens are opt-in: useSubscriptions picks what to receive.
       .connect(grant.url ?? location.origin.replace(/^http/, "ws"), grant.token, { autoSubscribe: false })
       .then(() => {
         if (cancelled) return;
-        setRoom(instance);
+        setSession({ room: instance, chat });
         playCue("join");
       })
       .catch((err: Error) => !cancelled && setError(err.message));
     return () => {
       cancelled = true;
       void instance.disconnect();
+      chat.dispose();
     };
   }, [grant]);
 
@@ -236,7 +239,7 @@ function LiveRoom({
     );
   }
 
-  if (!room) {
+  if (!session) {
     return (
       <div className="grid h-full place-items-center">
         <div className="flex flex-col items-center gap-4 text-soft">
@@ -248,7 +251,7 @@ function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={room} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} />
+      <RoomView room={session.room} chat={session.chat} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} />
     </VolumeProvider>
   );
 }

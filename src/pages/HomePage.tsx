@@ -2,6 +2,7 @@ import { ArrowRight, Clock, Download, Hash, Plus, Trash2, UserRound } from "luci
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CallPreview } from "../components/CallPreview";
+import { UpdateButton } from "../components/UpdateButton";
 import {
   Avatar,
   Button,
@@ -14,9 +15,10 @@ import {
   headerLinkClass,
   inputClass,
 } from "../components/ui";
-import { api } from "../lib/api";
+import { api, type PresentPerson } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
 import { IS_DESKTOP_APP } from "../lib/downloads";
+import { usePresence } from "../lib/presence";
 import { forgetRoom, loadNickname, rememberRoom, saveNickname, useSavedRooms } from "../lib/storage";
 
 const relativeTime = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
@@ -29,11 +31,37 @@ function timeAgo(ts: number): string {
   return relativeTime.format(Math.round(hours / 24), "day");
 }
 
+const PRESENCE_AVATARS = 3;
+
+/** "3 pessoas agora" with the first faces stacked; names on hover. */
+function RoomPresence({ people }: { people: PresentPerson[] }) {
+  const extra = people.length - PRESENCE_AVATARS;
+  const ring = "ring-2 ring-panel transition group-hover:ring-surface";
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-sm" title={people.map((p) => p.name).join(", ")}>
+      <div className="flex -space-x-1.5" aria-hidden>
+        {people.slice(0, PRESENCE_AVATARS).map((p) => (
+          <Avatar key={p.identity} name={p.name} size="xs" className={ring} />
+        ))}
+        {extra > 0 && (
+          <span className={`grid size-6 place-items-center rounded-full bg-surface-hi text-[0.625rem] font-bold ${ring}`}>
+            +{extra}
+          </span>
+        )}
+      </div>
+      <span className="font-semibold text-blurple-hi">
+        {people.length} {people.length === 1 ? "pessoa" : "pessoas"} agora
+      </span>
+    </div>
+  );
+}
+
 type Mode = "create" | "join";
 
 export function HomePage() {
   const navigate = useNavigate();
   const savedRooms = useSavedRooms();
+  const presence = usePresence(savedRooms.map((r) => r.code));
   const [nickname, setNickname] = useState(loadNickname);
   const [mode, setMode] = useState<Mode>("create");
   const [roomName, setRoomName] = useState("");
@@ -90,7 +118,9 @@ export function HomePage() {
     <div className="aurora min-h-full">
       <header className="mx-auto flex max-w-[1240px] items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
         <Logo />
-        {!IS_DESKTOP_APP && (
+        {IS_DESKTOP_APP ? (
+          <UpdateButton />
+        ) : (
           <Link to="/baixar" className={headerLinkClass} aria-label="Baixar app" title="Baixar app">
             <Download className="size-4" />
             <span className="hidden sm:inline">Baixar app</span>
@@ -121,6 +151,7 @@ export function HomePage() {
                         <Clock className="size-3.5" /> {timeAgo(room.lastJoinedAt)}
                       </span>
                     </p>
+                    {presence[room.code] && <RoomPresence people={presence[room.code]} />}
                   </div>
                   <button
                     onClick={() => forgetRoom(room.code)}

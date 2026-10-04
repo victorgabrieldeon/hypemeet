@@ -13,10 +13,30 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   prioriza resolução). Trocar numa tela já no ar ajusta captura, encoder e bitrate sem reabrir o seletor.
 - **Escolher microfone, câmera e saída de áudio** nos chevrons dos botões; a escolha fica salva.
 - Fixar (duplo clique) e tela cheia por tile.
+- **Desenhar na tela de quem transmite**: lápis no tile da tela → caneta ou seta por cima da imagem,
+  e um clique sem arrastar solta um "ping". Todo mundo que assiste aquela tela vê na hora (data channel
+  do LiveKit, tópico `ink`), cada pessoa com sua cor. Os traços somem sozinhos uns segundos depois,
+  já que a imagem embaixo continua mudando. Esc sai do modo desenho.
 - **Entra mutado**: microfone e câmera começam desligados no lobby.
 - **Tela só sob demanda**: a tela de outra pessoa aparece com "Ver transmissão" e só começa a
   chegar (vídeo + som) quando você clica; "Parar de assistir" no tile corta de novo.
 - **Sons da sala**: alguém entrou/saiu, você entrou/saiu, tela começou/parou, mic ligado/mutado.
+- **Assistir junto** (pipoca na barra): link do YouTube ou vídeo do computador tocando sincronizado
+  pra todo mundo, com play/pause/avanço compartilhados ("Pausado por Fulano"). Cada um toca no próprio
+  player, então sai mais leve que transmitir a tela e em qualidade original. Volume é só seu;
+  "Minimizar" volta pras telas sem parar o som. Atalhos com o player focado: espaço/K, ←/→ (5 s), J/L (10 s), F, M.
+- **Chat de texto**: mensagens, links clicáveis e imagens (colar, arrastar ou escolher). Vai direto
+  pelo data channel do LiveKit, sem passar pelo servidor nem ficar salvo: quem chega depois recebe o
+  histórico de quem está há mais tempo na sala, e tudo some quando a sala esvazia.
+- **Soundboard** (botão de megafone na barra): airhorn, BRUH, boom, tum dum tss, trombone triste e
+  grilos, sintetizados na hora como os sons da sala e mixados no seu microfone — a galera ouve pela sua
+  voz, e você ouve uma cópia na sua saída de áudio. Um som por vez (outro clique corta o anterior). Com
+  o mic desligado/mutado (inclusive push-to-talk solto) o som só toca pra você, porque o servidor não
+  repassa áudio de mic mutado.
+- **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
+  sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
+  porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
+  `http://localhost:3001/r/<código>/og.png`. Emojis vêm do Twemoji (jsDelivr): sem internet, só eles somem.
 
 ## Stack
 
@@ -63,6 +83,7 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | --- | --- | --- |
 | `LIVEKIT_URL` | dev: mesma origem via proxy `/rtc` | URL **pública** que o navegador usa (`wss://`). Obrigatória em produção |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | dev: `devkey` / `secret` | Mesmas chaves do servidor LiveKit. Obrigatórias em produção |
+| `LIVEKIT_HOST` | `LIVEKIT_URL` (dev: `http://localhost:7880`) | URL que o servidor usa para consultar a API do LiveKit (quem está online). Em produção dá para apontar direto para a rede interna, ex. `http://livekit:7880` |
 | `PORT` | `3001` | |
 | `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite das salas |
 
@@ -94,6 +115,13 @@ produção ou do `dev:lan`) numa janela própria e adiciona o que a aba do naveg
 - **Áudio do sistema** junto da tela. No Windows e no macOS (14.2+) o som da própria chamada fica de
   fora; no Linux não dá pra excluir, então vem desligado e o seletor avisa do eco. No Wayland o
   seletor é o do sistema (portal do PipeWire), que não pergunta de áudio: o app pergunta logo depois.
+- **Pressione para falar** com o jogo em foco: no menu do microfone (setinha ao lado do botão), liga e
+  escolhe uma tecla ou botão do mouse (meio ou laterais). Segurar abre o microfone, soltar fecha; com
+  o microfone já aberto a tecla não faz nada. A tecla continua chegando ao jogo. Usa
+  [`uiohook-napi`](https://github.com/SnosMe/uiohook-napi), que só fica ativo com a opção ligada e uma
+  sala aberta (o `globalShortcut` do Electron não avisa quando a tecla é solta). No Linux depende do
+  X11: no Wayland só pega as teclas com uma janela X11/XWayland em foco (a maioria dos jogos, Steam
+  e Proton). No macOS pede a permissão de Acessibilidade.
 - Segue rodando minimizado (sem throttling) e abre links externos no navegador.
 
 ```bash
@@ -120,10 +148,37 @@ A lista de arquivos vive em `src/lib/downloads.ts` e vale para o site e para o s
 uma versão nova, suba `version` em `desktop/package.json`; rodar de novo na mesma versão substitui
 os arquivos.
 
+**Atualização dentro do app.** O app checa a release mais recente ao abrir e a cada 4 h (ou em
+**HypeMeet → Verificar atualizações…**). Instalador do Windows, AppImage e `.deb` baixam a versão nova
+em segundo plano e mostram **Atualizar** no topo da tela inicial: um clique reinicia já atualizado (no
+`.deb` o sistema pede a senha). Sem o clique, ela é instalada ao fechar o app (menos no `.deb`). macOS
+(assinatura ad-hoc não deixa trocar o app sozinho), `.exe` portátil e `.tar.gz` mostram **Baixar
+atualização**, que abre o arquivo novo no navegador. O feed são os `latest.yml`/`latest-linux.yml` que o
+`desktop:build` gera e o `desktop:publish` sobe junto, então publique sempre Windows e Linux juntos.
+Versões anteriores à 0.2.0 não têm o atualizador: quem estiver nelas precisa baixar uma vez pelo site.
+
 Servidor usado, em ordem: `--server=<url>` na linha de comando → `HYPEMEET_URL` → o salvo pelo app →
 o `--url` do build. Sem nenhum, o app pede o endereço; depois dá pra trocar em **HypeMeet → Trocar
 servidor…** (Alt mostra o menu). Servidor com certificado autoassinado (`dev:lan`): o app mostra a
 impressão digital e oferece **Confiar neste certificado**, fixado só para aquele host.
+
+## Como o assistir junto funciona
+
+Nenhum vídeo passa pelo LiveKit: só o estado da reprodução (`src/room/watch.ts`).
+
+- **Estado** no atributo `watch` de quem começou (o host): fonte, tocando/pausado, posição e o
+  horário em que ela foi medida, no relógio do host. Quem entra depois lê o atributo e já cai no ponto certo.
+- **Controles** de qualquer pessoa viram uma RPC (`watch.action`) pro host, que aplica e republica.
+  Por isso o token dá `canUpdateOwnMetadata`.
+- **Relógio**: cada um mede a diferença pro relógio do host com algumas RPCs `watch.clock` (fica a
+  de menor ida e volta). O player de cada um, inclusive o do host, segue o estado: dá play/pause
+  pra bater e faz seek se desviar mais que 1 s (YouTube) ou 0,4 s (arquivo).
+- **Host saiu**: quem está há mais tempo na sala assume o último estado, então a sessão continua.
+- **Vídeo do computador**: cada pessoa abre a própria cópia (o app pede pelo nome e tamanho); nada é
+  enviado. Começa pausado pra dar tempo de todo mundo abrir o arquivo. Formatos: o que o navegador
+  tocar (MP4 H.264/AAC e WebM em todo lugar; MKV depende do codec).
+- **YouTube**: IFrame Player API com os controles do YouTube escondidos (cliques no vídeo passam
+  pelos nossos controles). Vídeos com incorporação desativada pelo dono não tocam.
 
 ## Como as várias telas funcionam
 
@@ -142,6 +197,14 @@ A sala conecta com `autoSubscribe: false`: microfones e câmeras são assinados 
 segue a escolha feita para o vídeo, inclusive se for publicado depois.
 
 O volume acima de 100% usa `webAudioMix` do LiveKit (GainNode por trilha).
+
+### Qualidade da conexão
+
+As barrinhas ao lado de cada nome são a `connectionQuality` que o servidor LiveKit calcula pra cada
+pessoa (3 = excelente, 2 = boa, 1 âmbar = ruim, vermelho = caiu). Passando o mouse numa tela aparece
+o que está realmente indo/chegando, medido via `getStats()` a cada segundo: resolução e fps da maior
+camada ativa e o bitrate somado. Quem compartilha vê "Ninguém assistindo · envio pausado" quando o
+dynacast desliga todas as camadas.
 
 ## Limitações de áudio da tela (do navegador, não do app)
 

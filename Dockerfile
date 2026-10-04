@@ -11,6 +11,8 @@ ENV NODE_ENV=production PORT=3001 DB_PATH=/app/data/hypemeet.db
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 COPY server ./server
+# The link-preview card draws the logo from here.
+COPY public ./public
 COPY --from=build /app/dist ./dist
 EXPOSE 3001
 CMD ["bun", "server/index.ts"]

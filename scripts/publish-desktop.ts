@@ -7,9 +7,9 @@
 //   bun run desktop:publish
 //
 // Re-running for the same version replaces the assets. Needs `gh` logged in.
-import { linkSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { linkSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { DESKTOP_FILES, DESKTOP_PLATFORMS, RELEASES_REPO } from "../src/lib/downloads";
+import { DESKTOP_FILES, DESKTOP_PLATFORMS, RELEASES_REPO, UPDATE_FEEDS } from "../src/lib/downloads";
 
 const DESKTOP = join(import.meta.dir, "..", "desktop");
 const RELEASE_DIR = join(DESKTOP, "release");
@@ -38,6 +38,26 @@ const assets = DESKTOP_FILES.map((file) => {
   linkSync(join(RELEASE_DIR, built.get(file)!), path);
   return path;
 });
+
+// The in-app updater reads these; point them at the version-less names published above.
+for (const feed of UPDATE_FEEDS) {
+  let text: string;
+  try {
+    text = readFileSync(join(RELEASE_DIR, feed), "utf8");
+  } catch {
+    fail(`falta ${feed}: gere os builds com bun run desktop:build`);
+  }
+  if (!new RegExp(`^version: ${version.replaceAll(".", "\\.")}$`, "m").test(text)) {
+    fail(`${feed} não é da versão ${version}: gere os builds de novo`);
+  }
+  const renamed = text.replace(/^(\s*-?\s*(?:url|path): )(.+)$/gm, (_, key: string, file: string) => {
+    const published = file.replace(`-${version}`, "");
+    if (!DESKTOP_FILES.includes(published)) fail(`${feed} cita ${file}, que não é publicado`);
+    return key + published;
+  });
+  writeFileSync(join(staging, feed), renamed);
+  assets.push(join(staging, feed));
+}
 
 async function gh(args: string[], quiet = false) {
   if (!quiet) console.log(`\n$ gh ${args.join(" ")}`);

@@ -3,23 +3,30 @@ import {
   Check,
   Copy,
   Link2,
+  Megaphone,
+  MessageSquare,
   Mic,
   MicOff,
   MonitorUp,
   PhoneOff,
+  Popcorn,
+  SmilePlus,
   Users,
   Video,
   VideoOff,
   Volume2,
   WifiOff,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button, LogoMark, Spinner } from "../components/ui";
 import type { RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
+import { usePttState } from "../lib/ptt";
+import type { RoomChat } from "./chat";
+import { ChatPanel } from "./ChatPanel";
 import { RoomAudio } from "./media";
-import { loadScreenPrefs, saveScreenPrefs } from "./devices";
-import { DeviceMenu, MenuChevron, useDismiss } from "./menus";
+import { loadNoiseFilter, loadScreenPrefs, saveNoiseFilter, saveScreenPrefs } from "./devices";
+import { DeviceMenu, MenuChevron, MenuSection, MenuToggle, useDismiss } from "./menus";
 import {
   buildTiles,
   SCREEN_AUDIO_COPY,
@@ -29,8 +36,16 @@ import {
   useSubscriptions,
   type TileModel,
 } from "./model";
+import { canSuppressNoise, useNoiseFilter } from "./noise";
+import { PushToTalkSection, usePushToTalk } from "./pushToTalk";
+import { InkProvider } from "./ink";
+import { ReactionBar, ReactionsProvider, reactionTarget, useReactions } from "./reactions";
 import { ScreenPanel } from "./ScreenPanel";
+import { SoundboardPanel } from "./SoundboardPanel";
 import { Stage } from "./Stage";
+import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
+import { WatchPanel } from "./WatchPanel";
+import { WatchPlayer } from "./WatchPlayer";
 import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
@@ -89,13 +104,14 @@ function ControlButton({
 
 interface RoomViewProps {
   room: Room;
+  chat: RoomChat;
   info: RoomInfo;
   initialDevices: { mic: boolean; camera: boolean };
   onLeave: () => void;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
+export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -107,8 +123,44 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
   const [screensOpen, setScreensOpen] = useState(false);
   const screensRef = useRef<HTMLDivElement>(null);
   useDismiss(screensRef, screensOpen, () => setScreensOpen(false));
+  const reactions = useReactions(room);
+  const [reactionsOpen, setReactionsOpen] = useState(false);
+  const reactionsRef = useRef<HTMLDivElement>(null);
+  useDismiss(reactionsRef, reactionsOpen, () => setReactionsOpen(false));
+  const [soundsOpen, setSoundsOpen] = useState(false);
+  const soundsRef = useRef<HTMLDivElement>(null);
+  useDismiss(soundsRef, soundsOpen, () => setSoundsOpen(false));
+  const watch = useWatchParty(room);
+  const [watchOpen, setWatchOpen] = useState(false);
+  const watchRef = useRef<HTMLDivElement>(null);
+  useDismiss(watchRef, watchOpen, () => setWatchOpen(false));
+  // Our copy of the video for a file session, tagged with the source it was opened for.
+  const [watchFile, setWatchFile] = useState<{ file: File; key: string } | null>(null);
+  const watchKey = watch.party ? sourceKey(watch.party.state.source) : null;
+  const watchId = watch.party?.state.id;
+  // A session starting (here or by someone else) takes the stage; minimizing it is up to each viewer.
+  useEffect(() => {
+    if (watchId) setPinnedId(WATCH_TILE_ID);
+  }, [watchId]);
   const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const chatState = useSyncExternalStore(chat.subscribe, chat.getSnapshot);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  useEffect(() => chat.setVisible(chatOpen), [chat, chatOpen]);
+
+  // Ping for messages nobody is looking at: panel closed or window in the background.
+  useEffect(() => chat.onIncoming(() => (!chat.isVisible || document.hidden) && playCue("message")), [chat]);
+
+  const [noiseFilter, setNoiseFilter] = useState(loadNoiseFilter);
+  useNoiseFilter(local, noiseFilter, (err) => {
+    // Back off so the switch doesn't claim a filter that isn't running.
+    setNoiseFilter(false);
+    saveNoiseFilter(false);
+    setToast({ text: `Não deu pra ativar a supressão de ruído: ${(err as Error)?.message ?? err}`, tone: "error" });
+  });
+  const ptt = usePttState();
+  usePushToTalk(local, ptt, (e) => setToast({ text: deviceError(e, "o microfone"), tone: "error" }));
 
   useEffect(() => {
     if (!toast) return;
@@ -137,6 +189,7 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
   const myScreens = tiles.filter(
     (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
   );
+  const reactionTargetTile = reactionTarget(tiles, pinnedId);
   const micOn = local.isMicrophoneEnabled;
   const cameraOn = local.isCameraEnabled;
   const state = room.state;
@@ -243,21 +296,65 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
         </button>
       )}
 
-      <Stage tiles={tiles} pinnedId={pinnedId} onPin={setPinnedId} />
+      <ReactionsProvider value={reactions}>
+        <div className="relative flex min-h-0 flex-1 gap-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+            {/* Outside the stage so pinning/minimizing never reloads it; hidden, it keeps playing. */}
+            {watch.party && watchKey && (
+              <WatchPlayer
+                key={`${watch.party.state.id}:${watchKey}`}
+                party={watch.party}
+                watch={watch}
+                file={watchFile?.key === watchKey ? watchFile.file : null}
+                onPickFile={(file) => setWatchFile({ file, key: watchKey })}
+                onMinimize={() => setPinnedId(null)}
+                onError={(text) => setToast({ text, tone: "error" })}
+                className={pinnedId === WATCH_TILE_ID ? "min-h-0 flex-1" : "hidden"}
+              />
+            )}
+            <InkProvider room={room}>
+              <Stage tiles={tiles} watch={watch.party} pinnedId={pinnedId} onPin={setPinnedId} />
+            </InkProvider>
+          </div>
+          <ChatPanel
+            chat={chat}
+            state={chatState}
+            open={chatOpen}
+            onClose={() => setChatOpen(false)}
+            onError={(text) => setToast({ text, tone: "error" })}
+          />
+        </div>
+      </ReactionsProvider>
 
       <footer className="relative mx-auto flex items-center gap-2 rounded-full border border-line bg-panel p-2 shadow-float sm:gap-3 sm:p-2.5">
         <div className="relative">
-          <ControlButton on={micOn} busy={busy === "mic"} onClick={toggleMic} label={micOn ? "Desligar microfone" : "Ligar microfone"}>
+          <ControlButton on={micOn} busy={busy === "mic"} onClick={toggleMic} label={micOn ? "Desligar microfone" : ptt?.enabled && ptt.binding ? `Ligar microfone (ou segure ${ptt.binding})` : "Ligar microfone"}>
             {micOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
           </ControlButton>
           <MenuChevron label="Microfone e saída de áudio">
             {(close) => (
-              <DeviceMenu
-                room={room}
-                kinds={["audioinput", "audiooutput"]}
-                close={close}
-                onError={(text) => setToast({ text, tone: "error" })}
-              />
+              <>
+                <DeviceMenu
+                  room={room}
+                  kinds={["audioinput", "audiooutput"]}
+                  close={close}
+                  onError={(text) => setToast({ text, tone: "error" })}
+                />
+                {canSuppressNoise && (
+                  <MenuSection title="Processamento">
+                    <MenuToggle
+                      label="Supressão de ruído"
+                      hint="Corta teclado, ventilador e barulho de fundo"
+                      checked={noiseFilter}
+                      onChange={(on) => {
+                        setNoiseFilter(on);
+                        saveNoiseFilter(on);
+                      }}
+                    />
+                  </MenuSection>
+                )}
+                {ptt && <PushToTalkSection ptt={ptt} />}
+              </>
             )}
           </MenuChevron>
         </div>
@@ -306,6 +403,77 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
             />
           )}
         </div>
+        {/* Stays open after a pick so you can spam reactions; anchored to the footer like the screens panel. */}
+        <div ref={reactionsRef} className="contents">
+          <ControlButton
+            tone="plain"
+            on={reactionsOpen}
+            expanded={reactionsOpen}
+            onClick={() => setReactionsOpen(!reactionsOpen)}
+            label="Reagir"
+          >
+            <SmilePlus className="size-5" />
+          </ControlButton>
+          {reactionsOpen && reactionTargetTile && (
+            <div className="absolute bottom-full left-1/2 z-40 mb-3 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 animate-pop rounded-lg bg-panel p-2 shadow-float ring-1 ring-line">
+              <ReactionBar target={reactionTargetTile} onReact={(emoji) => reactions.send(emoji, reactionTargetTile.id)} />
+            </div>
+          )}
+        </div>
+        <div ref={watchRef} className="contents">
+          <ControlButton
+            tone="plain"
+            on={!!watch.party || watchOpen}
+            expanded={watchOpen}
+            onClick={() => setWatchOpen(!watchOpen)}
+            label="Assistir junto"
+          >
+            <Popcorn className="size-5" />
+          </ControlButton>
+          {watchOpen && (
+            <WatchPanel
+              watch={watch}
+              onFileChosen={(file) =>
+                setWatchFile({ file, key: sourceKey({ kind: "file", name: file.name, size: file.size }) })
+              }
+              onDone={() => setWatchOpen(false)}
+              onError={(text) => setToast({ text, tone: "error" })}
+            />
+          )}
+        </div>
+        <div ref={soundsRef} className="contents">
+          <ControlButton
+            tone="plain"
+            on={soundsOpen}
+            expanded={soundsOpen}
+            onClick={() => setSoundsOpen(!soundsOpen)}
+            label="Soundboard"
+          >
+            <Megaphone className="size-5" />
+          </ControlButton>
+          {soundsOpen && (
+            <SoundboardPanel
+              mic={local.getTrackPublication(Track.Source.Microphone)?.audioTrack}
+              micOn={micOn}
+              onEnableMic={() => void toggleMic()}
+              onError={(text) => setToast({ text, tone: "error" })}
+            />
+          )}
+        </div>
+        <ControlButton
+          tone="plain"
+          on={chatOpen}
+          expanded={chatOpen}
+          onClick={() => setChatOpen(!chatOpen)}
+          label={chatOpen ? "Fechar chat" : "Abrir chat"}
+        >
+          <MessageSquare className="size-5" />
+          {!chatOpen && chatState.unread > 0 && (
+            <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-blurple px-1 text-[11px] font-bold text-ink ring-2 ring-panel">
+              {chatState.unread > 9 ? "9+" : chatState.unread}
+            </span>
+          )}
+        </ControlButton>
         <button
           onClick={() => {
             playCue("leave");

@@ -7,12 +7,17 @@ files:
   - package.json
   - main.js
   - preload.js
+  - updater.js
+  - ptt.js
   - icon.png
   - pages/**
 icon: icon.png
 # The UI is in pt-BR; dropping the other ~50 Chromium locales saves ~40 MB.
 # Windows/Linux name them pt-BR.pak; macOS uses pt_BR.lproj.
 electronLanguages: [pt-BR, pt_BR, en-US]
+# uiohook-napi (push-to-talk) ships N-API binaries for every OS/arch and picks one at runtime, so
+# there's nothing to rebuild; a rebuild would try to compile it for the target, which fails cross-OS.
+npmRebuild: false
 
 win:
   target: [nsis, portable]
@@ -32,6 +37,9 @@ linux:
   synopsis: Salas com várias telas, câmera e áudio
   maintainer: HypeMeet <hypemeet@localhost>
   artifactName: ${productName}-${version}-${arch}.${ext}
+deb:
+  # electron-builder's defaults plus libxt6, which the push-to-talk hook links against.
+  depends: [libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0, libxt6]
 
 # Only the .app here: scripts/build-desktop.ts ad-hoc signs and zips it. electron-builder can't sign
 # outside macOS, and its zip flattens the framework symlinks (doubling the size, breaking the seal).

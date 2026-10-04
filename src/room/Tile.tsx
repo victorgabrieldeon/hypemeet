@@ -7,10 +7,13 @@ import {
   type TrackPublication,
 } from "livekit-client";
 import {
+  Activity,
   EyeOff,
   Maximize,
   MicOff,
   MonitorUp,
+  MoveUpRight,
+  Pencil,
   Pin,
   PinOff,
   Play,
@@ -19,10 +22,14 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Avatar, Spinner } from "../components/ui";
+import { useInk, type InkTool } from "./ink";
+import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
 import { volumeKey, watchScreen, type TileModel } from "./model";
+import { ConnectionBars, formatBitrate, useVideoStats } from "./quality";
+import { ReactionLayer } from "./reactions";
 import { MAX_VOLUME, useVolumes } from "./volume";
 
 function VolumeControl({ participant, pub, label }: { participant: Participant; pub: TrackPublication; label: string }) {
@@ -74,7 +81,43 @@ function Pill({ children }: { children: ReactNode }) {
   );
 }
 
-function IconButton({ onClick, label, children }: { onClick: () => void; label: string; children: ReactNode }) {
+/** Live fps / bitrate / resolution of a screen; only mounted while hovered, so it only polls then. */
+function ScreenStats({ track, isLocal }: { track: Track; isLocal: boolean }) {
+  const stats = useVideoStats(track);
+  let text;
+  if (!stats) text = "Medindo…";
+  // Dynacast pauses every layer of a screen nobody is watching.
+  else if (stats.bitrate === 0) text = isLocal ? "Ninguém assistindo · envio pausado" : "Nada chegando";
+  else
+    text = [
+      stats.width ? `${stats.width}×${stats.height}` : null,
+      `${Math.round(stats.fps)} fps`,
+      formatBitrate(stats.bitrate),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  return (
+    <Pill>
+      <Activity className="size-3.5 shrink-0" />
+      <span className="truncate tabular-nums" title={isLocal ? "O que você está enviando" : "O que está chegando pra você"}>
+        {isLocal ? "Enviando" : "Recebendo"} {text}
+      </span>
+    </Pill>
+  );
+}
+
+function IconButton({
+  onClick,
+  label,
+  active,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  /** Set on toggles: lit Blurple while on. */
+  active?: boolean;
+  children: ReactNode;
+}) {
   return (
     <button
       onClick={(e) => {
@@ -82,12 +125,63 @@ function IconButton({ onClick, label, children }: { onClick: () => void; label: 
         onClick();
       }}
       onDoubleClick={(e) => e.stopPropagation()}
-      className="grid size-9 place-items-center rounded-full bg-black/65 text-ink backdrop-blur-md transition hover:bg-black/85"
+      className={`grid size-9 place-items-center rounded-full text-ink backdrop-blur-md transition ${active ? "bg-blurple hover:brightness-110" : "bg-black/65 hover:bg-black/85"}`}
       aria-label={label}
+      aria-pressed={active}
       title={label}
     >
       {children}
     </button>
+  );
+}
+
+const INK_TOOLS: { tool: InkTool; icon: typeof Pencil; label: string }[] = [
+  { tool: "pen", icon: Pencil, label: "Caneta" },
+  { tool: "arrow", icon: MoveUpRight, label: "Seta" },
+];
+
+/** Shown while drawing on a screen: pick pen or arrow, or put the tool down. */
+function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkTool | null) => void }) {
+  const ink = useInk();
+  return (
+    <div
+      role="toolbar"
+      aria-label="Desenhar na tela"
+      className="flex items-center gap-0.5 rounded-full bg-black/70 p-1 backdrop-blur-md"
+      onDoubleClick={(e) => e.stopPropagation()}
+    >
+      <span
+        className="mx-1.5 size-3 shrink-0 rounded-full ring-2 ring-white/25"
+        style={{ background: ink.color }}
+        title="Sua cor: é assim que os outros veem seus desenhos"
+      />
+      <span className="hidden pr-1.5 text-xs whitespace-nowrap text-ink/70 @2xl:inline">
+        Arraste pra desenhar · clique pra pingar
+      </span>
+      {INK_TOOLS.map(({ tool: value, icon: Icon, label }) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={tool === value}
+          aria-label={label}
+          title={label}
+          onClick={() => onChange(value)}
+          className={`grid size-8 place-items-center rounded-full transition ${tool === value ? "bg-blurple text-ink" : "text-ink/80 hover:bg-white/15 hover:text-ink"}`}
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
+      <span className="mx-0.5 h-5 w-px bg-white/15" />
+      <button
+        type="button"
+        aria-label="Parar de desenhar"
+        title="Parar de desenhar (Esc)"
+        onClick={() => onChange(null)}
+        className="grid size-8 place-items-center rounded-full text-ink/80 transition hover:bg-white/15 hover:text-ink"
+      >
+        <X className="size-4" />
+      </button>
+    </div>
   );
 }
 
@@ -100,9 +194,20 @@ interface TileProps {
 
 export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [hovered, setHovered] = useState(false);
   const { participant } = tile;
   const isLocal = participant.isLocal;
   const name = participant.name || participant.identity;
+  // Screen tiles only: the picture's aspect (to line ink up with it) and the tool in hand, if drawing.
+  const [aspect, setAspect] = useState<number | null>(null);
+  const [inkTool, setInkTool] = useState<InkTool | null>(null);
+
+  useEffect(() => {
+    if (!inkTool) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setInkTool(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inkTool]);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -137,6 +242,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           <Pill>
             {!micOn && <MicOff className="size-3.5 shrink-0 text-danger" />}
             <span className="truncate">{isLocal ? `${name} (você)` : name}</span>
+            <ConnectionBars quality={participant.connectionQuality} />
           </Pill>
         </div>
         <div className={`${overlayBase} top-2 right-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
@@ -145,6 +251,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </IconButton>
         </div>
+        <ReactionLayer tileId={tile.id} compact={compact} />
       </div>
     );
   }
@@ -154,11 +261,15 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const title = isLocal ? `Sua ${screenLabel}` : `${number ? `Tela ${number}` : "Tela"} de ${name}`;
   // Remote screens aren't received until the listener asks for them (see useSubscriptions).
   const watching = isLocal || (video as RemoteTrackPublication).isDesired;
+  const showing = watching && !!video.track;
+  const tool = showing && !compact ? inkTool : null;
   return (
     <div
       ref={ref}
       onDoubleClick={onTogglePin}
-      className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black"
     >
       {!watching ? (
         <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
@@ -174,20 +285,33 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           </button>
         </div>
       ) : video.track ? (
-        <VideoView track={video.track} fit="contain" />
+        <VideoView track={video.track} fit="contain" onAspect={setAspect} />
       ) : (
         <div className="grid size-full place-items-center text-soft">
           <Spinner />
         </div>
       )}
-      <div className={`${overlayBase} top-2 left-2 max-w-[calc(100%-1rem)]`}>
-        <Pill>
-          <MonitorUp className="size-3.5 shrink-0" />
-          <span className="truncate">{title}</span>
-          {audio && <Volume2 className="size-3.5 shrink-0 text-ink/75" aria-label="com áudio" />}
-        </Pill>
+      {showing && <InkLayer screen={video.trackSid} aspect={aspect} tool={tool} />}
+      <div className={`${overlayBase} top-2 left-2 ${tool ? "max-w-[calc(50%-1rem)]" : "max-w-[calc(100%-1rem)]"}`}>
+        <div className="flex min-w-0 flex-col items-start gap-1.5">
+          <Pill>
+            <MonitorUp className="size-3.5 shrink-0" />
+            <span className="truncate">{title}</span>
+            {audio && <Volume2 className="size-3.5 shrink-0 text-ink/75" aria-label="com áudio" />}
+            <ConnectionBars quality={participant.connectionQuality} />
+          </Pill>
+          {hovered && !compact && watching && video.track && <ScreenStats track={video.track} isLocal={isLocal} />}
+        </div>
       </div>
-      <div className={`${overlayBase} right-2 bottom-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
+      {tool && (
+        <div className={`${overlayBase} top-2 right-2`}>
+          <InkToolbar tool={tool} onChange={setInkTool} />
+        </div>
+      )}
+      {/* Spans the tile's width: let presses on the gaps through to the ink canvas underneath. */}
+      <div
+        className={`${overlayBase} pointer-events-none right-2 bottom-2 left-2 flex-wrap justify-end *:pointer-events-auto ${hoverOnly}`}
+      >
         {!isLocal && watching && audio && (
           <VolumeControl participant={participant} pub={audio} label={`${screenLabel} de ${name}`} />
         )}
@@ -212,12 +336,22 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
         <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
           {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
         </IconButton>
+        {showing && !compact && (
+          <IconButton
+            onClick={() => setInkTool(inkTool ? null : "pen")}
+            label={inkTool ? "Parar de desenhar" : "Desenhar na tela"}
+            active={!!inkTool}
+          >
+            <Pencil className="size-4" />
+          </IconButton>
+        )}
         {watching && (
           <IconButton onClick={toggleFullscreen} label="Tela cheia">
             <Maximize className="size-4" />
           </IconButton>
         )}
       </div>
+      <ReactionLayer tileId={tile.id} compact={compact} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { RELEASES_URL } from "../src/lib/downloads";
 
 const DESKTOP = join(import.meta.dir, "..", "desktop");
 
@@ -85,6 +86,11 @@ await run(["bun", "install"]);
 
 const builderArgs = [
   ...(server ? [`-c.extraMetadata.hypemeetUrl=${server}`] : []),
+  // Update feed: the app reads releasesUrl, electron-builder writes latest*.yml for this provider.
+  `-c.extraMetadata.releasesUrl=${RELEASES_URL}`,
+  "-c.publish.provider=generic",
+  `-c.publish.url=${RELEASES_URL}`,
+  "--publish=never",
   // .deb metadata requires a homepage; the server is it. `.invalid` is the RFC 2606 "none" TLD.
   `-c.extraMetadata.homepage=${server ?? "https://hypemeet.invalid"}`,
 ];

@@ -62,26 +62,28 @@ export function Avatar({
  name,
  size = "md",
  shape = "circle",
+ className = "",
 }: {
  name: string;
- size?: "sm" | "md" | "lg";
+ size?: "xs" | "sm" | "md" | "lg";
  /** square = server-icon style, used for rooms. */
  shape?: "circle" | "square";
+ className?: string;
 }) {
  const initials =
   name
    .split(/\s+/)
    .filter(Boolean)
-   .slice(0, 2)
+   .slice(0, size === "xs" ? 1 : 2)
    .map((p) => p[0]!.toUpperCase())
    .join("") || "?";
  let hash = 0;
  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
  const fill = AVATAR_FILLS[Math.abs(hash) % AVATAR_FILLS.length];
- const sizes = { sm: "size-9 text-sm", md: "size-12 text-base", lg: "size-24 text-3xl" };
+ const sizes = { xs: "size-6 text-[0.625rem]", sm: "size-9 text-sm", md: "size-12 text-base", lg: "size-24 text-3xl" };
  return (
   <div
-   className={`grid shrink-0 place-items-center font-display font-bold text-ink ${shape === "square" ? "rounded-md" : "rounded-full"} ${fill} ${sizes[size]}`}
+   className={`grid shrink-0 place-items-center font-display font-bold text-ink ${shape === "square" ? "rounded-md" : "rounded-full"} ${fill} ${sizes[size]} ${className}`}
   >
    {initials}
   </div>

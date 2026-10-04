@@ -23,6 +23,10 @@ const CUES = {
   [783.99, 0, 0.1],
   [523.25, 0.08, 0.18],
  ],
+ message: [
+  [987.77, 0, 0.07],
+  [1318.51, 0.05, 0.14],
+ ],
 } satisfies Record<string, [number, number, number][]>;
 
 export type Cue = keyof typeof CUES;
@@ -33,11 +37,8 @@ const VOLUME = 0.12;
 let ctx: (AudioContext & { setSinkId(sinkId: string): Promise<void> }) | null = null;
 let sink = "";
 
-/**
- * Synthesised rather than shipped as files: no assets to load, plays instantly. Goes to the speaker
- * picked in the device menu, like the call audio.
- */
-export function playCue(cue: Cue) {
+/** Context for sounds only we hear; goes to the speaker picked in the device menu, like the call audio. */
+export function cueContext(): AudioContext {
  ctx ??= new AudioContext() as NonNullable<typeof ctx>;
  const speaker = canPickSpeaker ? (loadDevice("audiooutput") ?? "") : "";
  if (speaker !== sink) {
@@ -46,6 +47,12 @@ export function playCue(cue: Cue) {
   void ctx.setSinkId(speaker).catch(() => { });
  }
  void ctx.resume();
+ return ctx;
+}
+
+/** Synthesised rather than shipped as files: no assets to load, plays instantly. */
+export function playCue(cue: Cue) {
+ const ctx = cueContext();
  const start = ctx.currentTime + 0.01;
  for (const [freq, offset, duration] of CUES[cue]) {
   const osc = ctx.createOscillator();

@@ -6,6 +6,7 @@ export type DeviceKind = "audioinput" | "videoinput" | "audiooutput";
 const deviceKey = (kind: DeviceKind) => `hypemeet:device:${kind}`;
 const SCREEN_MODE_KEY = "hypemeet:screen-mode";
 const SCREEN_AUDIO_KEY = "hypemeet:screen-audio";
+const NOISE_FILTER_KEY = "hypemeet:noise-filter";
 
 export function saveDevice(kind: DeviceKind, deviceId: string) {
  localStorage.setItem(deviceKey(kind), deviceId);
@@ -45,3 +46,7 @@ export function saveScreenPrefs(prefs: ScreenPrefs) {
  localStorage.setItem(SCREEN_MODE_KEY, prefs.mode);
  localStorage.setItem(SCREEN_AUDIO_KEY, prefs.audio ? "on" : "off");
 }
+
+/** Off by default: RNNoise can colour voices a little, so it's opt-in. */
+export const loadNoiseFilter = () => localStorage.getItem(NOISE_FILTER_KEY) === "on";
+export const saveNoiseFilter = (on: boolean) => localStorage.setItem(NOISE_FILTER_KEY, on ? "on" : "off");

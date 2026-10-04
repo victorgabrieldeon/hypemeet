@@ -49,7 +49,13 @@ export const DESKTOP_PLATFORMS: Record<DesktopOS, DesktopPlatform> = {
 
 export const DESKTOP_FILES = Object.values(DESKTOP_PLATFORMS).flatMap((p) => p.builds.map((b) => b.file));
 
-export const downloadUrl = (file: string) => `https://github.com/${RELEASES_REPO}/releases/latest/download/${file}`;
+/** Also the desktop app's update feed (latest.yml, latest-linux.yml). */
+export const RELEASES_URL = `https://github.com/${RELEASES_REPO}/releases/latest/download`;
+
+export const downloadUrl = (file: string) => `${RELEASES_URL}/${file}`;
+
+/** Update metadata electron-builder writes next to the builds; published along with them. */
+export const UPDATE_FEEDS = ["latest.yml", "latest-linux.yml"];
 
 /** The packaged app loads this same site; it has nothing to download. */
 export const IS_DESKTOP_APP = /\bElectron\//.test(navigator.userAgent);

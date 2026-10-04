@@ -1,11 +1,14 @@
 // HypeMeet desktop: a Chromium shell around a HypeMeet server. The UI and API stay on the server;
-// this process adds what a browser tab can't: a native screen picker and system-audio capture.
+// this process adds what a browser tab can't: a native screen picker, system-audio capture and a
+// push-to-talk key that works with another app in focus.
 const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const pkg = require("./package.json");
+const { createPushToTalk } = require("./ptt");
+const { createUpdater } = require("./updater");
 
 const IS_WINDOWS = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
@@ -299,6 +302,45 @@ ipcMain.handle("setup:connect", async (event, raw, trustFingerprint) => {
   return { ok: true };
 });
 
+// ---- Updates -------------------------------------------------------------------------------
+
+const updater = createUpdater({
+  getWindow: () => mainWindow,
+  broadcast: (state) => mainWindow?.webContents.send("update:state", state),
+});
+
+/** The server's pages get the update button; nothing else from main. */
+const isServerFrame = (frame) => !!frame && isServerUrl(frame.url);
+
+ipcMain.handle("update:state", (event) => (isServerFrame(event.senderFrame) ? updater.state() : null));
+ipcMain.handle("update:check", (event) => (isServerFrame(event.senderFrame) ? updater.check() : null));
+ipcMain.on("update:apply", (event) => {
+  if (isServerFrame(event.senderFrame)) updater.apply();
+});
+
+// ---- Push-to-talk --------------------------------------------------------------------------
+
+const ptt = createPushToTalk({
+  readConfig,
+  writeConfig,
+  broadcast: (state) => mainWindow?.webContents.send("ptt:state", state),
+  onPress: (pressed) => mainWindow?.webContents.send("ptt:press", pressed),
+});
+
+ipcMain.handle("ptt:state", (event) => (isServerFrame(event.senderFrame) ? ptt.state() : null));
+ipcMain.on("ptt:enable", (event, on) => {
+  if (isServerFrame(event.senderFrame)) ptt.setEnabled(on);
+});
+ipcMain.on("ptt:capture", (event, on) => {
+  if (isServerFrame(event.senderFrame)) ptt.capture(on);
+});
+ipcMain.on("ptt:capture-key", (event, code) => {
+  if (isServerFrame(event.senderFrame)) ptt.captureDomKey(code);
+});
+ipcMain.on("ptt:listen", (event, on) => {
+  if (isServerFrame(event.senderFrame)) ptt.listen(on);
+});
+
 // ---- App -----------------------------------------------------------------------------------
 
 function buildMenu() {
@@ -308,6 +350,9 @@ function buildMenu() {
       submenu: [
         { label: "Trocar servidor…", click: () => showSetup() },
         { label: "Voltar ao início", accelerator: "Alt+Home", click: () => openServer() },
+        { type: "separator" },
+        { label: "Verificar atualizações…", click: () => updater.checkFromMenu() },
+        { label: `Versão ${app.getVersion()}`, enabled: false },
         { type: "separator" },
         { role: "quit", label: "Sair" },
       ],
@@ -369,6 +414,9 @@ function createMainWindow() {
     event.preventDefault();
     showSetup(`${server} redirecionou para ${new URL(url).origin}. Confira o endereço do servidor.`);
   });
+  // A reload or a new page drops the room without unmounting it: stop listening for its key.
+  webContents.on("did-navigate", () => ptt.stop());
+  webContents.on("render-process-gone", () => ptt.stop());
   webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // -3 = ERR_ABORTED: a navigation replaced this one, not a failure.
     if (!isMainFrame || code === -3 || !isServerUrl(url)) return;
@@ -398,7 +446,9 @@ if (!app.requestSingleInstanceLock()) {
 
     Menu.setApplicationMenu(buildMenu());
     createMainWindow();
+    updater.start();
   });
 
   app.on("window-all-closed", () => app.quit());
+  app.on("will-quit", () => ptt.stop());
 }
