@@ -1,0 +1,33 @@
+appId: app.hypemeet.desktop
+productName: HypeMeet
+copyright: HypeMeet
+directories:
+  output: release
+files:
+  - package.json
+  - main.js
+  - preload.js
+  - icon.png
+  - pages/**
+icon: icon.png
+# The UI is in pt-BR; dropping the other ~50 Chromium locales saves ~40 MB.
+electronLanguages: [pt-BR, en-US]
+
+win:
+  target: [nsis, portable]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+linux:
+  target: [AppImage, deb]
+  executableName: hypemeet
+  # .desktop file named after package.json desktopName, so docks match it to the running window.
+  syncDesktopName: true
+  category: Network
+  synopsis: Salas com várias telas, câmera e áudio
+  maintainer: HypeMeet <hypemeet@localhost>
+  artifactName: ${productName}-${version}-${arch}.${ext}

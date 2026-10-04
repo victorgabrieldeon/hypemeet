@@ -1,0 +1,21 @@
+{
+  "name": "hypemeet-desktop",
+  "productName": "HypeMeet",
+  "desktopName": "hypemeet.desktop",
+  "version": "0.1.0",
+  "description": "HypeMeet para desktop: salas com várias telas, câmera e áudio",
+  "author": "HypeMeet",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "trustedDependencies": ["electron"],
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}

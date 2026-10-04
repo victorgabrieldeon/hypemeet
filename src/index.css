@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/hanken-grotesk";
+
+/* Near-black indigo canvas, inset panels, one Blurple accent, violet light for atmosphere. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Hanken Grotesk Variable", "Inter Variable", ui-sans-serif, sans-serif;
+
+  --color-canvas: #07070c;
+  --color-panel: #0c0c14;
+  --color-surface: #11111b;
+  --color-surface-hi: #191926;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-blurple: #5865f2;
+  --color-blurple-hi: #8b93ff;
+  --color-glow: #7457ff;
+  --color-ink: #ffffff;
+  --color-ink-dark: #07070c;
+  /* Secondary text; ≥7:1 on canvas/panel, ≥6:1 on surface-hi. */
+  --color-soft: #a0a2b8;
+  /* Functional only: leave, mute, errors, LIVE. */
+  --color-danger: #f0384c;
+
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 28px;
+
+  --shadow-float: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+  /* Violet rim + bloom for the hero/lobby cards. */
+  --shadow-glow: 0 0 0 1px rgb(124 108 255 / 0.2), 0 40px 120px -30px rgb(116 87 255 / 0.55);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 260ms var(--ease-out-expo);
+  --animate-pop: pop 320ms var(--ease-out-expo);
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgb(88 101 242 / 0.55);
+    color: var(--color-ink);
+  }
+  input {
+    caret-color: var(--color-blurple-hi);
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-blurple-hi);
+    outline-offset: 3px;
+  }
+  html {
+    scrollbar-color: var(--color-surface-hi) var(--color-canvas);
+  }
+}
+
+@utility type-heading-sm {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+@utility type-link {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+@utility type-link-sm {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* Small tracked caps for panel labels. */
+@utility type-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/*
+ * Two glowing planet-horizon rims sweeping across the canvas. Each pseudo-element is a huge dark
+ * ellipse whose top edge carries a violet light; only the rim is ever on screen.
+ */
+@utility aurora {
+  position: relative;
+  /* clip, not hidden: hidden boxes stay programmatically scrollable, so focus could shift the page sideways. */
+  overflow: clip;
+  isolation: isolate;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    background: var(--color-canvas);
+    pointer-events: none;
+  }
+  &::before {
+    width: 190vmax;
+    height: 120vmax;
+    left: -20vmax;
+    top: 62%;
+    border-top: 1.5px solid rgb(150 132 255 / 0.85);
+    box-shadow:
+      0 -24px 90px -6px rgb(116 87 255 / 0.5),
+      inset 0 36px 70px -36px rgb(116 87 255 / 0.55);
+    transform: rotate(-17deg);
+    transform-origin: 50% 0;
+    animation: horizon-drift 32s ease-in-out infinite alternate;
+  }
+  &::after {
+    width: 110vmax;
+    height: 110vmax;
+    left: 74%;
+    top: 6%;
+    border-top: 1.5px solid rgb(150 132 255 / 0.7);
+    box-shadow:
+      0 -20px 70px -10px rgb(116 87 255 / 0.4),
+      inset 0 30px 60px -32px rgb(116 87 255 / 0.4);
+    transform: rotate(-28deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      animation: none;
+    }
+  }
+}
+
+@keyframes horizon-drift {
+  from { transform: rotate(-17deg); }
+  to { transform: rotate(-14deg) translateY(-2%); }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-hi) transparent;
+}
+
+/* Range input as a slim Blurple slider; --fill is set inline (0–100%). */
+@utility range-accent {
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-blurple) 0,
+    var(--color-blurple-hi) var(--fill, 50%),
+    rgb(255 255 255 / 0.18) var(--fill, 50%)
+  );
+  outline: none;
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: white;
+    box-shadow: 0 1px 6px rgb(0 0 0 / 0.4);
+  }
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 999px;
+    background: white;
+  }
+}

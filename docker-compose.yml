@@ -1,0 +1,7 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    # --dev: API key "devkey" / secret "secret", UDP mux on 7882. Not for production.
+    command: --dev --bind 0.0.0.0
+    network_mode: host
+    restart: unless-stopped

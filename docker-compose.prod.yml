@@ -1,0 +1,34 @@
+# Production stack (Dokploy). Env: LIVEKIT_DOMAIN, LIVEKIT_NODE_IP, LIVEKIT_API_KEY, LIVEKIT_API_SECRET.
+# Domains (HTTPS via Traefik): app → port 3001, livekit → port 7880 (signaling over wss).
+# Media bypasses Traefik: 7881/tcp (ICE over TCP) and 7882/udp (UDP mux) must be open on the host.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      LIVEKIT_URL: wss://${LIVEKIT_DOMAIN}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    volumes:
+      - hypemeet-data:/app/data
+
+  livekit:
+    image: livekit/livekit-server:v1.13.7
+    restart: unless-stopped
+    command: --bind 0.0.0.0
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          node_ip: ${LIVEKIT_NODE_IP}
+          use_external_ip: false
+        keys:
+          ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+    ports:
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+
+volumes:
+  hypemeet-data:

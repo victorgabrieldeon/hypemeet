@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:" />
+    <title>HypeMeet</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="setup">
+    <form class="card" id="form" novalidate>
+      <img src="../icon.png" alt="" />
+      <div>
+        <h1>Conectar ao HypeMeet</h1>
+        <p class="soft">Cole o endereço do servidor onde o HypeMeet está rodando.</p>
+      </div>
+      <input id="server" type="url" placeholder="https://meet.seudominio.com" autocomplete="url" spellcheck="false" required autofocus />
+      <p class="error" id="error" role="alert"></p>
+      <p class="soft fingerprint" id="fingerprint" hidden></p>
+      <div class="row">
+        <button class="btn" id="back" type="button" hidden>Voltar</button>
+        <button class="btn" id="trust" type="button" hidden>Confiar neste certificado</button>
+        <button class="btn primary" id="submit" type="submit">Conectar</button>
+      </div>
+    </form>
+    <script src="setup.js"></script>
+  </body>
+</html>

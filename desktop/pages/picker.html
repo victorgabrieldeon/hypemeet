@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:" />
+    <title>Compartilhar tela</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="picker">
+    <header>
+      <h1>O que você quer compartilhar?</h1>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-kind="screen" aria-selected="true">Telas</button>
+        <button type="button" role="tab" data-kind="window" aria-selected="false">Janelas</button>
+      </div>
+    </header>
+    <main class="grid" id="grid" aria-live="polite">
+      <p class="empty soft">Carregando…</p>
+    </main>
+    <footer>
+      <label class="audio" id="audio" hidden>
+        <input id="audio-on" type="checkbox" />
+        <span>Compartilhar o áudio do sistema</span>
+        <small id="audio-hint"></small>
+      </label>
+      <div class="row">
+        <button class="btn" id="cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="share" type="button" disabled>Compartilhar</button>
+      </div>
+    </footer>
+    <script src="picker.js"></script>
+  </body>
+</html>
