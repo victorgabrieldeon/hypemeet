@@ -10,18 +10,18 @@ const VARIANTS: Record<Variant, string> = {
  danger: "bg-danger text-ink hover:brightness-110",
 };
 
+/** Classes of <Button>, for links that must look like one. */
+export function buttonClass({ variant = "ghost", square = false }: { variant?: Variant; square?: boolean } = {}) {
+ return `type-link inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md transition duration-200 ease-out-expo active:translate-y-px disabled:opacity-50 ${square ? "w-12" : "px-5"} ${VARIANTS[variant]}`;
+}
+
 export function Button({
  variant = "ghost",
  square = false,
  className = "",
  ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; /** icon-only, 1:1 */ square?: boolean }) {
- return (
-  <button
-   {...props}
-   className={`type-link inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md transition duration-200 ease-out-expo active:translate-y-px disabled:opacity-50 ${square ? "w-12" : "px-5"} ${VARIANTS[variant]} ${className}`}
-  />
- );
+ return <button {...props} className={`${buttonClass({ variant, square })} ${className}`} />;
 }
 
 export function LogoMark({ className = "size-9" }: { className?: string }) {

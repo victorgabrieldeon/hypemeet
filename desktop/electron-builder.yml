@@ -11,7 +11,8 @@ files:
   - pages/**
 icon: icon.png
 # The UI is in pt-BR; dropping the other ~50 Chromium locales saves ~40 MB.
-electronLanguages: [pt-BR, en-US]
+# Windows/Linux name them pt-BR.pak; macOS uses pt_BR.lproj.
+electronLanguages: [pt-BR, pt_BR, en-US]
 
 win:
   target: [nsis, portable]
@@ -23,7 +24,7 @@ portable:
   artifactName: ${productName}-${version}-portable.${ext}
 
 linux:
-  target: [AppImage, deb]
+  target: [AppImage, deb, tar.gz]
   executableName: hypemeet
   # .desktop file named after package.json desktopName, so docks match it to the running window.
   syncDesktopName: true
@@ -31,3 +32,13 @@ linux:
   synopsis: Salas com várias telas, câmera e áudio
   maintainer: HypeMeet <hypemeet@localhost>
   artifactName: ${productName}-${version}-${arch}.${ext}
+
+# Only the .app here: scripts/build-desktop.ts ad-hoc signs and zips it. electron-builder can't sign
+# outside macOS, and its zip flattens the framework symlinks (doubling the size, breaking the seal).
+mac:
+  target: dir
+  category: public.app-category.social-networking
+  extendInfo:
+    NSCameraUsageDescription: O HypeMeet usa a câmera quando você a liga na sala.
+    NSMicrophoneUsageDescription: O HypeMeet usa o microfone quando você fala na sala.
+    NSAudioCaptureUsageDescription: O HypeMeet captura o áudio do computador quando você compartilha a tela com som.

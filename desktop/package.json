@@ -13,7 +13,6 @@
     "start": "electron .",
     "dist": "electron-builder"
   },
-  "trustedDependencies": ["electron"],
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3"

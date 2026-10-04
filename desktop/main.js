@@ -8,10 +8,12 @@ const { pathToFileURL } = require("node:url");
 const pkg = require("./package.json");
 
 const IS_WINDOWS = process.platform === "win32";
+const IS_MAC = process.platform === "darwin";
 // On Wayland the PipeWire portal is the picker: getSources() opens it and returns the chosen source.
 const IS_WAYLAND = process.platform === "linux" && process.env.XDG_SESSION_TYPE === "wayland";
-// Only Windows can drop our own playout (the room's voices) from loopback; on Linux it echoes back.
-const LOOPBACK_EXCLUDES_SELF = IS_WINDOWS;
+// Windows and macOS (14.2+, CoreAudio tap) can drop our own playout (the room's voices) from
+// loopback; on Linux it echoes back.
+const LOOPBACK_EXCLUDES_SELF = IS_WINDOWS || IS_MAC;
 const BACKGROUND = "#07070c";
 const ICON = path.join(__dirname, "icon.png");
 const PAGES = path.join(__dirname, "pages");
@@ -226,8 +228,15 @@ async function probe(origin) {
   probeSession.setCertificateVerifyProc(verifyCertificate);
   try {
     const res = await probeSession.fetch(`${origin}/api/rooms/__desktop_probe__`, {
+      redirect: "manual",
       signal: AbortSignal.timeout(8000),
     });
+    // The window refuses cross-origin redirects, so catch them here (e.g. http → https).
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      const target = location ? new URL(location, origin).origin : "outro endereço";
+      return { error: `${origin} redireciona para ${target}: confira o endereço do servidor.` };
+    }
     const body = await res.json().catch(() => null);
     return body && typeof body.error === "string" ? null : { error: "Esse endereço não parece um servidor HypeMeet" };
   } catch (error) {
@@ -287,6 +296,8 @@ function buildMenu() {
         { role: "quit", label: "Sair" },
       ],
     },
+    // macOS routes Cmd+C/V/X/A/Z through the Edit menu; without it text fields lose those shortcuts.
+    ...(IS_MAC ? [{ role: "editMenu", label: "Editar" }] : []),
     {
       label: "Exibir",
       submenu: [
@@ -334,6 +345,13 @@ function createMainWindow() {
     if (isServerUrl(url) || url.startsWith(PAGES_URL)) return;
     event.preventDefault();
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
+  });
+  // Server-side redirects skip will-navigate. A server that bounces elsewhere (parked domain,
+  // login wall) must not get the window, its camera permissions or the screen picker.
+  webContents.on("will-redirect", (event, url, _inPlace, isMainFrame) => {
+    if (!isMainFrame || isServerUrl(url)) return;
+    event.preventDefault();
+    showSetup(`${server} redirecionou para ${new URL(url).origin}. Confira o endereço do servidor.`);
   });
   webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // -3 = ERR_ABORTED: a navigation replaced this one, not a failure.

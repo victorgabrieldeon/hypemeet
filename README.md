@@ -84,26 +84,40 @@ Variáveis do compose no Dokploy: `LIVEKIT_DOMAIN`, `LIVEKIT_NODE_IP` (IP públi
 `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres). As portas 7881/tcp e 7882/udp precisam
 estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio não chegam.
 
-## App desktop (Windows / Linux)
+## App desktop (Windows / macOS / Linux)
 
 `desktop/` empacota o HypeMeet em Electron: o app abre o front do **seu servidor** (o mesmo de
 produção ou do `dev:lan`) numa janela própria e adiciona o que a aba do navegador não tem:
 
 - **Seletor de tela nativo** (telas e janelas com miniatura), uma vez por tela compartilhada.
-- **Áudio do sistema** junto da tela. No Windows o som da própria chamada fica de fora; no Linux não
-  dá pra excluir, então vem desligado e o seletor avisa do eco. No Wayland o seletor é o do sistema
-  (portal do PipeWire) e não há áudio do sistema.
+- **Áudio do sistema** junto da tela. No Windows e no macOS (14.2+) o som da própria chamada fica de
+  fora; no Linux não dá pra excluir, então vem desligado e o seletor avisa do eco. No Wayland o
+  seletor é o do sistema (portal do PipeWire) e não há áudio do sistema.
 - Segue rodando minimizado (sem throttling) e abre links externos no navegador.
 
 ```bash
 bun run desktop                                        # roda local; pede o servidor na 1ª vez
 bun run desktop:build --url https://meet.seudominio.com            # pacote do sistema atual
-bun run desktop:build --url https://meet.seudominio.com --linux --win
+bun run desktop:build --url https://meet.seudominio.com --linux --win --mac
+bun run desktop:publish                                # sobe os builds como GitHub Release
 ```
 
 Saída em `desktop/release/`: `HypeMeet-Setup-<versão>.exe` (instalador), `HypeMeet-<versão>-portable.exe`,
-`HypeMeet-<versão>-x86_64.AppImage` e `HypeMeet-<versão>-amd64.deb`. Gerar o `.exe` fora do Windows
-usa Docker (`electronuserland/builder:wine`); o pacote Linux precisa ser gerado no Linux.
+`HypeMeet-<versão>-x86_64.AppImage`, `HypeMeet-<versão>-amd64.deb`, `HypeMeet-<versão>-x64.tar.gz` e
+`HypeMeet-<versão>-mac-{arm64,x64}.zip`. Gerar o `.exe` fora do Windows usa Docker
+(`electronuserland/builder:wine`); o pacote Linux precisa ser gerado no Linux. O macOS sai de qualquer
+sistema, mas precisa de [`rcodesign`](https://github.com/indygreg/apple-platform-rs/releases) e `zip`
+no PATH: sem conta de desenvolvedor Apple, o `.app` leva assinatura ad-hoc (o mínimo para abrir no
+Apple Silicon), então na primeira vez o macOS pede **Ajustes → Privacidade e Segurança → Abrir Mesmo
+Assim**, e compartilhar tela pede a permissão de Gravação de Tela.
+
+**Downloads no site.** `desktop:publish` cria a release `v<versão>` (de `desktop/package.json`) no repo
+público [`hypemeet-releases`](https://github.com/victorgabrieldeon/hypemeet-releases) — este repo é
+privado — com os arquivos sem a versão no nome (`HypeMeet-Setup.exe`, `HypeMeet-mac-arm64.zip`…).
+A home linka `releases/latest/download/<arquivo>`, então publicar uma versão nova já atualiza o site.
+A lista de arquivos vive em `src/lib/downloads.ts` e vale para o site e para o script. Para lançar
+uma versão nova, suba `version` em `desktop/package.json`; rodar de novo na mesma versão substitui
+os arquivos.
 
 Servidor usado, em ordem: `--server=<url>` na linha de comando → `HYPEMEET_URL` → o salvo pelo app →
 o `--url` do build. Sem nenhum, o app pede o endereço; depois dá pra trocar em **HypeMeet → Trocar

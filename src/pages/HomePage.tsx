@@ -1,10 +1,12 @@
-import { ArrowRight, Clock, Hash, History, Plus, Trash2, UserRound } from "lucide-react";
+import { ArrowRight, Clock, Download, Hash, History, Plus, Trash2, UserRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { CallPreview } from "../components/CallPreview";
+import { DesktopDownloads } from "../components/DesktopDownloads";
 import { Avatar, Button, Field, Logo, LogoMark, Spinner, Wordmark, glowCardClass, inputClass } from "../components/ui";
 import { api } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
+import { IS_DESKTOP_APP } from "../lib/downloads";
 import { forgetRoom, loadNickname, rememberRoom, saveNickname, useSavedRooms } from "../lib/storage";
 
 const relativeTime = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
@@ -16,6 +18,9 @@ function timeAgo(ts: number): string {
   if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
   return relativeTime.format(Math.round(hours / 24), "day");
 }
+
+const headerLinkClass =
+  "type-link-sm flex h-11 items-center gap-2 rounded-md border border-line bg-surface/70 px-4 text-soft transition hover:bg-surface-hi hover:text-ink";
 
 type Mode = "create" | "join";
 
@@ -78,16 +83,21 @@ export function HomePage() {
     <div className="aurora min-h-full">
       <header className="mx-auto flex max-w-[1240px] items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
         <Logo />
-        {savedRooms.length > 0 && (
-          <a
-            href="#salas"
-            className="type-link-sm flex h-11 items-center gap-2 rounded-md border border-line bg-surface/70 px-4 text-soft transition hover:bg-surface-hi hover:text-ink"
-          >
-            <History className="size-4" />
-            <span className="hidden sm:inline">Suas salas</span>
-            <span className="text-ink">{savedRooms.length}</span>
-          </a>
-        )}
+        <nav className="flex items-center gap-2" aria-label="Atalhos">
+          {savedRooms.length > 0 && (
+            <a href="#salas" className={headerLinkClass}>
+              <History className="size-4" />
+              <span className="hidden sm:inline">Suas salas</span>
+              <span className="text-ink">{savedRooms.length}</span>
+            </a>
+          )}
+          {!IS_DESKTOP_APP && (
+            <a href="#baixar" className={headerLinkClass} aria-label="Baixar app" title="Baixar app">
+              <Download className="size-4" />
+              <span className="hidden sm:inline">Baixar app</span>
+            </a>
+          )}
+        </nav>
       </header>
 
       <main className="mx-auto grid max-w-[1240px] items-center gap-12 px-5 pt-4 pb-16 sm:px-8 lg:min-h-[calc(100svh-7.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pb-24">
@@ -220,6 +230,8 @@ export function HomePage() {
           </ul>
         )}
       </section>
+
+      {!IS_DESKTOP_APP && <DesktopDownloads />}
     </div>
   );
 }
