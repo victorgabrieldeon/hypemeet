@@ -6,11 +6,10 @@ export interface YTPlayer {
   getCurrentTime(): number;
   getDuration(): number;
   getPlayerState(): number;
-  setVolume(volume: number): void;
-  mute(): void;
-  unMute(): void;
-  /** Undocumented but stable; the only way to read the title without an API key. */
-  getVideoData(): { title?: string };
+  getPlaybackRate(): number;
+  setPlaybackRate(rate: number): void;
+  /** Undocumented but stable; the only way to read the title (or tell a live) without an API key. */
+  getVideoData(): { title?: string; isLive?: boolean };
   destroy(): void;
 }
 
@@ -22,7 +21,12 @@ interface YTNamespace {
       width: string;
       height: string;
       playerVars: Record<string, string | number>;
-      events: { onReady?: () => void; onError?: (event: { data: number }) => void };
+      events: {
+        onReady?: () => void;
+        onError?: (event: { data: number }) => void;
+        onStateChange?: (event: { data: number }) => void;
+        onPlaybackRateChange?: (event: { data: number }) => void;
+      };
     },
   ) => YTPlayer;
 }

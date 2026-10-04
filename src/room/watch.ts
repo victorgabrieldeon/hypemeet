@@ -20,7 +20,8 @@ const RPC_CLOCK = "watch.clock";
 const NAME_MAX = 200;
 
 export type WatchSource =
-  | { kind: "youtube"; videoId: string; title?: string }
+  /** `title` and `live` are filled in by the host's player once it loads. */
+  | { kind: "youtube"; videoId: string; title?: string; live?: boolean }
   /** Each viewer opens their own copy; name + size tell them which one. */
   | { kind: "file"; name: string; size: number };
 
@@ -29,8 +30,10 @@ export interface WatchState {
   id: string;
   source: WatchSource;
   playing: boolean;
-  /** Seconds into the video at `at`. */
+  /** Seconds into the video at `at`. For a live, seconds since the stream began (same for every viewer). */
   position: number;
+  /** Playback speed (YouTube's own menu can change it). */
+  rate: number;
   /** Host clock (ms) when `position` was taken. */
   at: number;
   /** Nickname of whoever made the last change. */
@@ -45,7 +48,9 @@ export type WatchAction =
   | { type: "play"; position?: number }
   | { type: "pause"; position: number }
   | { type: "seek"; position: number }
-  | { type: "title"; title: string }
+  | { type: "rate"; rate: number; position: number }
+  /** What only a loaded player knows. A live also carries the host's live-edge position. */
+  | { type: "meta"; title?: string; live?: boolean; position?: number }
   | { type: "stop" };
 
 export interface WatchParty {
@@ -58,15 +63,21 @@ export const sourceKey = (source: WatchSource) =>
 
 /** Where the video should be at `hostNow` (host clock, ms). */
 export function positionAt(state: WatchState, hostNow: number): number {
-  return state.playing ? state.position + Math.max(0, hostNow - state.at) / 1000 : state.position;
+  return state.playing ? state.position + (Math.max(0, hostNow - state.at) / 1000) * state.rate : state.position;
 }
 
 const isSeconds = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
+const isRate = (n: unknown): n is number => typeof n === "number" && n >= 0.25 && n <= 2;
 
 function parseSource(raw: unknown): WatchSource | null {
   const s = raw as Partial<Record<string, unknown>> | null;
   if (s?.kind === "youtube" && typeof s.videoId === "string" && /^[\w-]{11}$/.test(s.videoId))
-    return { kind: "youtube", videoId: s.videoId, ...(typeof s.title === "string" ? { title: s.title.slice(0, NAME_MAX) } : {}) };
+    return {
+      kind: "youtube",
+      videoId: s.videoId,
+      ...(typeof s.title === "string" ? { title: s.title.slice(0, NAME_MAX) } : {}),
+      ...(s.live === true ? { live: true } : {}),
+    };
   if (s?.kind === "file" && typeof s.name === "string" && isSeconds(s.size))
     return { kind: "file", name: s.name.slice(0, NAME_MAX), size: s.size };
   return null;
@@ -78,7 +89,16 @@ function parseState(raw: string | undefined): WatchState | null {
     const s = JSON.parse(raw) as Partial<WatchState>;
     const source = parseSource(s.source);
     if (!source || typeof s.id !== "string" || !isSeconds(s.position) || !isSeconds(s.at) || !isSeconds(s.rev)) return null;
-    return { id: s.id, source, playing: !!s.playing, position: s.position, at: s.at, by: String(s.by ?? ""), rev: s.rev };
+    return {
+      id: s.id,
+      source,
+      playing: !!s.playing,
+      position: s.position,
+      rate: isRate(s.rate) ? s.rate : 1,
+      at: s.at,
+      by: String(s.by ?? ""),
+      rev: s.rev,
+    };
   } catch {
     return null;
   }
@@ -98,8 +118,15 @@ function parseAction(raw: string): WatchAction | null {
       case "pause":
       case "seek":
         return isSeconds(a.position) ? { type: a.type, position: a.position } : null;
-      case "title":
-        return typeof a.title === "string" ? { type: "title", title: a.title.slice(0, NAME_MAX) } : null;
+      case "rate":
+        return isRate(a.rate) && isSeconds(a.position) ? { type: "rate", rate: a.rate, position: a.position } : null;
+      case "meta":
+        return {
+          type: "meta",
+          ...(typeof a.title === "string" ? { title: a.title.slice(0, NAME_MAX) } : {}),
+          ...(a.live === true ? { live: true } : {}),
+          ...(isSeconds(a.position) ? { position: a.position } : {}),
+        };
       case "stop":
         return { type: "stop" };
     }
@@ -119,6 +146,7 @@ function reduce(state: WatchState | null, action: WatchAction, by: string, now: 
       // A file waits for everyone to open their copy; YouTube just starts.
       playing: action.source.kind === "youtube",
       position: action.position ?? 0,
+      rate: 1,
       at: now,
       by,
       rev: (state?.rev ?? 0) + 1,
@@ -133,11 +161,19 @@ function reduce(state: WatchState | null, action: WatchAction, by: string, now: 
       return { ...state, playing: false, position: action.position, at: now, by, rev };
     case "seek":
       return { ...state, position: action.position, at: now, by, rev };
-    case "title":
-      // Filled in by the host's player once it loads; not a user action, so `by` stays.
-      return state.source.kind === "youtube" && !state.source.title
-        ? { ...state, source: { ...state.source, title: action.title }, rev }
-        : state;
+    case "rate":
+      return { ...state, rate: action.rate, position: action.position, at: now, by, rev };
+    case "meta": {
+      // Not a user action, so `by` stays.
+      const { source } = state;
+      if (source.kind !== "youtube") return state;
+      const title = source.title ?? action.title;
+      const goesLive = !!action.live && !source.live;
+      if (title === source.title && !goesLive) return state;
+      const next = { ...state, source: { ...source, title, ...(source.live || goesLive ? { live: true } : {}) }, rev };
+      // Until now positions came from the link (0); a live starts where the host's player joined it.
+      return goesLive && action.position !== undefined ? { ...next, position: action.position, at: now } : next;
+    }
   }
 }
 

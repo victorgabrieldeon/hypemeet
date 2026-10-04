@@ -8,31 +8,48 @@ import { loadYouTube, YT_STATE, youTubeError, youTubeThumbnail, type YTPlayer } 
 /** What the sync loop needs from a player, YouTube or <video>. */
 interface MediaHandle {
   time(): number;
-  /** 0 until known. */
+  /** 0 until known. Meaningless for a live. */
   duration(): number;
   /** Playing or trying to (buffering). */
   playing(): boolean;
-  /** Buffering or seeking: its position means nothing right now. */
-  stalled(): boolean;
+  /** Loading, buffering or seeking: its position means nothing right now. */
+  busy(): boolean;
+  /** Settled in play or pause; only then can a jump in its position be read as the viewer seeking. */
+  stable(): boolean;
+  live(): boolean;
+  rate(): number;
   play(): Promise<void>;
   pause(): void;
   seek(seconds: number): void;
+  setRate(rate: number): void;
   setVolume(volume: number, muted: boolean): void;
   title(): string | undefined;
 }
 
 const TICK_MS = 400;
 /** How far a player may drift before it's snapped back. YouTube seeks rebuffer, so it gets more slack. */
-const TOLERANCE = { youtube: { playing: 1, paused: 0.5 }, file: { playing: 0.4, paused: 0.25 } };
+const TOLERANCE = {
+  youtube: { playing: 1, paused: 0.5 },
+  file: { playing: 0.4, paused: 0.25 },
+  // Each viewer's live edge sits a little apart; chasing every second would rebuffer forever.
+  live: { playing: 3, paused: 1 },
+};
 /** After a corrective seek or a local click, let the player settle before judging it again. */
 const SETTLE_MS = 1500;
 const HOLD_MS = 2500;
+/** Our own commands come back as player events for a moment; don't mistake them for the viewer's. */
+const ECHO_MS = 1500;
+/** A jump this big between two settled samples, that we didn't cause, is the viewer seeking in YouTube's bar. */
+const SEEK_JUMP = 2;
+/** Corrective seeks that keep missing (a live edge out of reach, an ad) give up instead of looping. */
+const SEEK_BURST = 3;
+const SEEK_WINDOW_MS = 20_000;
 /** Ticks spent "should be playing but isn't" before assuming the browser blocked autoplay. */
 const STUCK_TICKS = 8;
 const VOLUME_KEY = "hypemeet:watch-volume";
 
 export const watchTitle = (source: WatchSource) =>
-  source.kind === "youtube" ? (source.title ?? "Vídeo do YouTube") : source.name;
+  source.kind === "youtube" ? (source.title ?? (source.live ? "Live do YouTube" : "Vídeo do YouTube")) : source.name;
 
 function formatTime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -45,6 +62,14 @@ function formatTime(seconds: number): string {
 function formatBytes(bytes: number): string {
   const gb = bytes / 1024 ** 3;
   return gb >= 1 ? `${gb.toFixed(1).replace(".", ",")} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
+}
+
+/** "Pausado por Bia · 1,5×" */
+function statusText(state: WatchState): string {
+  const parts = [];
+  if (!state.playing && state.by) parts.push(`Pausado por ${state.by}`);
+  if (state.rate !== 1) parts.push(`${String(state.rate).replace(".", ",")}×`);
+  return parts.join(" · ");
 }
 
 function loadVolume(): { volume: number; muted: boolean } {
@@ -63,29 +88,37 @@ function youTubeHandle(player: YTPlayer): MediaHandle {
     time: () => player.getCurrentTime() ?? 0,
     duration: () => player.getDuration() ?? 0,
     playing: () => state() === YT_STATE.PLAYING || state() === YT_STATE.BUFFERING,
-    stalled: () => state() === YT_STATE.BUFFERING || state() === YT_STATE.UNSTARTED,
+    busy: () => state() === YT_STATE.BUFFERING || state() === YT_STATE.UNSTARTED,
+    stable: () => state() === YT_STATE.PLAYING || state() === YT_STATE.PAUSED,
+    live: () => !!player.getVideoData()?.isLive,
+    rate: () => player.getPlaybackRate() ?? 1,
     play: async () => player.playVideo(),
     pause: () => player.pauseVideo(),
     seek: (seconds) => player.seekTo(seconds, true),
-    setVolume: (volume, muted) => {
-      player.setVolume(Math.round(volume * 100));
-      if (muted) player.mute();
-      else player.unMute();
-    },
+    setRate: (rate) => player.setPlaybackRate(rate),
+    // YouTube's own volume control is per viewer already.
+    setVolume: () => undefined,
     title: () => player.getVideoData()?.title || undefined,
   };
 }
 
 function videoHandle(video: HTMLVideoElement): MediaHandle {
+  const busy = () => video.seeking || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
   return {
     time: () => video.currentTime,
     duration: () => (Number.isFinite(video.duration) ? video.duration : 0),
     playing: () => !video.paused && !video.ended,
-    stalled: () => video.seeking || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA,
+    busy,
+    stable: () => !busy(),
+    live: () => false,
+    rate: () => video.playbackRate,
     play: () => video.play(),
     pause: () => video.pause(),
     seek: (seconds) => {
       video.currentTime = seconds;
+    },
+    setRate: (rate) => {
+      video.playbackRate = rate;
     },
     setVolume: (volume, muted) => {
       video.volume = volume;
@@ -95,21 +128,21 @@ function videoHandle(video: HTMLVideoElement): MediaHandle {
   };
 }
 
-function YouTubeMedia({
-  videoId,
-  start,
-  onMedia,
-  onError,
-}: {
+interface YouTubeMediaProps {
   videoId: string;
-  /** Where to start, read once when the player is created. */
-  start: () => number;
+  /** Where to start, read once when the player is created; undefined for a live (it opens at the edge). */
+  start: () => number | undefined;
   onMedia: (media: MediaHandle | null) => void;
   onError: (text: string) => void;
-}) {
+  onState: (state: number) => void;
+  onRate: (rate: number) => void;
+}
+
+/** YouTube's own player, controls and all; what viewers do in it is picked up by useSync. */
+function YouTubeMedia({ videoId, ...callbacks }: YouTubeMediaProps) {
   const box = useRef<HTMLDivElement>(null);
-  const props = useRef({ start, onMedia, onError });
-  props.current = { start, onMedia, onError };
+  const props = useRef(callbacks);
+  props.current = callbacks;
 
   useEffect(() => {
     let player: YTPlayer | null = null;
@@ -120,24 +153,25 @@ function YouTubeMedia({
         // The API swaps the element for its iframe: give it one React doesn't own.
         const el = document.createElement("div");
         box.current!.replaceChildren(el);
+        const start = props.current.start();
         const created = new YT.Player(el, {
           videoId,
           width: "100%",
           height: "100%",
           playerVars: {
-            // Our controls drive it, so everyone's clicks go through the shared state.
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
-            iv_load_policy: 3,
             playsinline: 1,
             rel: 0,
-            start: Math.floor(props.current.start()),
+            iv_load_policy: 3,
+            // Our button fullscreens the whole player; YouTube's needs a permission the desktop app only gives the server.
+            fs: 0,
             origin: location.origin,
+            ...(start && start >= 1 ? { start: Math.floor(start) } : {}),
           },
           events: {
             onReady: () => !cancelled && props.current.onMedia(youTubeHandle(created)),
             onError: (event) => !cancelled && props.current.onError(youTubeError(event.data)),
+            onStateChange: (event) => !cancelled && props.current.onState(event.data),
+            onPlaybackRateChange: (event) => !cancelled && props.current.onRate(event.data),
           },
         });
         player = created;
@@ -200,43 +234,110 @@ function FileMedia({
   );
 }
 
+interface SyncOptions {
+  tolerance: { playing: number; paused: number };
+  /** The viewer can drive the player directly (YouTube's own controls): turn what they do into actions. */
+  native: boolean;
+  onUser: (action: WatchAction) => void;
+}
+
 /**
- * Keeps a player on the shared state: play/pause to match, and a seek whenever it drifts past the
- * tolerance (buffering, a late join, ads). Everyone, the host included, just follows the state.
+ * Keeps a player on the shared state: play/pause/speed to match, and a seek whenever it drifts past
+ * the tolerance (buffering, a late join, ads). Everyone, the host included, just follows the state.
+ * With native controls it also works the other way: a play, pause, seek or speed change the viewer
+ * makes in the player itself, told apart from our own commands, becomes an action for everyone.
  */
-function useSync(media: MediaHandle | null, state: WatchState, hostNow: () => number, tolerance: { playing: number; paused: number }) {
-  const [clock, setClock] = useState({ time: 0, duration: 0 });
+function useSync(media: MediaHandle | null, state: WatchState, hostNow: () => number, options: SyncOptions) {
+  const [clock, setClock] = useState({ time: 0, duration: 0, live: false });
   const [blocked, setBlocked] = useState(false);
-  const live = useRef({ state, hostNow });
-  live.current = { state, hostNow };
+  const live = useRef({ state, hostNow, options });
+  live.current = { state, hostNow, options };
   // Skip ticks until `until`, unless a newer state (rev) arrives first.
   const settle = useRef({ until: 0, rev: -1 });
   const stuck = useRef(0);
+  /** When we last told the player to do each thing, to recognise the echo. */
+  const ours = useRef({ play: 0, pause: 0, seek: 0, rate: 0 });
+  const seeks = useRef<{ at: number; rev: number }[]>([]);
+  /** Last settled reading, to spot jumps. Null = take a fresh baseline. */
+  const sample = useRef<{ time: number; at: number; playing: boolean } | null>(null);
+  /** Play/pause the viewer asked for in the player, until the host's answer (a new rev) arrives. */
+  const intent = useRef<{ playing: boolean; rev: number } | null>(null);
+
+  useEffect(() => {
+    sample.current = null;
+  }, [media]);
+
+  const hold = useCallback(() => {
+    settle.current = { until: performance.now() + HOLD_MS, rev: live.current.state.rev };
+  }, []);
+
+  const user = useCallback(
+    (action: WatchAction) => {
+      hold();
+      if (action.type === "play" || action.type === "pause")
+        intent.current = { playing: action.type === "play", rev: live.current.state.rev };
+      live.current.options.onUser(action);
+    },
+    [hold],
+  );
 
   const tick = useCallback(() => {
     if (!media) return;
-    const { state, hostNow } = live.current;
+    const { state, hostNow, options } = live.current;
+    const now = performance.now();
     const time = media.time();
     const duration = media.duration();
-    setClock({ time, duration });
-    if (performance.now() < settle.current.until && settle.current.rev === state.rev) return;
+    const isLive = media.live();
+    setClock({ time, duration, live: isLive });
+
+    if (options.native && media.stable()) {
+      const prev = sample.current;
+      if (prev && now - ours.current.seek > ECHO_MS) {
+        const expected = prev.time + (prev.playing ? ((now - prev.at) / 1000) * media.rate() : 0);
+        if (Math.abs(time - expected) > SEEK_JUMP) user({ type: "seek", position: time });
+      }
+      sample.current = { time, at: now, playing: media.playing() };
+    } else if (sample.current) {
+      // Loading or buffering: no progress is expected until it settles again.
+      sample.current = { ...sample.current, at: now, playing: false };
+    }
+
+    if (now < settle.current.until && settle.current.rev === state.rev) return;
 
     let target = positionAt(state, hostNow());
-    if (duration > 0) target = Math.min(target, duration);
-    const shouldPlay = state.playing && !(duration > 0 && target >= duration - 0.5);
+    if (!isLive && duration > 0) target = Math.min(target, duration);
+    const shouldPlay = state.playing && !(!isLive && duration > 0 && target >= duration - 0.5);
+    if (Math.abs(media.rate() - state.rate) > 0.01) {
+      ours.current.rate = now;
+      media.setRate(state.rate);
+    }
     if (shouldPlay && !media.playing()) {
       if (++stuck.current === STUCK_TICKS) setBlocked(true);
+      ours.current.play = now;
       media.play().catch((err: DOMException) => err?.name === "NotAllowedError" && setBlocked(true));
     } else {
       stuck.current = 0;
-      if (!shouldPlay && media.playing()) media.pause();
+      if (media.playing()) setBlocked(false);
+      // A viewer's own play passes through buffering before onPlayerState sees it: let it get there.
+      if (!shouldPlay && media.playing() && !(options.native && media.busy())) {
+        ours.current.pause = now;
+        media.pause();
+      }
     }
-    if (media.stalled() || duration === 0) return;
-    if (Math.abs(time - target) > (shouldPlay ? tolerance.playing : tolerance.paused)) {
-      media.seek(target);
-      settle.current = { until: performance.now() + SETTLE_MS, rev: state.rev };
-    }
-  }, [media, tolerance]);
+
+    // A live has no shared position until the host's player reports where it joined the stream.
+    if (isLive && !(state.source.kind === "youtube" && state.source.live)) return;
+    if (media.busy() || (!isLive && duration === 0)) return;
+    const tolerance = isLive ? TOLERANCE.live : options.tolerance;
+    if (Math.abs(time - target) <= (shouldPlay ? tolerance.playing : tolerance.paused)) return;
+    seeks.current = seeks.current.filter((s) => s.rev === state.rev && now - s.at < SEEK_WINDOW_MS);
+    if (seeks.current.length >= SEEK_BURST) return;
+    seeks.current.push({ at: now, rev: state.rev });
+    ours.current.seek = now;
+    sample.current = null;
+    media.seek(target);
+    settle.current = { until: now + SETTLE_MS, rev: state.rev };
+  }, [media, user]);
 
   useEffect(() => {
     if (!media) return;
@@ -258,8 +359,25 @@ function useSync(media: MediaHandle | null, state: WatchState, hostNow: () => nu
       void media?.play().catch(() => setBlocked(true));
     },
     /** Our own click already moved the player: don't undo it before the host echoes the change. */
-    hold() {
-      settle.current = { until: performance.now() + HOLD_MS, rev: live.current.state.rev };
+    hold,
+    /** YouTube state changes: a play or pause we didn't ask for came from the viewer. */
+    onPlayerState(playerState: number) {
+      if (!media || !live.current.options.native) return;
+      const now = performance.now();
+      const { state } = live.current;
+      const shared = intent.current?.rev === state.rev ? intent.current.playing : state.playing;
+      if (playerState === YT_STATE.PLAYING) {
+        setBlocked(false);
+        if (!shared && now - ours.current.play > ECHO_MS && now - ours.current.seek > ECHO_MS)
+          user({ type: "play", position: media.time() });
+      } else if (playerState === YT_STATE.PAUSED) {
+        if (shared && now - ours.current.pause > ECHO_MS) user({ type: "pause", position: media.time() });
+      }
+    },
+    onPlayerRate(rate: number) {
+      if (!media || !live.current.options.native) return;
+      if (Math.abs(rate - live.current.state.rate) > 0.01 && performance.now() - ours.current.rate > ECHO_MS)
+        user({ type: "rate", rate, position: media.time() });
     },
   };
 }
@@ -285,6 +403,32 @@ function Overlay({ children }: { children: ReactNode }) {
   );
 }
 
+function LiveBadge() {
+  return (
+    <span className="shrink-0 rounded-xs bg-danger px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wider text-ink">
+      AO VIVO
+    </span>
+  );
+}
+
+function FilePicker({ label, primary, onPick }: { label: string; primary?: boolean; onPick: (file: File) => void }) {
+  return (
+    <label className={`${buttonClass({ variant: primary ? "primary" : "ghost" })} type-link-sm mt-1 h-11 cursor-pointer`}>
+      <FileVideo className="size-4" /> {label}
+      <input
+        type="file"
+        accept="video/*,.mkv,.mov,.avi"
+        hidden
+        onChange={(e) => {
+          const picked = e.target.files?.[0];
+          e.target.value = "";
+          if (picked) onPick(picked);
+        }}
+      />
+    </label>
+  );
+}
+
 interface WatchPlayerProps {
   party: WatchParty;
   watch: WatchControls;
@@ -296,38 +440,57 @@ interface WatchPlayerProps {
   className?: string;
 }
 
-/** The shared player. Mounted for the whole session (hidden when minimized) so it never reloads. */
+/**
+ * The shared player. Mounted for the whole session (hidden when minimized) so it never reloads.
+ * YouTube shows its own player and controls under a slim header; a local file gets ours.
+ */
 export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onError, className = "" }: WatchPlayerProps) {
   const { state } = party;
   const { source } = state;
+  const isYouTube = source.kind === "youtube";
   const ref = useRef<HTMLDivElement>(null);
   const [media, setMedia] = useState<MediaHandle | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [volume, setVolume] = useState(loadVolume);
   const [scrub, setScrub] = useState<number | null>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const sync = useSync(media, state, watch.hostNow, TOLERANCE[source.kind]);
+
+  const send = (action: WatchAction) =>
+    void watch.dispatch(action).catch(() => onError("Não deu pra controlar o vídeo agora. Tente de novo."));
+  const sync = useSync(media, state, watch.hostNow, {
+    tolerance: TOLERANCE[source.kind],
+    native: isYouTube,
+    onUser: send,
+  });
 
   useEffect(() => {
     media?.setVolume(volume.volume, volume.muted);
     localStorage.setItem(VOLUME_KEY, JSON.stringify(volume));
   }, [media, volume]);
 
-  // YouTube titles need no API key when read from the host's own player.
-  const needsTitle = watch.isHost && source.kind === "youtube" && !source.title;
-  const loaded = sync.duration > 0;
+  // What only a loaded player knows (no API key needed), reported by the host's.
+  const metaSent = useRef("");
   useEffect(() => {
-    const title = needsTitle && loaded ? media?.title() : undefined;
-    if (title) void watch.dispatch({ type: "title", title }).catch(() => undefined);
-  }, [needsTitle, loaded, media, watch]);
+    if (!media || !watch.isHost || source.kind !== "youtube") return;
+    const title = source.title ? undefined : media.title();
+    // Its player opened the live at the edge: that's where everyone meets.
+    const goLive = sync.live && !source.live && media.stable() && media.playing();
+    const key = `${title ?? ""}|${goLive}`;
+    if ((!title && !goLive) || metaSent.current === key) return;
+    metaSent.current = key;
+    watch
+      .dispatch({ type: "meta", ...(title ? { title } : {}), ...(goLive ? { live: true, position: media.time() } : {}) })
+      .catch(() => {
+        metaSent.current = "";
+      });
+  });
 
+  const live = sync.live || (source.kind === "youtube" && !!source.live);
   const duration = sync.duration;
-  const ended = duration > 0 && positionAt(state, watch.hostNow()) >= duration - 0.5;
+  const ended = !live && duration > 0 && positionAt(state, watch.hostNow()) >= duration - 0.5;
   const playing = state.playing && !ended;
   const shown = scrub ?? Math.min(sync.time, duration || sync.time);
-
-  const send = (action: WatchAction) =>
-    void watch.dispatch(action).catch(() => onError("Não deu pra controlar o vídeo agora. Tente de novo."));
+  const status = statusText(state);
 
   function toggle() {
     if (!media) return;
@@ -361,6 +524,61 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
     else void ref.current?.requestFullscreen();
   };
 
+  if (isYouTube) {
+    return (
+      <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg bg-black ${className}`}>
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel pr-1.5 pl-3">
+          <Popcorn className="size-4 shrink-0 text-blurple-hi" />
+          {live && <LiveBadge />}
+          <span className="type-link-sm min-w-0 truncate">{watchTitle(source)}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-soft">{status && `· ${status}`}</span>
+          <button
+            onClick={onMinimize}
+            aria-label="Minimizar"
+            title="Minimizar"
+            className="grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+          >
+            <Minimize2 className="size-4" />
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            aria-label="Tela cheia"
+            title="Tela cheia"
+            className="grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+          >
+            <Maximize className="size-4" />
+          </button>
+        </div>
+        <div className="relative min-h-0 flex-1" aria-label={`Assistindo junto: ${watchTitle(source)}`}>
+          <YouTubeMedia
+            videoId={source.videoId}
+            start={() => (source.live ? undefined : positionAt(state, watch.hostNow()))}
+            onMedia={setMedia}
+            onError={setFailure}
+            onState={sync.onPlayerState}
+            onRate={sync.onPlayerRate}
+          />
+          {failure ? (
+            <Overlay>
+              <p className="type-link">{failure}</p>
+            </Overlay>
+          ) : !media ? (
+            <div className="pointer-events-none absolute inset-0 grid place-items-center text-soft">
+              <Spinner className="size-7" />
+            </div>
+          ) : (
+            sync.blocked && (
+              // YouTube's own play button is right there and counts as the gesture the browser wants.
+              <div className="type-link-sm pointer-events-none absolute top-3 left-1/2 z-10 flex -translate-x-1/2 animate-fade-in items-center gap-2 rounded-full bg-blurple px-4 py-2 text-ink shadow-float">
+                <Play className="size-4 fill-current" /> Dê play no vídeo pra entrar na sessão
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const silent = volume.muted || volume.volume === 0;
   const VolumeIcon = silent ? VolumeX : volume.volume < 0.5 ? Volume1 : Volume2;
   const percent = volume.muted ? 0 : Math.round(volume.volume * 100);
@@ -377,43 +595,20 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
           <span className="text-soft"> · {formatBytes(source.size)}</span>
         </p>
         <p className="text-xs text-soft">Cada um toca o próprio arquivo: nada é enviado, então chega em qualidade original.</p>
-        <label className={`${buttonClass({ variant: "primary" })} type-link-sm mt-1 h-11 cursor-pointer`}>
-          <FileVideo className="size-4" /> Escolher arquivo
-          <input
-            type="file"
-            accept="video/*,.mkv,.mov,.avi"
-            hidden
-            onChange={(e) => {
-              const picked = e.target.files?.[0];
-              e.target.value = "";
-              if (picked) onPickFile(picked);
-            }}
-          />
-        </label>
+        <FilePicker label="Escolher arquivo" primary onPick={onPickFile} />
       </Overlay>
     );
   } else if (failure) {
     overlay = (
       <Overlay>
         <p className="type-link">{failure}</p>
-        {source.kind === "file" && (
-          <label className={`${buttonClass()} type-link-sm h-11 cursor-pointer`}>
-            Escolher outro arquivo
-            <input
-              type="file"
-              accept="video/*,.mkv,.mov,.avi"
-              hidden
-              onChange={(e) => {
-                const picked = e.target.files?.[0];
-                e.target.value = "";
-                if (picked) {
-                  setFailure(null);
-                  onPickFile(picked);
-                }
-              }}
-            />
-          </label>
-        )}
+        <FilePicker
+          label="Escolher outro arquivo"
+          onPick={(picked) => {
+            setFailure(null);
+            onPickFile(picked);
+          }}
+        />
       </Overlay>
     );
   } else if (sync.blocked) {
@@ -454,18 +649,9 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
       }}
       className={`group relative animate-pop overflow-hidden rounded-lg bg-black focus-visible:outline-offset-0 ${className}`}
     >
-      {source.kind === "youtube" ? (
-        <YouTubeMedia
-          videoId={source.videoId}
-          start={() => positionAt(state, watch.hostNow())}
-          onMedia={setMedia}
-          onError={setFailure}
-        />
-      ) : (
-        file && <FileMedia file={file} onMedia={setMedia} onError={setFailure} />
-      )}
+      {file && <FileMedia file={file} onMedia={setMedia} onError={setFailure} />}
 
-      {/* Shields the iframe: clicks on the video go through our shared controls, not YouTube's. */}
+      {/* Clicks on the video go through the shared controls. */}
       <div
         className="absolute inset-0"
         onClick={() => {
@@ -524,9 +710,7 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
           <span className="px-1 text-xs font-semibold text-ink/90 tabular-nums">
             {formatTime(shown)} <span className="text-ink/50">/ {formatTime(duration)}</span>
           </span>
-          <span className="min-w-0 flex-1 truncate px-1 text-xs text-ink/65">
-            {!state.playing && state.by ? `Pausado por ${state.by}` : ""}
-          </span>
+          <span className="min-w-0 flex-1 truncate px-1 text-xs text-ink/65">{status}</span>
           <div className="flex items-center gap-1.5">
             <ControlIcon
               onClick={() => setVolume((v) => ({ muted: !v.muted, volume: v.volume || 1 }))}
@@ -561,6 +745,7 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
 /** The session as a tile on the stage while the player is minimized; the audio keeps playing. */
 export function WatchTile({ party, compact, onOpen }: { party: WatchParty; compact?: boolean; onOpen: () => void }) {
   const { source, playing } = party.state;
+  const live = source.kind === "youtube" && source.live;
   return (
     <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black">
       {source.kind === "youtube" ? (
@@ -586,6 +771,7 @@ export function WatchTile({ party, compact, onOpen }: { party: WatchParty; compa
       </div>
       {!compact && (
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-sm bg-black/65 px-2.5 py-1 text-xs text-ink/85 backdrop-blur-md">
+          {live && <LiveBadge />}
           {playing ? <Play className="size-3 fill-current" /> : <Pause className="size-3 fill-current" />}
           {playing ? "Tocando" : "Pausado"}
         </div>

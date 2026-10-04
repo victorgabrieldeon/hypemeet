@@ -83,7 +83,7 @@ export function WatchPanel({ watch, onFileChosen, onDone, onError }: WatchPanelP
               setLink(e.target.value);
               setInvalid(false);
             }}
-            placeholder="Link do YouTube"
+            placeholder="Link do YouTube (vídeo ou live)"
             aria-label="Link do YouTube"
             aria-invalid={invalid}
           />
