@@ -1,4 +1,4 @@
-import { FileVideo, Maximize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
+import { EyeOff, FileVideo, Maximize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { buttonClass, Spinner } from "../components/ui";
 import { loadDevice } from "./devices";
@@ -368,8 +368,9 @@ function useSync(media: MediaHandle | null, state: WatchState, hostNow: () => nu
       const shared = intent.current?.rev === state.rev ? intent.current.playing : state.playing;
       if (playerState === YT_STATE.PLAYING) {
         setBlocked(false);
-        if (!shared && now - ours.current.play > ECHO_MS && now - ours.current.seek > ECHO_MS)
-          user({ type: "play", position: media.time() });
+        // No position: a player that just joined a paused session (or a live, opened at its edge) isn't
+        // at the shared spot yet, so resume from where it was paused. Seeks are reported on their own.
+        if (!shared && now - ours.current.play > ECHO_MS && now - ours.current.seek > ECHO_MS) user({ type: "play" });
       } else if (playerState === YT_STATE.PAUSED) {
         if (shared && now - ours.current.pause > ECHO_MS) user({ type: "pause", position: media.time() });
       }
@@ -436,6 +437,8 @@ interface WatchPlayerProps {
   file: File | null;
   onPickFile: (file: File) => void;
   onMinimize: () => void;
+  /** Stop following the session, just for this viewer. */
+  onLeave: () => void;
   onError: (text: string) => void;
   className?: string;
 }
@@ -444,7 +447,16 @@ interface WatchPlayerProps {
  * The shared player. Mounted for the whole session (hidden when minimized) so it never reloads.
  * YouTube shows its own player and controls under a slim header; a local file gets ours.
  */
-export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onError, className = "" }: WatchPlayerProps) {
+export function WatchPlayer({
+  party,
+  watch,
+  file,
+  onPickFile,
+  onMinimize,
+  onLeave,
+  onError,
+  className = "",
+}: WatchPlayerProps) {
   const { state } = party;
   const { source } = state;
   const isYouTube = source.kind === "youtube";
@@ -468,12 +480,13 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
     localStorage.setItem(VOLUME_KEY, JSON.stringify(volume));
   }, [media, volume]);
 
-  // What only a loaded player knows (no API key needed), reported by the host's.
+  // What only a loaded player knows (no API key needed). Any viewer reports it (the host may not be
+  // following); the host keeps the first answer.
   const metaSent = useRef("");
   useEffect(() => {
-    if (!media || !watch.isHost || source.kind !== "youtube") return;
+    if (!media || source.kind !== "youtube") return;
     const title = source.title ? undefined : media.title();
-    // Its player opened the live at the edge: that's where everyone meets.
+    // A fresh player opens a live at the edge: that's where everyone meets.
     const goLive = sync.live && !source.live && media.stable() && media.playing();
     const key = `${title ?? ""}|${goLive}`;
     if ((!title && !goLive) || metaSent.current === key) return;
@@ -532,6 +545,14 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
           {live && <LiveBadge />}
           <span className="type-link-sm min-w-0 truncate">{watchTitle(source)}</span>
           <span className="min-w-0 flex-1 truncate text-xs text-soft">{status && `· ${status}`}</span>
+          <button
+            onClick={onLeave}
+            className="type-link-sm flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2 text-soft transition hover:bg-surface-hi hover:text-ink"
+            title="Fecha o vídeo só pra você; a sessão segue pros outros"
+          >
+            <EyeOff className="size-4" />
+            <span className="hidden sm:inline">Parar de acompanhar</span>
+          </button>
           <button
             onClick={onMinimize}
             aria-label="Minimizar"
@@ -596,6 +617,9 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
         </p>
         <p className="text-xs text-soft">Cada um toca o próprio arquivo: nada é enviado, então chega em qualidade original.</p>
         <FilePicker label="Escolher arquivo" primary onPick={onPickFile} />
+        <button onClick={onLeave} className="type-link-sm rounded-sm px-2 py-1 text-soft transition hover:text-ink">
+          Não quero assistir
+        </button>
       </Overlay>
     );
   } else if (failure) {
@@ -730,6 +754,9 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
               aria-label="Volume do vídeo (só pra você)"
             />
           </div>
+          <ControlIcon onClick={onLeave} label="Parar de acompanhar (só pra você)">
+            <EyeOff className="size-4" />
+          </ControlIcon>
           <ControlIcon onClick={onMinimize} label="Minimizar">
             <Minimize2 className="size-4" />
           </ControlIcon>
@@ -742,8 +769,21 @@ export function WatchPlayer({ party, watch, file, onPickFile, onMinimize, onErro
   );
 }
 
-/** The session as a tile on the stage while the player is minimized; the audio keeps playing. */
-export function WatchTile({ party, compact, onOpen }: { party: WatchParty; compact?: boolean; onOpen: () => void }) {
+/**
+ * The session as a tile on the stage: while minimized (the audio keeps playing), or, for a viewer who
+ * stopped following, an offer to join.
+ */
+export function WatchTile({
+  party,
+  joined,
+  compact,
+  onOpen,
+}: {
+  party: WatchParty;
+  joined: boolean;
+  compact?: boolean;
+  onOpen: () => void;
+}) {
   const { source, playing } = party.state;
   const live = source.kind === "youtube" && source.live;
   return (
@@ -762,7 +802,8 @@ export function WatchTile({ party, compact, onOpen }: { party: WatchParty; compa
           onDoubleClick={(e) => e.stopPropagation()}
           className={`type-link-sm flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
         >
-          <Popcorn className={compact ? "size-3.5" : "size-4"} /> {compact ? "Abrir" : "Voltar pro vídeo"}
+          <Popcorn className={compact ? "size-3.5" : "size-4"} />
+          {joined ? (compact ? "Abrir" : "Voltar pro vídeo") : compact ? "Entrar" : "Assistir junto"}
         </button>
       </div>
       <div className="absolute top-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] font-semibold text-ink backdrop-blur-md">
@@ -774,6 +815,7 @@ export function WatchTile({ party, compact, onOpen }: { party: WatchParty; compa
           {live && <LiveBadge />}
           {playing ? <Play className="size-3 fill-current" /> : <Pause className="size-3 fill-current" />}
           {playing ? "Tocando" : "Pausado"}
+          {!joined && <span className="text-ink/60">· você não está acompanhando</span>}
         </div>
       )}
     </div>

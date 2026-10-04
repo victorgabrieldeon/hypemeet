@@ -26,7 +26,9 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   Fulano"). Cada um toca no próprio player, então sai mais leve que transmitir a tela e em qualidade
   original. O YouTube aparece com o **player do próprio YouTube** (controles, legendas, qualidade):
   o que qualquer um faz nele vale pra todos. Volume é só seu; "Minimizar" volta pras telas sem parar
-  o som. No vídeo do computador, atalhos com o player focado: espaço/K, ←/→ (5 s), J/L (10 s), F, M.
+  o som. **Parar de acompanhar** (no player ou na pipoca) tira o vídeo só pra você: nada carrega nem
+  toca, a sessão segue pros outros e o tile "Assistir junto" te põe de volta no ponto em que estão.
+  "Encerrar pra todos" termina a sessão. No vídeo do computador, atalhos com o player focado: espaço/K, ←/→ (5 s), J/L (10 s), F, M.
 - **Chat de texto**: mensagens, links clicáveis e imagens (colar, arrastar ou escolher). Vai direto
   pelo data channel do LiveKit, sem passar pelo servidor nem ficar salvo: quem chega depois recebe o
   histórico de quem está há mais tempo na sala, e tudo some quando a sala esvazia.
@@ -177,14 +179,15 @@ Nenhum vídeo passa pelo LiveKit: só o estado da reprodução (`src/room/watch.
   pra bater e faz seek se desviar mais que 1 s (YouTube), 3 s (live) ou 0,4 s (arquivo). Um seek
   que não pega (borda da live fora de alcance, anúncio) desiste depois de 3 tentativas em 20 s.
 - **Host saiu**: quem está há mais tempo na sala assume o último estado, então a sessão continua.
+  Quem parou de acompanhar continua podendo herdar: o estado não depende de ter o player aberto.
 - **Vídeo do computador**: cada pessoa abre a própria cópia (o app pede pelo nome e tamanho); nada é
   enviado. Começa pausado pra dar tempo de todo mundo abrir o arquivo. Formatos: o que o navegador
   tocar (MP4 H.264/AAC e WebM em todo lugar; MKV depende do codec).
 - **YouTube**: IFrame Player API com o player nativo. Play, pause, seek (barra ou teclado) e
   velocidade feitos nele viram ações pra todos: play/pause pelos eventos de estado, seek por um salto
   de mais de 2 s entre duas leituras, velocidade pelo evento de taxa; comandos da própria sincronia
-  são ignorados por 1,5 s pra não voltarem como ação. O host lê título e "é live" do próprio player
-  (sem chave de API). Vídeos com incorporação desativada pelo dono não tocam.
+  são ignorados por 1,5 s pra não voltarem como ação. Título e "é live" vêm do player de quem estiver
+  assistindo (sem chave de API; o host pode não estar acompanhando). Vídeos com incorporação desativada pelo dono não tocam.
 - **Lives**: `getCurrentTime()` numa live é o tempo desde o início da transmissão, igual pra todo
   mundo. O player do host abre na borda ao vivo e publica essa posição; até lá ninguém faz seek.
   Pausar e retomar continua do ponto pausado (se a live tiver DVR), todos juntos.

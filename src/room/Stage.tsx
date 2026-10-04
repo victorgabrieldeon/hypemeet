@@ -28,13 +28,15 @@ interface StageProps {
    * reloads); pinning it leaves the stage just the strip of everyone else.
    */
   watch?: WatchParty | null;
+  /** False when this viewer opted out of the session: its tile offers to join instead. */
+  watchJoined?: boolean;
   pinnedId: string | null;
   onPin: (id: string | null) => void;
 }
 
-export function Stage({ tiles, watch, pinnedId, onPin }: StageProps) {
+export function Stage({ tiles, watch, watchJoined = true, pinnedId, onPin }: StageProps) {
   const [ref, { width, height }] = useSize<HTMLDivElement>();
-  const watchPinned = !!watch && pinnedId === WATCH_TILE_ID;
+  const watchPinned = !!watch && watchJoined && pinnedId === WATCH_TILE_ID;
   const pinned = tiles.find((t) => t.id === pinnedId);
   const toggle = (id: string) => onPin(pinnedId === id ? null : id);
 
@@ -42,7 +44,7 @@ export function Stage({ tiles, watch, pinnedId, onPin }: StageProps) {
     <div className="scrollbar-thin flex h-28 shrink-0 gap-3 overflow-x-auto sm:h-32">
       {withWatch && watch && (
         <div className="aspect-video h-full shrink-0">
-          <WatchTile party={watch} compact onOpen={() => onPin(WATCH_TILE_ID)} />
+          <WatchTile party={watch} joined={watchJoined} compact onOpen={() => onPin(WATCH_TILE_ID)} />
         </div>
       )}
       {others.map((tile) => (
@@ -72,7 +74,7 @@ export function Stage({ tiles, watch, pinnedId, onPin }: StageProps) {
       <div className="flex size-full flex-wrap content-center justify-center" style={{ gap: GAP }}>
         {tileWidth > 0 && watch && (
           <div style={{ width: tileWidth, height: tileHeight }}>
-            <WatchTile party={watch} onOpen={() => onPin(WATCH_TILE_ID)} />
+            <WatchTile party={watch} joined={watchJoined} onOpen={() => onPin(WATCH_TILE_ID)} />
           </div>
         )}
         {tileWidth > 0 &&

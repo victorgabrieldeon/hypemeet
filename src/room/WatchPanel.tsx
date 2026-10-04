@@ -1,4 +1,4 @@
-import { ArrowRight, FolderOpen, Square } from "lucide-react";
+import { ArrowRight, EyeOff, FolderOpen, Popcorn, Square } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { Button, inputClass, Spinner } from "../components/ui";
 import type { WatchAction, WatchControls } from "./watch";
@@ -7,14 +7,18 @@ import { parseYouTube } from "./youtube";
 
 interface WatchPanelProps {
   watch: WatchControls;
+  /** Whether this viewer is following the running session (opting out is just for them). */
+  following: boolean;
+  onJoin: () => void;
+  onLeave: () => void;
   /** Called before the file is announced, so our own player already has it when the state arrives. */
   onFileChosen: (file: File) => void;
   onDone: () => void;
   onError: (text: string) => void;
 }
 
-/** Popover above the dock: start a session, swap its video or end it. */
-export function WatchPanel({ watch, onFileChosen, onDone, onError }: WatchPanelProps) {
+/** Popover above the dock: start a session, swap its video, follow it or not, or end it for everyone. */
+export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, onDone, onError }: WatchPanelProps) {
   const { party } = watch;
   const [link, setLink] = useState("");
   const [invalid, setInvalid] = useState(false);
@@ -25,6 +29,8 @@ export function WatchPanel({ watch, onFileChosen, onDone, onError }: WatchPanelP
     setPending(kind);
     try {
       await watch.dispatch(action);
+      // Picking a video means you want to watch it.
+      if (action.type === "load" && !following) onJoin();
       onDone();
     } catch {
       onError("Não deu pra falar com quem está com o vídeo. Tente de novo.");
@@ -52,23 +58,43 @@ export function WatchPanel({ watch, onFileChosen, onDone, onError }: WatchPanelP
       </div>
 
       {party && (
-        <div className="flex items-center gap-2.5 rounded-md border border-line bg-surface p-3">
-          <span className="size-2 shrink-0 rounded-full bg-blurple-hi shadow-[0_0_8px_rgb(139_147_255/0.9)]" />
-          <p className="min-w-0 flex-1 text-sm">
-            <span className="block truncate font-semibold">{watchTitle(party.state.source)}</span>
-            <span className="block truncate text-xs text-soft">
-              {party.state.playing ? "Tocando" : party.state.by ? `Pausado por ${party.state.by}` : "Pausado"}
-            </span>
-          </p>
-          <button
-            type="button"
-            disabled={pending !== null}
-            onClick={() => void run("stop", { type: "stop" })}
-            className="type-link-sm flex h-8 items-center gap-1.5 rounded-sm bg-danger/15 px-2.5 text-danger transition hover:bg-danger hover:text-ink disabled:opacity-50"
-          >
-            {pending === "stop" ? <Spinner className="size-3.5" /> : <Square className="size-3 fill-current" />}
-            Encerrar
-          </button>
+        <div className="flex flex-col gap-2.5 rounded-md border border-line bg-surface p-3">
+          <div className="flex items-center gap-2.5">
+            <span className="size-2 shrink-0 rounded-full bg-blurple-hi shadow-[0_0_8px_rgb(139_147_255/0.9)]" />
+            <p className="min-w-0 flex-1 text-sm">
+              <span className="block truncate font-semibold">{watchTitle(party.state.source)}</span>
+              <span className="block truncate text-xs text-soft">
+                {party.state.playing ? "Tocando" : party.state.by ? `Pausado por ${party.state.by}` : "Pausado"}
+                {!following && " · você não está acompanhando"}
+              </span>
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (following) onLeave();
+                else onJoin();
+                onDone();
+              }}
+              title={following ? "Fecha o vídeo só pra você; a sessão segue pros outros" : undefined}
+              className={`type-link-sm flex h-9 items-center justify-center gap-1.5 rounded-sm transition ${following ? "bg-surface-hi text-ink hover:bg-blurple/25" : "bg-blurple text-ink hover:brightness-110"
+                }`}
+            >
+              {following ? <EyeOff className="size-4" /> : <Popcorn className="size-4" />}
+              {following ? "Parar de acompanhar" : "Entrar"}
+            </button>
+            <button
+              type="button"
+              disabled={pending !== null}
+              onClick={() => void run("stop", { type: "stop" })}
+              title="Termina a sessão pra todo mundo"
+              className="type-link-sm flex h-9 items-center justify-center gap-1.5 rounded-sm bg-danger/15 text-danger transition hover:bg-danger hover:text-ink disabled:opacity-50"
+            >
+              {pending === "stop" ? <Spinner className="size-3.5" /> : <Square className="size-3 fill-current" />}
+              Encerrar pra todos
+            </button>
+          </div>
         </div>
       )}
 

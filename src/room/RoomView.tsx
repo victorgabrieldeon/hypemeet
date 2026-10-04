@@ -142,6 +142,18 @@ export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }
   useEffect(() => {
     if (watchId) setPinnedId(WATCH_TILE_ID);
   }, [watchId]);
+  // The session this viewer chose not to follow: no player at all (nothing loads, nothing plays) until they rejoin.
+  const [watchSkipped, setWatchSkipped] = useState<string | null>(null);
+  const following = !!watchId && watchSkipped !== watchId;
+  const leaveWatch = () => {
+    setWatchSkipped(watchId ?? null);
+    setPinnedId((id) => (id === WATCH_TILE_ID ? null : id));
+    setToast({ text: "Você parou de acompanhar. A sessão segue pros outros; pra voltar, é só abrir o tile.", tone: "info" });
+  };
+  const joinWatch = () => {
+    setWatchSkipped(null);
+    setPinnedId(WATCH_TILE_ID);
+  };
   const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const chatState = useSyncExternalStore(chat.subscribe, chat.getSnapshot);
@@ -300,7 +312,7 @@ export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }
         <div className="relative flex min-h-0 flex-1 gap-3">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             {/* Outside the stage so pinning/minimizing never reloads it; hidden, it keeps playing. */}
-            {watch.party && watchKey && (
+            {watch.party && watchKey && following && (
               <WatchPlayer
                 key={`${watch.party.state.id}:${watchKey}`}
                 party={watch.party}
@@ -308,12 +320,19 @@ export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }
                 file={watchFile?.key === watchKey ? watchFile.file : null}
                 onPickFile={(file) => setWatchFile({ file, key: watchKey })}
                 onMinimize={() => setPinnedId(null)}
+                onLeave={leaveWatch}
                 onError={(text) => setToast({ text, tone: "error" })}
                 className={pinnedId === WATCH_TILE_ID ? "min-h-0 flex-1" : "hidden"}
               />
             )}
             <InkProvider room={room}>
-              <Stage tiles={tiles} watch={watch.party} pinnedId={pinnedId} onPin={setPinnedId} />
+              <Stage
+                tiles={tiles}
+                watch={watch.party}
+                watchJoined={following}
+                pinnedId={pinnedId}
+                onPin={(id) => (id === WATCH_TILE_ID && !following ? joinWatch() : setPinnedId(id))}
+              />
             </InkProvider>
           </div>
           <ChatPanel
@@ -433,6 +452,9 @@ export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }
           {watchOpen && (
             <WatchPanel
               watch={watch}
+              following={following}
+              onJoin={joinWatch}
+              onLeave={leaveWatch}
               onFileChosen={(file) =>
                 setWatchFile({ file, key: sourceKey({ kind: "file", name: file.name, size: file.size }) })
               }
