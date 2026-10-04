@@ -2,7 +2,7 @@ import type { LocalParticipant, LocalTrackPublication } from "livekit-client";
 import { Gamepad2, MonitorUp, Square, Type, Volume2, VolumeX, type LucideIcon } from "lucide-react";
 import { useReducer, useState } from "react";
 import { Button, Spinner } from "../components/ui";
-import { changeScreenMode, screenModeOf, type ScreenMode, type ScreenPrefs, type TileModel } from "./model";
+import { changeScreenMode, SCREEN_AUDIO_COPY, screenModeOf, type ScreenMode, type ScreenPrefs, type TileModel } from "./model";
 
 type ScreenTile = Extract<TileModel, { kind: "screen" }>;
 
@@ -151,8 +151,8 @@ export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, 
                         )
                       }
                       className={`flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-semibold transition disabled:opacity-60 ${audio.isMuted
-                          ? "bg-danger/15 text-danger hover:bg-danger/25"
-                          : "bg-surface-hi text-ink hover:bg-blurple/25"
+                        ? "bg-danger/15 text-danger hover:bg-danger/25"
+                        : "bg-surface-hi text-ink hover:bg-blurple/25"
                         }`}
                     >
                       {audio.isMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
@@ -160,7 +160,7 @@ export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, 
                     </button>
                   ) : (
                     <span
-                      title="Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova marcando “Compartilhar áudio” no seletor."
+                      title={SCREEN_AUDIO_COPY.tooltip}
                       className="flex h-9 cursor-help items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-soft"
                     >
                       <VolumeX className="size-4" /> Sem som
@@ -183,7 +183,7 @@ export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, 
         <label className="flex cursor-pointer items-center justify-between gap-3">
           <span className="text-sm">
             <span className="block font-medium">Transmitir com som</span>
-            <span className="block text-xs text-soft">No Linux/macOS, só compartilhando uma aba.</span>
+            <span className="block text-xs text-soft">{SCREEN_AUDIO_COPY.hint}</span>
           </span>
           <button
             type="button"

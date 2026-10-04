@@ -15,6 +15,10 @@ export function buttonClass({ variant = "ghost", square = false }: { variant?: V
  return `type-link inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md transition duration-200 ease-out-expo active:translate-y-px disabled:opacity-50 ${square ? "w-12" : "px-5"} ${VARIANTS[variant]}`;
 }
 
+/** Pill-shaped link in the top bar of the home and download pages. */
+export const headerLinkClass =
+ "type-link-sm flex h-11 items-center gap-2 rounded-md border border-line bg-surface/70 px-4 text-soft transition hover:bg-surface-hi hover:text-ink";
+
 export function Button({
  variant = "ghost",
  square = false,

@@ -1,6 +1,5 @@
 import { ConnectionState, Track, type Room } from "livekit-client";
 import {
-  AudioLines,
   Check,
   Copy,
   Link2,
@@ -20,13 +19,11 @@ import type { RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
 import { RoomAudio } from "./media";
 import { loadScreenPrefs, saveScreenPrefs } from "./devices";
-import { DeviceAudioMenu, DeviceMenu, MENU_PANEL_CLASS, MenuChevron, useDismiss } from "./menus";
+import { DeviceMenu, MenuChevron, useDismiss } from "./menus";
 import {
   buildTiles,
-  deviceAudioPublication,
-  startDeviceAudio,
+  SCREEN_AUDIO_COPY,
   startScreenShare,
-  stopDeviceAudio,
   useRoomVersion,
   useScreenAudioCleanup,
   type TileModel,
@@ -101,14 +98,11 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
   useScreenAudioCleanup(room);
   const local = room.localParticipant;
   const [pinnedId, setPinnedId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"mic" | "camera" | "screen" | "deviceAudio" | null>(null);
+  const [busy, setBusy] = useState<"mic" | "camera" | "screen" | null>(null);
   const [screenPrefs, setScreenPrefs] = useState(loadScreenPrefs);
   const [screensOpen, setScreensOpen] = useState(false);
   const screensRef = useRef<HTMLDivElement>(null);
   useDismiss(screensRef, screensOpen, () => setScreensOpen(false));
-  const [deviceAudioOpen, setDeviceAudioOpen] = useState(false);
-  const deviceAudioRef = useRef<HTMLDivElement>(null);
-  useDismiss(deviceAudioRef, deviceAudioOpen, () => setDeviceAudioOpen(false));
   const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
 
@@ -141,7 +135,6 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
   );
   const micOn = local.isMicrophoneEnabled;
   const cameraOn = local.isCameraEnabled;
-  const deviceAudioId = deviceAudioPublication(local)?.track?.mediaStreamTrack.getSettings().deviceId;
   const state = room.state;
 
   async function toggleMic() {
@@ -173,25 +166,13 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
       if (screenPrefs.audio && !withAudio)
         setToast({
           tone: "info",
-          text: "Tela compartilhada sem som. Pra mandar áudio, marque “Compartilhar áudio” no seletor (no Linux/macOS só funciona compartilhando uma aba).",
+          text: SCREEN_AUDIO_COPY.missing,
         });
     } catch (e) {
       const name = (e as DOMException)?.name;
       // User closed the picker: not an error.
       if (name !== "NotAllowedError" && name !== "AbortError")
         setToast({ text: `Não deu pra compartilhar a tela: ${(e as Error).message}`, tone: "error" });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function pickDeviceAudio(deviceId: string) {
-    setDeviceAudioOpen(false);
-    setBusy("deviceAudio");
-    try {
-      await startDeviceAudio(local, deviceId);
-    } catch (e) {
-      setToast({ text: deviceError(e, "o dispositivo de áudio"), tone: "error" });
     } finally {
       setBusy(null);
     }
@@ -318,31 +299,6 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
               onStart={() => void addScreen()}
               onError={(text) => setToast({ text, tone: "error" })}
             />
-          )}
-        </div>
-        <div ref={deviceAudioRef} className="relative">
-          <ControlButton
-            tone="plain"
-            on={deviceAudioId !== undefined}
-            busy={busy === "deviceAudio"}
-            expanded={deviceAudioOpen}
-            onClick={() => setDeviceAudioOpen(!deviceAudioOpen)}
-            label="Transmitir áudio do PC"
-          >
-            <AudioLines className="size-5" />
-          </ControlButton>
-          {deviceAudioOpen && (
-            <div role="menu" className={MENU_PANEL_CLASS}>
-              <DeviceAudioMenu
-                room={room}
-                activeId={deviceAudioId}
-                onPick={(deviceId) => void pickDeviceAudio(deviceId)}
-                onStop={() => {
-                  setDeviceAudioOpen(false);
-                  void stopDeviceAudio(local);
-                }}
-              />
-            </div>
           )}
         </div>
         <button

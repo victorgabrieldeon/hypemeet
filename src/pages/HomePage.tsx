@@ -1,9 +1,19 @@
-import { ArrowRight, Clock, Download, Hash, History, Plus, Trash2, UserRound } from "lucide-react";
+import { ArrowRight, Clock, Download, Hash, Plus, Trash2, UserRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { CallPreview } from "../components/CallPreview";
-import { DesktopDownloads } from "../components/DesktopDownloads";
-import { Avatar, Button, Field, Logo, LogoMark, Spinner, Wordmark, glowCardClass, inputClass } from "../components/ui";
+import {
+  Avatar,
+  Button,
+  Field,
+  Logo,
+  LogoMark,
+  Spinner,
+  Wordmark,
+  glowCardClass,
+  headerLinkClass,
+  inputClass,
+} from "../components/ui";
 import { api } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
 import { IS_DESKTOP_APP } from "../lib/downloads";
@@ -18,9 +28,6 @@ function timeAgo(ts: number): string {
   if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
   return relativeTime.format(Math.round(hours / 24), "day");
 }
-
-const headerLinkClass =
-  "type-link-sm flex h-11 items-center gap-2 rounded-md border border-line bg-surface/70 px-4 text-soft transition hover:bg-surface-hi hover:text-ink";
 
 type Mode = "create" | "join";
 
@@ -83,27 +90,66 @@ export function HomePage() {
     <div className="aurora min-h-full">
       <header className="mx-auto flex max-w-[1240px] items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
         <Logo />
-        <nav className="flex items-center gap-2" aria-label="Atalhos">
-          {savedRooms.length > 0 && (
-            <a href="#salas" className={headerLinkClass}>
-              <History className="size-4" />
-              <span className="hidden sm:inline">Suas salas</span>
-              <span className="text-ink">{savedRooms.length}</span>
-            </a>
-          )}
-          {!IS_DESKTOP_APP && (
-            <a href="#baixar" className={headerLinkClass} aria-label="Baixar app" title="Baixar app">
-              <Download className="size-4" />
-              <span className="hidden sm:inline">Baixar app</span>
-            </a>
-          )}
-        </nav>
+        {!IS_DESKTOP_APP && (
+          <Link to="/baixar" className={headerLinkClass} aria-label="Baixar app" title="Baixar app">
+            <Download className="size-4" />
+            <span className="hidden sm:inline">Baixar app</span>
+          </Link>
+        )}
       </header>
 
-      <main className="mx-auto grid max-w-[1240px] items-center gap-12 px-5 pt-4 pb-16 sm:px-8 lg:min-h-[calc(100svh-7.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pb-24">
-        <div className="hidden lg:block">
-          <CallPreview />
-        </div>
+      <main className="mx-auto grid max-w-[1240px] items-center gap-8 px-5 pt-4 pb-16 sm:px-8 lg:min-h-[calc(100svh-7.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pb-24">
+        {/* Returning visitors see their rooms first; newcomers get the call preview instead. */}
+        {savedRooms.length > 0 ? (
+          <section aria-labelledby="salas-titulo" className="flex min-w-0 animate-fade-in flex-col gap-4">
+            <h2 id="salas-titulo" className="flex items-baseline gap-3 font-display text-xl font-bold">
+              Suas salas
+              <span className="text-sm font-medium text-soft">{savedRooms.length}</span>
+            </h2>
+            <ul className="-mr-2 flex max-h-[42svh] flex-col gap-3 overflow-y-auto pr-2 [scrollbar-width:thin] lg:max-h-[min(36rem,calc(100svh-14rem))]">
+              {savedRooms.map((room) => (
+                <li
+                  key={room.code}
+                  className="group flex items-center gap-4 rounded-lg border border-line bg-panel p-3 transition hover:border-white/[0.12] hover:bg-surface"
+                >
+                  <Avatar name={room.name} shape="square" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-display font-bold">{room.name}</h3>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-soft">
+                      <span className="font-mono tracking-widest">{formatCode(room.code)}</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3.5" /> {timeAgo(room.lastJoinedAt)}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => forgetRoom(room.code)}
+                    className="grid size-10 shrink-0 place-items-center rounded-md text-soft opacity-0 transition group-hover:opacity-100 hover:bg-surface-hi hover:text-danger focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                    aria-label={`Remover ${room.name}`}
+                    title="Remover da lista"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                  <Button
+                    variant="primary"
+                    className="type-link-sm h-10"
+                    onClick={() => {
+                      persistNickname();
+                      navigate(`/r/${room.code}`);
+                    }}
+                    aria-label={`Entrar em ${room.name}`}
+                  >
+                    <span className="hidden sm:inline">Entrar</span> <ArrowRight className="size-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <div className="hidden lg:block">
+            <CallPreview />
+          </div>
+        )}
 
         <section className={`${glowCardClass} mx-auto w-full max-w-[34rem] animate-pop p-5 sm:p-10`}>
           <div className="mb-8 flex flex-col items-center gap-4 text-center">
@@ -179,59 +225,6 @@ export function HomePage() {
           </div>
         </section>
       </main>
-
-      <section id="salas" className="mx-auto flex max-w-[1240px] scroll-mt-6 flex-col gap-5 px-5 pb-20 sm:px-8">
-        <h2 className="flex items-baseline gap-3 font-display text-xl font-bold">
-          Suas salas
-          {savedRooms.length > 0 && <span className="text-sm font-medium text-soft">{savedRooms.length}</span>}
-        </h2>
-        {savedRooms.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line px-6 py-10 text-center text-soft">
-            As salas que você criar ou entrar aparecem aqui pra voltar com um clique.
-          </p>
-        ) : (
-          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {savedRooms.map((room) => (
-              <li
-                key={room.code}
-                className="group flex animate-fade-in items-center gap-4 rounded-lg border border-line bg-panel p-3 transition hover:border-white/[0.12] hover:bg-surface"
-              >
-                <Avatar name={room.name} shape="square" />
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate font-display font-bold">{room.name}</h3>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-soft">
-                    <span className="font-mono tracking-widest">{formatCode(room.code)}</span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="size-3.5" /> {timeAgo(room.lastJoinedAt)}
-                    </span>
-                  </p>
-                </div>
-                <button
-                  onClick={() => forgetRoom(room.code)}
-                  className="grid size-10 shrink-0 place-items-center rounded-md text-soft opacity-0 transition group-hover:opacity-100 hover:bg-surface-hi hover:text-danger focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                  aria-label={`Remover ${room.name}`}
-                  title="Remover da lista"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-                <Button
-                  variant="primary"
-                  className="type-link-sm h-10"
-                  onClick={() => {
-                    persistNickname();
-                    navigate(`/r/${room.code}`);
-                  }}
-                  aria-label={`Entrar em ${room.name}`}
-                >
-                  <span className="hidden sm:inline">Entrar</span> <ArrowRight className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {!IS_DESKTOP_APP && <DesktopDownloads />}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
  type TrackPublication,
 } from "livekit-client";
 import { useEffect, useReducer } from "react";
+import { detectOS, IS_DESKTOP_APP } from "../lib/downloads";
 
 /**
  * Every screen share is published as a pair:
@@ -99,6 +100,26 @@ export interface ScreenPrefs {
 }
 
 /**
+ * Where screen audio is switched on and what it captures differ between a browser tab (tab audio
+ * only on Linux/macOS) and the desktop app (whole-system loopback; on Linux it includes the call).
+ */
+export const SCREEN_AUDIO_COPY = IS_DESKTOP_APP
+ ? {
+  hint:
+   detectOS() === "linux"
+    ? "Todo o som do PC, inclusive o desta chamada (eco)."
+    : "Todo o som do PC, menos o desta chamada.",
+  missing: "Tela compartilhada sem som. Pra mandar áudio, ative “Compartilhar o áudio do sistema” ao escolher a tela.",
+  tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova ativando “Compartilhar o áudio do sistema”.",
+ }
+ : {
+  hint: "No Linux/macOS, só compartilhando uma aba.",
+  missing:
+   "Tela compartilhada sem som. Pra mandar áudio, marque “Compartilhar áudio” no seletor (no Linux/macOS só funciona compartilhando uma aba).",
+  tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova marcando “Compartilhar áudio” no seletor.",
+ };
+
+/**
  * Opens the browser picker and publishes the chosen surface. Resolves to whether audio is being
  * sent — false when it wasn't requested or the user/browser didn't provide it.
  */
@@ -186,50 +207,6 @@ export async function changeScreenMode(pub: LocalTrackPublication, mode: ScreenM
  top.maxBitrate = preset.maxBitrate;
  top.maxFramerate = preset.frameRate;
  await sender.setParameters(params);
-}
-
-/**
- * "Áudio do PC": any audio input (typically a virtual cable the user routes chosen apps into) sent as
- * raw stereo music audio. One per participant, attached to the person rather than to a screen.
- */
-const DEVICE_AUDIO_NAME = "device-audio";
-
-export function deviceAudioPublication(participant: Participant): TrackPublication | undefined {
- return participant.getTrackPublicationByName(DEVICE_AUDIO_NAME);
-}
-
-/** Starts streaming `deviceId`, replacing the current one. The old stream keeps going if the new one fails to open. */
-export async function startDeviceAudio(participant: LocalParticipant, deviceId: string): Promise<void> {
- const stream = await navigator.mediaDevices.getUserMedia({
-  // Raw stereo: voice processing would wreck music/game audio.
-  audio: {
-   deviceId: { exact: deviceId },
-   echoCancellation: false,
-   noiseSuppression: false,
-   autoGainControl: false,
-   channelCount: { ideal: 2 },
-  },
- });
- const [track] = stream.getAudioTracks();
- await stopDeviceAudio(participant);
- try {
-  await participant.publishTrack(track, {
-   name: DEVICE_AUDIO_NAME,
-   // Screen-audio semantics: unpublished if the device disappears, never treated as the mic.
-   source: Track.Source.ScreenShareAudio,
-   audioPreset: AudioPresets.musicHighQualityStereo,
-   dtx: false,
-   red: false,
-  });
- } catch (err) {
-  track.stop();
-  throw err;
- }
-}
-
-export async function stopDeviceAudio(participant: LocalParticipant): Promise<void> {
- const track = participant.getTrackPublicationByName(DEVICE_AUDIO_NAME)?.track;
- if (track) await participant.unpublishTrack(track);
 }
 
 /**

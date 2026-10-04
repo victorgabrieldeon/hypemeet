@@ -3,7 +3,7 @@
 Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + código da sala.
 
 - **Criar sala** com nome → gera código `ABC-DEF` pra mandar pra galera.
-- **Salas salvas**: toda sala que você cria/entra aparece na home (localStorage do navegador).
+- **Salas salvas**: toda sala que você cria/entra aparece no topo da home (localStorage do navegador).
 - **Várias telas ao mesmo tempo** por pessoa, cada uma com seu próprio áudio.
 - **Volume por stream, só pra você**: mutar ou ajustar de 0–200% cada tela e cada microfone.
 - **Central de transmissões** (botão de tela na barra): lista cada tela que você está mandando, com
@@ -12,9 +12,6 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 - **Modo por tela**: "Jogo" (60 fps, 6 Mbps, prioriza fluidez) ou "Nitidez" (30 fps, 4 Mbps,
   prioriza resolução). Trocar numa tela já no ar ajusta captura, encoder e bitrate sem reabrir o seletor.
 - **Escolher microfone, câmera e saída de áudio** nos chevrons dos botões; a escolha fica salva.
-- **Áudio do PC** (botão de ondas na barra): transmite qualquer entrada de áudio — normalmente um
-  cabo virtual com os apps que você escolheu — como áudio estéreo de música, sem tela. Aparece no
-  card da pessoa, com volume próprio pra quem ouve. Veja [Transmitir só alguns apps](#transmitir-só-alguns-apps-sem-o-discord).
 - Fixar (duplo clique) e tela cheia por tile.
 
 ## Stack
@@ -92,7 +89,7 @@ produção ou do `dev:lan`) numa janela própria e adiciona o que a aba do naveg
 - **Seletor de tela nativo** (telas e janelas com miniatura), uma vez por tela compartilhada.
 - **Áudio do sistema** junto da tela. No Windows e no macOS (14.2+) o som da própria chamada fica de
   fora; no Linux não dá pra excluir, então vem desligado e o seletor avisa do eco. No Wayland o
-  seletor é o do sistema (portal do PipeWire) e não há áudio do sistema.
+  seletor é o do sistema (portal do PipeWire), que não pergunta de áudio: o app pergunta logo depois.
 - Segue rodando minimizado (sem throttling) e abre links externos no navegador.
 
 ```bash
@@ -114,7 +111,7 @@ Assim**, e compartilhar tela pede a permissão de Gravação de Tela.
 **Downloads no site.** `desktop:publish` cria a release `v<versão>` (de `desktop/package.json`) no repo
 público [`hypemeet-releases`](https://github.com/victorgabrieldeon/hypemeet-releases) — este repo é
 privado — com os arquivos sem a versão no nome (`HypeMeet-Setup.exe`, `HypeMeet-mac-arm64.zip`…).
-A home linka `releases/latest/download/<arquivo>`, então publicar uma versão nova já atualiza o site.
+A página `/baixar` (botão "Baixar app" da home) linka `releases/latest/download/<arquivo>`, então publicar uma versão nova já atualiza o site.
 A lista de arquivos vive em `src/lib/downloads.ts` e vale para o site e para o script. Para lançar
 uma versão nova, suba `version` em `desktop/package.json`; rodar de novo na mesma versão substitui
 os arquivos.
@@ -136,9 +133,6 @@ transmissões, botão "Parar" do tile ou a barra "Parar compartilhamento" do nav
 pareado é despublicado junto. "Mudo" na central só pausa o áudio daquela tela (a trilha continua
 publicada); uma tela compartilhada sem som não ganha som depois — é preciso abrir uma nova.
 
-O "áudio do PC" é uma trilha avulsa `device-audio` (source `ScreenShareAudio`, mesmo preset), uma por
-pessoa; trocar de dispositivo abre o novo antes de largar o antigo.
-
 O volume acima de 100% usa `webAudioMix` do LiveKit (GainNode por trilha).
 
 ## Limitações de áudio da tela (do navegador, não do app)
@@ -151,7 +145,7 @@ O volume acima de 100% usa `webAudioMix` do LiveKit (GainNode por trilha).
 
 Se a tela for compartilhada sem som, o app avisa.
 
-### Áudio do PC sem o Discord
+### Áudio do sistema sem o Discord
 
 O navegador não deixa excluir um app específico do áudio do sistema: "tela inteira + áudio do
 sistema" pega tudo que toca no dispositivo de saída padrão, Discord incluso. O que dá pra fazer:
@@ -160,31 +154,3 @@ sistema" pega tudo que toca no dispositivo de saída padrão, Discord incluso. O
   tira do áudio do sistema o que a aba do HypeMeet está tocando (voz e telas dos outros).
 - **Só o áudio do jogo/app**: compartilhe a **janela** dele (não a tela inteira) e marque o áudio
   da janela — o Discord fica de fora.
-- **Vários apps, sem o Discord**: use o botão **Áudio do PC** com um cabo virtual (abaixo).
-
-### Transmitir só alguns apps (sem o Discord)
-
-O sistema manda os apps escolhidos pra uma saída virtual; o HypeMeet transmite a entrada dela.
-Funciona em qualquer navegador e sistema.
-
-**Windows**
-1. Instale o [VB-CABLE](https://vb-audio.com/Cable/) (grátis) e reinicie.
-2. *Configurações → Sistema → Som → Mixer de volume*: no jogo/Spotify/etc., troque a saída para
-   **CABLE Input**. Deixe o Discord no seu fone.
-3. Pra continuar ouvindo esses apps: *Painel de som → Gravação → CABLE Output → Propriedades →
-   Escutar → "Escutar este dispositivo"* pelo seu fone (ou use o Voicemeeter).
-4. No HypeMeet, botão **Áudio do PC → CABLE Output**.
-
-**Linux (PipeWire/PulseAudio)**
-1. Crie a saída virtual e uma entrada que o Chrome enxergue (ele esconde os "Monitor of …"):
-   ```bash
-   pactl load-module module-null-sink sink_name=hypemeet sink_properties=device.description=HypeMeet
-   pactl load-module module-remap-source master=hypemeet.monitor source_name=hypemeet_in source_properties=device.description=HypeMeetIn
-   ```
-2. No `pavucontrol` (aba Reprodução), mande os apps pra **HypeMeet**. Pra ouvir junto:
-   `pactl load-module module-loopback source=hypemeet.monitor`.
-3. No HypeMeet, botão **Áudio do PC → HypeMeetIn**. Os módulos somem ao reiniciar o PipeWire/sessão.
-
-**macOS**: instale o [BlackHole](https://existential.audio/blackhole/), crie um *Dispositivo de
-saída múltipla* (BlackHole + fone) no Configuração de Áudio e MIDI, mande os apps pra ele e escolha
-**BlackHole** no HypeMeet.

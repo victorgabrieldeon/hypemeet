@@ -1,6 +1,6 @@
 // HypeMeet desktop: a Chromium shell around a HypeMeet server. The UI and API stay on the server;
 // this process adds what a browser tab can't: a native screen picker and system-audio capture.
-const { app, BrowserWindow, Menu, desktopCapturer, ipcMain, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, desktopCapturer, dialog, ipcMain, session, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -192,6 +192,22 @@ ipcMain.on("picker:done", (event, choice) => {
   window.close();
 });
 
+/** Wayland: the portal picker has no audio option, so ask once it closes. Off by default: Linux loopback echoes the room. */
+async function askSystemAudio() {
+  if (!mainWindow) return false;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: "question",
+    title: "Compartilhar tela",
+    message: "Compartilhar o áudio do sistema também?",
+    detail: "Inclui o som desta chamada: quem fala vai se ouvir de volta. Use só com a sala em silêncio.",
+    buttons: ["Sem áudio", "Compartilhar áudio"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  return response === 1;
+}
+
 async function handleDisplayMedia(request, callback) {
   // Denying = calling back without a source; the page gets AbortError and treats it as "closed".
   const deny = () => callback(null);
@@ -200,8 +216,8 @@ async function handleDisplayMedia(request, callback) {
     if (IS_WAYLAND) {
       const [source] = await desktopCapturer.getSources({ types: ["screen", "window"] });
       if (!source) return deny();
-      // No picker of ours to ask about audio, and Linux loopback would echo the room back.
-      return callback({ video: source });
+      const audio = request.audioRequested && (await askSystemAudio());
+      return callback({ video: source, ...(audio ? { audio: "loopback" } : {}) });
     }
     const choice = await pickSource(request.audioRequested);
     if (!choice) return deny();

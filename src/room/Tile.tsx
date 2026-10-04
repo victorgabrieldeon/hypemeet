@@ -6,7 +6,6 @@ import {
   type TrackPublication,
 } from "livekit-client";
 import {
-  AudioLines,
   Maximize,
   MicOff,
   MonitorUp,
@@ -20,7 +19,7 @@ import {
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import { Avatar, Spinner } from "../components/ui";
 import { VideoView } from "./media";
-import { deviceAudioPublication, volumeKey, type TileModel } from "./model";
+import { volumeKey, type TileModel } from "./model";
 import { MAX_VOLUME, useVolumes } from "./volume";
 
 function VolumeControl({ participant, pub, label }: { participant: Participant; pub: TrackPublication; label: string }) {
@@ -113,7 +112,6 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   if (tile.kind === "camera") {
     const camera = participant.getTrackPublication(Track.Source.Camera);
     const mic = participant.getTrackPublication(Track.Source.Microphone);
-    const deviceAudio = deviceAudioPublication(participant);
     const cameraOn = camera?.track && !camera.isMuted;
     const micOn = mic && !mic.isMuted;
     return (
@@ -136,14 +134,10 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           <Pill>
             {!micOn && <MicOff className="size-3.5 shrink-0 text-danger" />}
             <span className="truncate">{isLocal ? `${name} (você)` : name}</span>
-            {deviceAudio && <AudioLines className="size-3.5 shrink-0 text-ink/75" aria-label="transmitindo áudio do PC" />}
           </Pill>
         </div>
         <div className={`${overlayBase} top-2 right-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
           {!isLocal && mic && <VolumeControl participant={participant} pub={mic} label={`microfone de ${name}`} />}
-          {!isLocal && deviceAudio && (
-            <VolumeControl participant={participant} pub={deviceAudio} label={`áudio do PC de ${name}`} />
-          )}
           <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </IconButton>

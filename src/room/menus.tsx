@@ -21,7 +21,7 @@ export function useDismiss(ref: RefObject<HTMLElement | null>, open: boolean, cl
 }
 
 /** Popover box that opens above its trigger; the trigger's wrapper must be `relative`. */
-export const MENU_PANEL_CLASS =
+const MENU_PANEL_CLASS =
  "absolute bottom-full left-1/2 z-40 mb-3 w-[min(18rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop rounded-lg bg-canvas p-2 shadow-float ring-1 ring-line";
 
 /**
@@ -159,80 +159,6 @@ export function DeviceMenu({
       </MenuSection>
      );
     })}
-  </>
- );
-}
-
-/**
- * Picks the input streamed as "áudio do PC". Opening it is an explicit request, so it may prompt for
- * mic permission: without it the browser hides device names.
- */
-export function DeviceAudioMenu({
- room,
- activeId,
- onPick,
- onStop,
-}: {
- room: Room;
- activeId: string | undefined;
- onPick: (deviceId: string) => void;
- onStop: () => void;
-}) {
- const [devices, setDevices] = useState<MediaDeviceInfo[] | null>(null);
- const [denied, setDenied] = useState(false);
-
- useEffect(() => {
-  let cancelled = false;
-  const load = () =>
-   Room.getLocalDevices("audioinput", true)
-    .then((list) => {
-     if (cancelled) return;
-     // "default"/"communications" are aliases of real entries; listing them twice only confuses.
-     setDevices(list.filter((d) => d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications"));
-     setDenied(false);
-    })
-    .catch(() => {
-     if (cancelled) return;
-     setDevices([]);
-     setDenied(true);
-    });
-  void load();
-  room.on(RoomEvent.MediaDevicesChanged, load);
-  return () => {
-   cancelled = true;
-   room.off(RoomEvent.MediaDevicesChanged, load);
-  };
- }, [room]);
-
- return (
-  <>
-   <MenuSection title="Transmitir áudio de">
-    {!devices ? (
-     <p className="px-2.5 py-1.5 text-sm text-soft">Procurando dispositivos…</p>
-    ) : denied ? (
-     <p className="px-2.5 py-1.5 text-sm text-soft">Libere o microfone no cadeado da barra de endereço pra ver os dispositivos.</p>
-    ) : devices.length === 0 ? (
-     <p className="px-2.5 py-1.5 text-sm text-soft">Nenhum encontrado</p>
-    ) : (
-     devices.map((device, i) => (
-      <MenuItem key={device.deviceId} active={device.deviceId === activeId} onClick={() => onPick(device.deviceId)}>
-       <span className="block truncate">{device.label || `Entrada ${i + 1}`}</span>
-      </MenuItem>
-     ))
-    )}
-    {activeId && (
-     <button
-      onClick={onStop}
-      className="mt-1 rounded-sm px-2.5 py-2 text-left text-sm text-danger transition hover:bg-danger/15"
-     >
-      Parar de transmitir
-     </button>
-    )}
-   </MenuSection>
-   <p className="mt-2 border-t border-line px-2.5 pt-2.5 pb-1 text-xs text-soft">
-    Pra mandar só alguns apps (sem o Discord), toque eles num cabo virtual — VB-CABLE no Windows, BlackHole no
-    macOS, null sink no Linux — e escolha a saída do cabo aqui.
-   </p>
   </>
  );
 }
