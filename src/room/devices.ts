@@ -11,14 +11,18 @@ export function saveDevice(kind: DeviceKind, deviceId: string) {
  localStorage.setItem(deviceKey(kind), deviceId);
 }
 
+export function loadDevice(kind: DeviceKind): string | null {
+ return localStorage.getItem(deviceKey(kind));
+}
+
 /**
  * Room options that start on the devices picked last time. Plain (non-exact) deviceIds act as a
  * preference, so an unplugged headset silently falls back to the system default.
  */
 export function deviceRoomOptions(): Pick<RoomOptions, "audioCaptureDefaults" | "videoCaptureDefaults" | "audioOutput"> {
- const mic = localStorage.getItem(deviceKey("audioinput"));
- const camera = localStorage.getItem(deviceKey("videoinput"));
- const speaker = localStorage.getItem(deviceKey("audiooutput"));
+ const mic = loadDevice("audioinput");
+ const camera = loadDevice("videoinput");
+ const speaker = loadDevice("audiooutput");
  return {
   ...(mic ? { audioCaptureDefaults: { deviceId: mic } } : {}),
   ...(camera ? { videoCaptureDefaults: { deviceId: camera } } : {}),

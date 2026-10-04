@@ -13,6 +13,10 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   prioriza resolução). Trocar numa tela já no ar ajusta captura, encoder e bitrate sem reabrir o seletor.
 - **Escolher microfone, câmera e saída de áudio** nos chevrons dos botões; a escolha fica salva.
 - Fixar (duplo clique) e tela cheia por tile.
+- **Entra mutado**: microfone e câmera começam desligados no lobby.
+- **Tela só sob demanda**: a tela de outra pessoa aparece com "Ver transmissão" e só começa a
+  chegar (vídeo + som) quando você clica; "Parar de assistir" no tile corta de novo.
+- **Sons da sala**: alguém entrou/saiu, você entrou/saiu, tela começou/parou, mic ligado/mutado.
 
 ## Stack
 
@@ -132,6 +136,10 @@ Quem assiste junta vídeo + áudio pelo nome e ordena pelo timestamp. Quando a t
 transmissões, botão "Parar" do tile ou a barra "Parar compartilhamento" do navegador), o áudio
 pareado é despublicado junto. "Mudo" na central só pausa o áudio daquela tela (a trilha continua
 publicada); uma tela compartilhada sem som não ganha som depois — é preciso abrir uma nova.
+
+A sala conecta com `autoSubscribe: false`: microfones e câmeras são assinados automaticamente
+(`useSubscriptions`), telas só quando quem assiste clica em "Ver transmissão" — o áudio pareado
+segue a escolha feita para o vídeo, inclusive se for publicado depois.
 
 O volume acima de 100% usa `webAudioMix` do LiveKit (GainNode por trilha).
 

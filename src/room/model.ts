@@ -5,6 +5,8 @@ import {
  type LocalParticipant,
  type LocalTrackPublication,
  type Participant,
+ type RemoteParticipant,
+ type RemoteTrackPublication,
  type Room,
  type TrackPublication,
 } from "livekit-client";
@@ -230,6 +232,39 @@ export function useScreenAudioCleanup(room: Room) {
  }, [room]);
 }
 
+/**
+ * The room connects with autoSubscribe off: mics and cameras are subscribed here as they appear,
+ * while a screen (video + paired audio) only streams once the listener chooses to watch it.
+ */
+export function useSubscriptions(room: Room) {
+ useEffect(() => {
+  const onPublished = (pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+   if (pub.source === Track.Source.ScreenShare) return;
+   if (pub.source === Track.Source.ScreenShareAudio) {
+    // Audio is published right after its video: follow whatever the listener chose for that screen.
+    const video = [...participant.trackPublications.values()].find(
+     (v) => v.source === Track.Source.ScreenShare && pub.trackName === v.trackName + AUDIO_SUFFIX,
+    );
+    if (video?.isDesired) pub.setSubscribed(true);
+    return;
+   }
+   pub.setSubscribed(true);
+  };
+  for (const participant of room.remoteParticipants.values())
+   for (const pub of participant.trackPublications.values()) onPublished(pub, participant);
+  room.on(RoomEvent.TrackPublished, onPublished);
+  return () => {
+   room.off(RoomEvent.TrackPublished, onPublished);
+  };
+ }, [room]);
+}
+
+/** Starts or stops receiving a remote screen, its audio included. */
+export function watchScreen(tile: Extract<TileModel, { kind: "screen" }>, watch: boolean) {
+ (tile.video as RemoteTrackPublication).setSubscribed(watch);
+ (tile.audio as RemoteTrackPublication | undefined)?.setSubscribed(watch);
+}
+
 const RERENDER_EVENTS = [
  RoomEvent.ConnectionStateChanged,
  RoomEvent.ParticipantConnected,
@@ -239,6 +274,7 @@ const RERENDER_EVENTS = [
  RoomEvent.TrackUnpublished,
  RoomEvent.TrackSubscribed,
  RoomEvent.TrackUnsubscribed,
+ RoomEvent.TrackSubscriptionStatusChanged,
  RoomEvent.TrackMuted,
  RoomEvent.TrackUnmuted,
  RoomEvent.LocalTrackPublished,

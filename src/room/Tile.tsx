@@ -3,14 +3,17 @@ import {
   Track,
   type LocalTrackPublication,
   type Participant,
+  type RemoteTrackPublication,
   type TrackPublication,
 } from "livekit-client";
 import {
+  EyeOff,
   Maximize,
   MicOff,
   MonitorUp,
   Pin,
   PinOff,
+  Play,
   Volume1,
   Volume2,
   VolumeX,
@@ -19,7 +22,7 @@ import {
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import { Avatar, Spinner } from "../components/ui";
 import { VideoView } from "./media";
-import { volumeKey, type TileModel } from "./model";
+import { volumeKey, watchScreen, type TileModel } from "./model";
 import { MAX_VOLUME, useVolumes } from "./volume";
 
 function VolumeControl({ participant, pub, label }: { participant: Participant; pub: TrackPublication; label: string }) {
@@ -149,13 +152,28 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const { video, audio, number } = tile;
   const screenLabel = number ? `tela ${number}` : "tela";
   const title = isLocal ? `Sua ${screenLabel}` : `${number ? `Tela ${number}` : "Tela"} de ${name}`;
+  // Remote screens aren't received until the listener asks for them (see useSubscriptions).
+  const watching = isLocal || (video as RemoteTrackPublication).isDesired;
   return (
     <div
       ref={ref}
       onDoubleClick={onTogglePin}
       className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black"
     >
-      {video.track ? (
+      {!watching ? (
+        <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              watchScreen(tile, true);
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className={`type-link-sm flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+          >
+            <Play className={compact ? "size-3.5" : "size-4"} /> {compact ? "Assistir" : "Ver transmissão"}
+          </button>
+        </div>
+      ) : video.track ? (
         <VideoView track={video.track} fit="contain" />
       ) : (
         <div className="grid size-full place-items-center text-soft">
@@ -170,7 +188,9 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
         </Pill>
       </div>
       <div className={`${overlayBase} right-2 bottom-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
-        {!isLocal && audio && <VolumeControl participant={participant} pub={audio} label={`${screenLabel} de ${name}`} />}
+        {!isLocal && watching && audio && (
+          <VolumeControl participant={participant} pub={audio} label={`${screenLabel} de ${name}`} />
+        )}
         {participant instanceof LocalParticipant && (
           <button
             onClick={(e) => {
@@ -184,12 +204,19 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             <X className="size-4" /> Parar
           </button>
         )}
+        {!isLocal && watching && (
+          <IconButton onClick={() => watchScreen(tile, false)} label="Parar de assistir">
+            <EyeOff className="size-4" />
+          </IconButton>
+        )}
         <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
           {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
         </IconButton>
-        <IconButton onClick={toggleFullscreen} label="Tela cheia">
-          <Maximize className="size-4" />
-        </IconButton>
+        {watching && (
+          <IconButton onClick={toggleFullscreen} label="Tela cheia">
+            <Maximize className="size-4" />
+          </IconButton>
+        )}
       </div>
     </div>
   );

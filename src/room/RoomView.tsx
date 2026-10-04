@@ -26,10 +26,12 @@ import {
   startScreenShare,
   useRoomVersion,
   useScreenAudioCleanup,
+  useSubscriptions,
   type TileModel,
 } from "./model";
 import { ScreenPanel } from "./ScreenPanel";
 import { Stage } from "./Stage";
+import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
   const name = (err as DOMException)?.name;
@@ -96,6 +98,8 @@ interface RoomViewProps {
 export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
+  useSubscriptions(room);
+  useRoomSounds(room);
   const local = room.localParticipant;
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<"mic" | "camera" | "screen" | null>(null);
@@ -141,6 +145,7 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
     setBusy("mic");
     try {
       await local.setMicrophoneEnabled(!micOn);
+      playCue(micOn ? "mute" : "unmute");
     } catch (e) {
       setToast({ text: deviceError(e, "o microfone"), tone: "error" });
     } finally {
@@ -302,7 +307,10 @@ export function RoomView({ room, info, initialDevices, onLeave, onRejoin }: Room
           )}
         </div>
         <button
-          onClick={onLeave}
+          onClick={() => {
+            playCue("leave");
+            onLeave();
+          }}
           className="type-link ml-1 flex h-12 items-center gap-2 rounded-full bg-danger px-4 text-ink transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 sm:ml-2 sm:h-14 sm:px-6"
           aria-label="Sair da sala"
         >

@@ -9,6 +9,7 @@ import { loadNickname, rememberRoom, saveNickname } from "../lib/storage";
 import { deviceRoomOptions } from "../room/devices";
 import { RoomView } from "../room/RoomView";
 import { VolumeProvider } from "../room/volume";
+import { playCue } from "../room/sounds";
 
 type Phase =
   | { step: "loading" }
@@ -105,7 +106,7 @@ function Lobby({
   onJoined: (grant: JoinGrant, devices: { mic: boolean; camera: boolean }) => void;
 }) {
   const [nickname, setNickname] = useState(loadNickname);
-  const [mic, setMic] = useState(true);
+  const [mic, setMic] = useState(false);
   const [camera, setCamera] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -202,8 +203,13 @@ function LiveRoom({
     });
     let cancelled = false;
     instance
-      .connect(grant.url ?? location.origin.replace(/^http/, "ws"), grant.token)
-      .then(() => !cancelled && setRoom(instance))
+      // Screens are opt-in: useSubscriptions picks what to receive.
+      .connect(grant.url ?? location.origin.replace(/^http/, "ws"), grant.token, { autoSubscribe: false })
+      .then(() => {
+        if (cancelled) return;
+        setRoom(instance);
+        playCue("join");
+      })
       .catch((err: Error) => !cancelled && setError(err.message));
     return () => {
       cancelled = true;
