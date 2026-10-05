@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FADE_MS, HOLD_MS, PING_MS, useInk, type InkTool, type ScreenInk } from "./ink";
 import { useSize } from "./useSize";
 
@@ -152,9 +152,19 @@ export function InkLayer({ screen, aspect, tool }: InkLayerProps) {
   const rect = fitContain(box, aspect);
   /** The press in progress; id stays null until it has moved far enough to be a stroke. */
   const gesture = useRef<{ id: string | null; x: number; y: number; clientX: number; clientY: number } | null>(null);
+  // Any layer over the video gets blended into every one of its frames, which without a GPU (software
+  // compositing) costs the screen real fps. So the canvas only exists while there's ink or a tool in hand.
+  const [inked, setInked] = useState(() => !!ink.visible(screen, performance.now()));
+  const shown = inked || !!tool;
+
+  useEffect(() => {
+    setInked(!!ink.visible(screen, performance.now()));
+    return ink.subscribe(screen, () => setInked(true));
+  }, [ink, screen]);
 
   // Animates only while there's ink on this screen; the store wakes it when something new arrives.
   useEffect(() => {
+    if (!shown) return;
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
@@ -166,7 +176,7 @@ export function InkLayer({ screen, aspect, tool }: InkLayerProps) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
       const marks = ink.visible(screen, now);
-      if (!marks) return;
+      if (!marks) return setInked(false);
       paint(ctx, marks, rect.width, rect.height, now);
       frame = requestAnimationFrame(draw);
     };
@@ -179,7 +189,7 @@ export function InkLayer({ screen, aspect, tool }: InkLayerProps) {
       cancelAnimationFrame(frame);
       unsubscribe();
     };
-  }, [ink, screen, rect.width, rect.height]);
+  }, [ink, screen, shown, rect.width, rect.height]);
 
   // Putting the tool down (or the tile going away) ends a stroke left mid-air.
   useEffect(
@@ -198,42 +208,44 @@ export function InkLayer({ screen, aspect, tool }: InkLayerProps) {
 
   return (
     <div ref={boxRef} className="pointer-events-none absolute inset-0">
-      <canvas
-        ref={canvasRef}
-        className={`absolute touch-none ${tool ? "pointer-events-auto cursor-crosshair" : ""}`}
-        style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
-        onPointerDown={(e) => {
-          if (!tool || e.button !== 0) return;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          const [x, y] = point(e);
-          gesture.current = { id: null, x, y, clientX: e.clientX, clientY: e.clientY };
-        }}
-        onPointerMove={(e) => {
-          const g = gesture.current;
-          if (!g || !tool) return;
-          if (g.id === null) {
-            if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < DRAG_PX) return;
-            g.id = ink.start(screen, tool, g.x, g.y);
-          }
-          // Coalesced samples keep fast pen strokes smooth; an arrow only needs the latest.
-          const samples = tool === "pen" ? (e.nativeEvent.getCoalescedEvents?.() ?? []) : [];
-          for (const sample of samples.length > 0 ? samples : [e.nativeEvent]) ink.extend(g.id, ...point(sample));
-        }}
-        onPointerUp={() => {
-          const g = gesture.current;
-          gesture.current = null;
-          if (!g) return;
-          if (g.id === null) ink.ping(screen, g.x, g.y);
-          else ink.finish(g.id);
-        }}
-        onPointerCancel={() => {
-          const id = gesture.current?.id;
-          gesture.current = null;
-          if (id) ink.finish(id);
-        }}
-        // Drawing shouldn't pin the tile.
-        onDoubleClick={(e) => tool && e.stopPropagation()}
-      />
+      {shown && (
+        <canvas
+          ref={canvasRef}
+          className={`absolute touch-none ${tool ? "pointer-events-auto cursor-crosshair" : ""}`}
+          style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+          onPointerDown={(e) => {
+            if (!tool || e.button !== 0) return;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            const [x, y] = point(e);
+            gesture.current = { id: null, x, y, clientX: e.clientX, clientY: e.clientY };
+          }}
+          onPointerMove={(e) => {
+            const g = gesture.current;
+            if (!g || !tool) return;
+            if (g.id === null) {
+              if (Math.hypot(e.clientX - g.clientX, e.clientY - g.clientY) < DRAG_PX) return;
+              g.id = ink.start(screen, tool, g.x, g.y);
+            }
+            // Coalesced samples keep fast pen strokes smooth; an arrow only needs the latest.
+            const samples = tool === "pen" ? (e.nativeEvent.getCoalescedEvents?.() ?? []) : [];
+            for (const sample of samples.length > 0 ? samples : [e.nativeEvent]) ink.extend(g.id, ...point(sample));
+          }}
+          onPointerUp={() => {
+            const g = gesture.current;
+            gesture.current = null;
+            if (!g) return;
+            if (g.id === null) ink.ping(screen, g.x, g.y);
+            else ink.finish(g.id);
+          }}
+          onPointerCancel={() => {
+            const id = gesture.current?.id;
+            gesture.current = null;
+            if (id) ink.finish(id);
+          }}
+          // Drawing shouldn't pin the tile.
+          onDoubleClick={(e) => tool && e.stopPropagation()}
+        />
+      )}
     </div>
   );
 }
