@@ -5,7 +5,8 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
  * Ink: freehand strokes, arrows and click pings drawn over a screen tile, seen by everyone watching
  * that screen. Marks are ephemeral — they fade a few seconds after the pointer lifts, since the
  * picture underneath keeps moving — so there's no state to hand to late joiners: each mark is just
- * streamed to the room over the data channel while it's drawn.
+ * streamed to the room over the data channel while it's drawn. Someone's strokes fade together, from
+ * their last one: drawing more keeps the whole drawing up.
  *
  * Points are normalised to the shared picture (0–1 on both axes, letterbox excluded), so a mark lands
  * on the same spot of the content whatever size each viewer's tile is.
@@ -13,7 +14,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 
 export type InkTool = "pen" | "arrow";
 
-/** Strokes stay solid this long after the pointer lifts, then fade out over FADE_MS. */
+/** Strokes stay solid this long after their author's last pointer lift, then fade out over FADE_MS. */
 export const HOLD_MS = 3500;
 export const FADE_MS = 700;
 export const PING_MS = 1400;
@@ -32,10 +33,15 @@ export interface Stroke {
   /** Flat [x0, y0, x1, y1, …], normalised. Arrows always hold exactly two points: tail and head. */
   points: number[];
   color: string;
+  /** Author's identity. */
+  author: string;
   /** Author's name; null for our own marks. */
   name: string | null;
   /** When the pointer lifted, or null while it's still being drawn. */
   doneAt: number | null;
+  /** When the author lifted the pointer off their latest stroke on this screen, or null while they're
+   *  still drawing; the hold-then-fade runs from here. Kept up to date by `visible`. */
+  settledAt: number | null;
   touchedAt: number;
 }
 
@@ -104,11 +110,17 @@ export class InkStore {
     const ink = this.screens.get(screen);
     if (!ink) return null;
     for (const [key, stroke] of ink.strokes) {
-      const expired =
-        stroke.doneAt !== null
-          ? now - stroke.doneAt > HOLD_MS + FADE_MS
-          : now - stroke.touchedAt > STALE_MS && !this.outgoing.has(key);
-      if (expired) ink.strokes.delete(key);
+      if (stroke.doneAt === null && now - stroke.touchedAt > STALE_MS && !this.outgoing.has(key)) ink.strokes.delete(key);
+    }
+    const settled = new Map<string, number | null>();
+    for (const { author, doneAt } of ink.strokes.values()) {
+      const latest = settled.get(author);
+      if (latest === null) continue;
+      settled.set(author, doneAt === null ? null : Math.max(latest ?? doneAt, doneAt));
+    }
+    for (const [key, stroke] of ink.strokes) {
+      stroke.settledAt = settled.get(stroke.author)!;
+      if (stroke.settledAt !== null && now - stroke.settledAt > HOLD_MS + FADE_MS) ink.strokes.delete(key);
     }
     ink.pings = ink.pings.filter((ping) => now - ping.at < PING_MS);
     if (ink.strokes.size === 0 && ink.pings.length === 0) {
@@ -126,8 +138,10 @@ export class InkStore {
       tool,
       points: tool === "arrow" ? [x, y, x, y] : [x, y],
       color: this.color,
+      author: this.room.localParticipant.identity,
       name: null,
       doneAt: null,
+      settledAt: null,
       touchedAt: now,
     };
     this.ink(screen).strokes.set(id, stroke);
@@ -184,7 +198,16 @@ export class InkStore {
       const key = `${participant.identity}/${msg.id}`;
       let stroke = strokes.get(key);
       if (!stroke) {
-        stroke = { tool: msg.tool, points: [], color, name, doneAt: null, touchedAt: now };
+        stroke = {
+          tool: msg.tool,
+          points: [],
+          color,
+          author: participant.identity,
+          name,
+          doneAt: null,
+          settledAt: null,
+          touchedAt: now,
+        };
         strokes.set(key, stroke);
       }
       stroke.points.splice(msg.from, Infinity, ...msg.pts.map((v) => v / SCALE));

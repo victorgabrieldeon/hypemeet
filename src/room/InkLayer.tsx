@@ -16,9 +16,9 @@ function fitContain(box: { width: number; height: number }, aspect: number | nul
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
 
-function strokeAlpha(doneAt: number | null, now: number) {
-  if (doneAt === null) return 1;
-  return clamp01(1 - (now - doneAt - HOLD_MS) / FADE_MS);
+function strokeAlpha(settledAt: number | null, now: number) {
+  if (settledAt === null) return 1;
+  return clamp01(1 - (now - settledAt - HOLD_MS) / FADE_MS);
 }
 
 /** Author tag next to someone else's mark, kept inside the picture. */
@@ -90,7 +90,7 @@ function paint(ctx: CanvasRenderingContext2D, ink: ScreenInk, width: number, hei
   for (const stroke of ink.strokes.values()) {
     if (stroke.points.length < 4) continue;
     const p = stroke.points.map((v, i) => v * (i % 2 ? height : width));
-    const alpha = strokeAlpha(stroke.doneAt, now);
+    const alpha = strokeAlpha(stroke.settledAt, now);
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = ctx.fillStyle = stroke.color;
     ctx.lineWidth = line;
