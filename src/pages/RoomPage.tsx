@@ -8,6 +8,7 @@ import { formatCode, normalizeCode } from "../lib/code";
 import { loadNickname, rememberRoom, saveNickname } from "../lib/storage";
 import { deviceRoomOptions } from "../room/devices";
 import { RoomChat } from "../room/chat";
+import { ScreenPreviews } from "../room/previews";
 import { RoomView } from "../room/RoomView";
 import { VolumeProvider } from "../room/volume";
 import { playCue } from "../room/sounds";
@@ -192,7 +193,7 @@ function LiveRoom({
   onLeave: () => void;
   onRejoin: () => void;
 }) {
-  const [session, setSession] = useState<{ room: Room; chat: RoomChat } | null>(null);
+  const [session, setSession] = useState<{ room: Room; chat: RoomChat; previews: ScreenPreviews } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -203,13 +204,14 @@ function LiveRoom({
       ...deviceRoomOptions(), // start on the mic/camera/speaker picked last time
     });
     const chat = new RoomChat(instance);
+    const previews = new ScreenPreviews(instance);
     let cancelled = false;
     instance
       // Screens are opt-in: useSubscriptions picks what to receive.
       .connect(grant.url ?? location.origin.replace(/^http/, "ws"), grant.token, { autoSubscribe: false })
       .then(() => {
         if (cancelled) return;
-        setSession({ room: instance, chat });
+        setSession({ room: instance, chat, previews });
         playCue("join");
       })
       .catch((err: Error) => !cancelled && setError(err.message));
@@ -217,6 +219,7 @@ function LiveRoom({
       cancelled = true;
       void instance.disconnect();
       chat.dispose();
+      previews.dispose();
     };
   }, [grant]);
 
@@ -251,7 +254,7 @@ function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} chat={session.chat} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} />
+      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} />
     </VolumeProvider>
   );
 }

@@ -46,6 +46,7 @@ import { Stage } from "./Stage";
 import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
 import { WatchPanel } from "./WatchPanel";
 import { WatchPlayer } from "./WatchPlayer";
+import { PreviewsProvider, type ScreenPreviews } from "./previews";
 import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
@@ -105,13 +106,14 @@ function ControlButton({
 interface RoomViewProps {
   room: Room;
   chat: RoomChat;
+  previews: ScreenPreviews;
   info: RoomInfo;
   initialDevices: { mic: boolean; camera: boolean };
   onLeave: () => void;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
+export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -326,13 +328,15 @@ export function RoomView({ room, chat, info, initialDevices, onLeave, onRejoin }
               />
             )}
             <InkProvider room={room}>
-              <Stage
-                tiles={tiles}
-                watch={watch.party}
-                watchJoined={following}
-                pinnedId={pinnedId}
-                onPin={(id) => (id === WATCH_TILE_ID && !following ? joinWatch() : setPinnedId(id))}
-              />
+              <PreviewsProvider previews={previews}>
+                <Stage
+                  tiles={tiles}
+                  watch={watch.party}
+                  watchJoined={following}
+                  pinnedId={pinnedId}
+                  onPin={(id) => (id === WATCH_TILE_ID && !following ? joinWatch() : setPinnedId(id))}
+                />
+              </PreviewsProvider>
             </InkProvider>
           </div>
           <ChatPanel

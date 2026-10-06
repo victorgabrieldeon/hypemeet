@@ -19,6 +19,13 @@ const CUES = {
   [659.25, 0.07, 0.1],
   [987.77, 0.14, 0.2],
  ],
+ /** Someone else went live: brighter and longer than our own screenStart, so it's noticed mid-conversation. */
+ goLive: [
+  [587.33, 0, 0.1],
+  [783.99, 0.07, 0.1],
+  [987.77, 0.14, 0.1],
+  [1174.66, 0.21, 0.32],
+ ],
  screenStop: [
   [783.99, 0, 0.1],
   [523.25, 0.08, 0.18],
@@ -70,22 +77,23 @@ export function playCue(cue: Cue) {
 }
 
 /**
- * Cues for things happening in the room: people joining/leaving, screens starting/stopping (ours and
- * others'), and the connection dropping. Our own join, leave button and mic toggles are cued by
+ * Cues for things happening in the room: people joining/leaving, screens starting/stopping (ours, and
+ * others' going live), and the connection dropping. Our own join, leave button and mic toggles are cued by
  * whoever triggers them.
  */
 export function useRoomSounds(room: Room) {
  useEffect(() => {
   const joined = () => playCue("join");
   const left = () => playCue("leave");
-  const published = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("screenStart");
+  const published = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("goLive");
+  const localPublished = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("screenStart");
   const unpublished = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("screenStop");
   const disconnected = (reason?: DisconnectReason) => reason !== DisconnectReason.CLIENT_INITIATED && playCue("leave");
   room
    .on(RoomEvent.ParticipantConnected, joined)
    .on(RoomEvent.ParticipantDisconnected, left)
    .on(RoomEvent.TrackPublished, published)
-   .on(RoomEvent.LocalTrackPublished, published)
+   .on(RoomEvent.LocalTrackPublished, localPublished)
    .on(RoomEvent.TrackUnpublished, unpublished)
    .on(RoomEvent.LocalTrackUnpublished, unpublished)
    .on(RoomEvent.Disconnected, disconnected);
@@ -94,7 +102,7 @@ export function useRoomSounds(room: Room) {
     .off(RoomEvent.ParticipantConnected, joined)
     .off(RoomEvent.ParticipantDisconnected, left)
     .off(RoomEvent.TrackPublished, published)
-    .off(RoomEvent.LocalTrackPublished, published)
+    .off(RoomEvent.LocalTrackPublished, localPublished)
     .off(RoomEvent.TrackUnpublished, unpublished)
     .off(RoomEvent.LocalTrackUnpublished, unpublished)
     .off(RoomEvent.Disconnected, disconnected);

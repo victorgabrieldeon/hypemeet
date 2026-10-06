@@ -28,6 +28,7 @@ import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
 import { volumeKey, watchScreen, type TileModel } from "./model";
+import { useScreenPreview } from "./previews";
 import { ConnectionBars, formatBitrate, useVideoStats } from "./quality";
 import { ReactionLayer } from "./reactions";
 import { MAX_VOLUME, useVolumes } from "./volume";
@@ -201,6 +202,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   // Screen tiles only: the picture's aspect (to line ink up with it) and the tool in hand, if drawing.
   const [aspect, setAspect] = useState<number | null>(null);
   const [inkTool, setInkTool] = useState<InkTool | null>(null);
+  const preview = useScreenPreview(tile.kind === "screen" && !isLocal ? tile.video.trackSid : null);
 
   useEffect(() => {
     if (!inkTool) return;
@@ -272,14 +274,20 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
       className="group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black"
     >
       {!watching ? (
-        <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
+        <div className="relative grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
+          {preview && (
+            <>
+              <img src={preview} alt="" draggable={false} className="absolute inset-0 size-full object-contain" />
+              <div className="absolute inset-0 bg-black/40 transition group-hover:bg-black/55" />
+            </>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
               watchScreen(tile, true);
             }}
             onDoubleClick={(e) => e.stopPropagation()}
-            className={`type-link-sm flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+            className={`type-link-sm relative flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
           >
             <Play className={compact ? "size-3.5" : "size-4"} /> {compact ? "Assistir" : "Ver transmissão"}
           </button>
@@ -295,6 +303,11 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
       <div className={`${overlayBase} top-2 left-2 ${tool ? "max-w-[calc(50%-1rem)]" : "max-w-[calc(100%-1rem)]"}`}>
         <div className="flex min-w-0 flex-col items-start gap-1.5">
           <Pill>
+            {!isLocal && !watching && (
+              <span className="shrink-0 rounded-xs bg-danger px-1 text-[10px] leading-4 font-bold tracking-wide uppercase">
+                Ao vivo
+              </span>
+            )}
             <MonitorUp className="size-3.5 shrink-0" />
             <span className="truncate">{title}</span>
             {audio && <Volume2 className="size-3.5 shrink-0 text-ink/75" aria-label="com áudio" />}

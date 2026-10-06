@@ -20,7 +20,10 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 - **Entra mutado**: microfone e câmera começam desligados no lobby.
 - **Tela só sob demanda**: a tela de outra pessoa aparece com "Ver transmissão" e só começa a
   chegar (vídeo + som) quando você clica; "Parar de assistir" no tile corta de novo.
-- **Sons da sala**: alguém entrou/saiu, você entrou/saiu, tela começou/parou, mic ligado/mutado.
+- **Prévia da live**, como no Discord: enquanto você não assiste, o tile mostra uma miniatura da
+  tela (selo "Ao vivo") atualizada a cada 10 s; quem acabou de entrar recebe a última na hora.
+- **Sons da sala**: alguém entrou/saiu, você entrou/saiu, alguém entrou ao vivo (som próprio),
+  sua tela começou, tela parou, mic ligado/mutado.
 - **Assistir junto** (pipoca na barra): link do YouTube (vídeo ou **live**) ou vídeo do computador
   tocando sincronizado pra todo mundo, com play/pause/avanço/velocidade compartilhados ("Pausado por
   Fulano"). Cada um toca no próprio player, então sai mais leve que transmitir a tela e em qualidade
@@ -215,6 +218,10 @@ publicada); uma tela compartilhada sem som não ganha som depois — é preciso 
 A sala conecta com `autoSubscribe: false`: microfones e câmeras são assinados automaticamente
 (`useSubscriptions`), telas só quando quem assiste clica em "Ver transmissão" — o áudio pareado
 segue a escolha feita para o vídeo, inclusive se for publicado depois.
+
+As prévias (`previews.tsx`) não usam o vídeo: quem transmite desenha um frame da captura num canvas
+(480 px, WebP/JPEG ~20 KB) a cada 10 s e manda como byte stream no tópico `screen-preview`; só o
+dono da tela pode trocar a prévia dela, e ela some quando a tela é despublicada.
 
 O volume acima de 100% usa `webAudioMix` do LiveKit (GainNode por trilha).
 
