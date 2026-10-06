@@ -9,6 +9,7 @@ files:
   - preload.js
   - updater.js
   - ptt.js
+  - app-audio.js
   - icon.png
   - pages/**
 icon: icon.png

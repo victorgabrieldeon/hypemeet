@@ -101,25 +101,87 @@ export interface ScreenPrefs {
  audio: boolean;
 }
 
+/** The desktop app's per-app screen audio (Linux, PipeWire; see desktop/app-audio.js). Absent elsewhere. */
+interface DesktopScreenAudio {
+ /** Right after getDisplayMedia: the label of the mic carrying the picked app's audio, or null. */
+ claim(): Promise<string | null>;
+ release(): void;
+}
+const desktopScreenAudio = (window as { desktopScreenAudio?: DesktopScreenAudio }).desktopScreenAudio;
+
 /**
  * Where screen audio is switched on and what it captures differ between a browser tab (tab audio
- * only on Linux/macOS) and the desktop app (whole-system loopback; on Linux it includes the call).
+ * only on Linux/macOS) and the desktop app (a single app/tab on Linux, else whole-system loopback;
+ * older Linux builds include the call).
  */
 export const SCREEN_AUDIO_COPY = IS_DESKTOP_APP
- ? {
-  hint:
-   detectOS() === "linux"
-    ? "Todo o som do PC, inclusive o desta chamada (eco)."
-    : "Todo o som do PC, menos o desta chamada.",
-  missing: "Tela compartilhada sem som. Pra mandar áudio, ative “Compartilhar o áudio do sistema” ao escolher a tela.",
-  tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova ativando “Compartilhar o áudio do sistema”.",
- }
+ ? desktopScreenAudio && detectOS() === "linux"
+  ? {
+   hint: "Uma aba, um app ou o PC todo: você escolhe no seletor.",
+   missing: "Tela compartilhada sem som. Pra mandar áudio, escolha o app ou a aba no campo “Áudio” do seletor.",
+   tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova escolhendo o app no campo “Áudio”.",
+  }
+  : {
+   hint:
+    detectOS() === "linux"
+     ? "Todo o som do PC, inclusive o desta chamada (eco)."
+     : "Todo o som do PC, menos o desta chamada.",
+   missing: "Tela compartilhada sem som. Pra mandar áudio, ative “Compartilhar o áudio do sistema” ao escolher a tela.",
+   tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova ativando “Compartilhar o áudio do sistema”.",
+  }
  : {
   hint: "No Linux/macOS, só compartilhando uma aba.",
   missing:
    "Tela compartilhada sem som. Pra mandar áudio, marque “Compartilhar áudio” no seletor (no Linux/macOS só funciona compartilhando uma aba).",
   tooltip: "Essa tela foi compartilhada sem áudio. Pra ter som, comece uma nova marcando “Compartilhar áudio” no seletor.",
  };
+
+/** The screen (video track name) whose audio is the desktop app's virtual mic: there's one, so one at a time. */
+let appAudioScreen: string | null = null;
+
+function releaseAppAudio() {
+ if (!appAudioScreen) return;
+ appAudioScreen = null;
+ desktopScreenAudio?.release();
+}
+
+/**
+ * The desktop app routed one app's (or tab's) playback into a virtual mic instead of handing
+ * getDisplayMedia an audio track: record that mic. Null when it didn't.
+ */
+async function openAppAudio(): Promise<MediaStreamTrack | null> {
+ const label = await desktopScreenAudio?.claim();
+ if (!label) return null;
+ try {
+  // PipeWire publishes the new mic asynchronously; give it a moment to show up.
+  for (let attempt = 0; attempt < 10; attempt++) {
+   const devices = await navigator.mediaDevices.enumerateDevices();
+   const device = devices.find((d) => d.kind === "audioinput" && d.label === label);
+   if (device) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+     // Raw audio, like the getDisplayMedia path.
+     audio: {
+      deviceId: { exact: device.deviceId },
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 2,
+      sampleRate: 48000,
+     },
+    });
+    return stream.getAudioTracks()[0] ?? null;
+   }
+   await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+ } catch (err) {
+  console.warn("app audio unavailable:", err);
+ }
+ desktopScreenAudio?.release();
+ return null;
+}
+
+/** Whether a mic is the desktop app's screen-audio mic, which isn't for talking. */
+export const isScreenAudioDevice = (device: MediaDeviceInfo) => device.label === "vencord-screen-share";
 
 /**
  * Opens the browser picker and publishes the chosen surface. Resolves to whether audio is being
@@ -148,8 +210,10 @@ export async function startScreenShare(participant: LocalParticipant, prefs: Scr
   throw new DOMException("no video track", "NotFoundError");
  }
  video.contentHint = preset.contentHint;
+ const appAudio = await openAppAudio();
+ if (appAudio) appAudioScreen = name;
  // Video first so receivers always see the screen before (or with) its audio.
- const tracks = [video, ...stream.getAudioTracks().slice(0, 1)];
+ const tracks = [video, ...(appAudio ? [appAudio] : stream.getAudioTracks().slice(0, 1))];
  try {
   for (const track of tracks) {
    if (track.kind === Track.Kind.Video) {
@@ -175,6 +239,7 @@ export async function startScreenShare(participant: LocalParticipant, prefs: Scr
    await participant.unpublishTrack(track).catch(() => undefined);
    track.stop();
   }
+  if (appAudioScreen === name) releaseAppAudio();
   throw err;
  }
  return tracks.length > 1;
@@ -213,11 +278,15 @@ export async function changeScreenMode(pub: LocalTrackPublication, mode: ScreenM
 
 /**
  * When a screen's video goes away (our stop button, or the browser's own "Stop sharing" bar, which
- * the SDK turns into an unpublish), drop its paired audio too.
+ * the SDK turns into an unpublish), drop its paired audio too, and free the desktop app's
+ * per-app audio if that's where it came from.
  */
 export function useScreenAudioCleanup(room: Room) {
  useEffect(() => {
   const onUnpublished = (pub: LocalTrackPublication, participant: LocalParticipant) => {
+   if (appAudioScreen && (pub.trackName === appAudioScreen || pub.trackName === appAudioScreen + AUDIO_SUFFIX)) {
+    releaseAppAudio();
+   }
    if (pub.source !== Track.Source.ScreenShare) return;
    for (const audio of participant.trackPublications.values()) {
     if (audio.trackName === pub.trackName + AUDIO_SUFFIX && audio.track) {
@@ -228,6 +297,8 @@ export function useScreenAudioCleanup(room: Room) {
   room.on(RoomEvent.LocalTrackUnpublished, onUnpublished);
   return () => {
    room.off(RoomEvent.LocalTrackUnpublished, onUnpublished);
+   // Leaving the room ends every screen.
+   releaseAppAudio();
   };
  }, [room]);
 }

@@ -48,7 +48,8 @@ p {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
   color: inherit;
 }
@@ -64,6 +65,7 @@ input[type="url"] {
 }
 
 input:focus-visible,
+select:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--blurple-hi);
   outline-offset: 2px;
@@ -264,4 +266,43 @@ button:focus-visible {
   grid-column: 2;
   color: var(--soft);
   font-size: 13px;
+}
+
+.audio-pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  width: min(460px, 100%);
+}
+
+.audio-pick select {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.audio-pick small {
+  grid-column: 2;
+  color: var(--soft);
+  font-size: 13px;
+}
+
+/* Wayland: the video was picked in the system portal, only audio is left. */
+.picker.audio-only {
+  grid-template-rows: auto 1fr;
+}
+
+.picker.audio-only .tabs,
+.picker.audio-only .grid {
+  display: none;
+}
+
+.picker.audio-only footer {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  border-top: 0;
 }

@@ -7,6 +7,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const pkg = require("./package.json");
+const { createAppAudio } = require("./app-audio");
 const { createPushToTalk } = require("./ptt");
 const { createUpdater } = require("./updater");
 
@@ -15,7 +16,7 @@ const IS_MAC = process.platform === "darwin";
 // On Wayland the PipeWire portal is the picker: getSources() opens it and returns the chosen source.
 const IS_WAYLAND = process.platform === "linux" && process.env.XDG_SESSION_TYPE === "wayland";
 // Windows and macOS (14.2+, CoreAudio tap) can drop our own playout (the room's voices) from
-// loopback; on Linux it echoes back.
+// loopback; on Linux it echoes back, so there app-audio.js (PipeWire) replaces it when it can.
 const LOOPBACK_EXCLUDES_SELF = IS_WINDOWS || IS_MAC;
 const BACKGROUND = "#07070c";
 const ICON = path.join(__dirname, "icon.png");
@@ -128,22 +129,45 @@ function openServer() {
 
 const ownWindowIds = () => BrowserWindow.getAllWindows().map((w) => w.getMediaSourceId());
 
+const appAudio = createAppAudio({
+  ownAudioPid: () => app.getAppMetrics().find((proc) => proc.name === "Audio Service")?.pid,
+});
+
 /**
- * The picker window currently open; `sources` remembers what it was shown, by id.
- * @type {{ resolve: (choice: { source: { id: string, name: string }, audio: boolean } | null) => void,
- *          window: BrowserWindow, audioRequested: boolean, sources: Map<string, string> } | null}
+ * What the picker offers for audio. "apps": per-app/per-tab capture through PipeWire (Linux);
+ * "loopback": Electron's whole-system capture, a checkbox.
+ */
+function audioOptions() {
+  if (appAudio.available()) {
+    // One virtual mic: while a screen uses it, the next one can't send audio.
+    return { mode: "apps", busy: appAudio.busy(), apps: appAudio.busy() ? [] : appAudio.list() };
+  }
+  return { mode: "loopback", default: LOOPBACK_EXCLUDES_SELF, excludesSelf: LOOPBACK_EXCLUDES_SELF };
+}
+
+/**
+ * The picker's audio answer: true = loopback, a string = an app-audio target ("system" or an id
+ * from its list), false = none.
+ * @typedef {boolean | string} AudioChoice
+ */
+
+/**
+ * The picker window currently open; `sources` remembers what it was shown, by id. `audioOnly`:
+ * the video was already picked (Wayland portal), only ask about audio.
+ * @type {{ resolve: (choice: { source: { id: string, name: string } | null, audio: AudioChoice } | null) => void,
+ *          window: BrowserWindow, audioRequested: boolean, audioOnly: boolean, sources: Map<string, string> } | null}
  */
 let pending = null;
 
-function pickSource(audioRequested) {
+function pickSource(audioRequested, audioOnly = false) {
   return new Promise((resolve) => {
     const window = new BrowserWindow({
       parent: mainWindow,
       modal: true,
-      width: 860,
-      height: 620,
-      minWidth: 520,
-      minHeight: 400,
+      width: audioOnly ? 520 : 860,
+      height: audioOnly ? 280 : 620,
+      minWidth: audioOnly ? 420 : 520,
+      minHeight: audioOnly ? 240 : 400,
       title: "Compartilhar tela",
       backgroundColor: BACKGROUND,
       icon: ICON,
@@ -152,7 +176,7 @@ function pickSource(audioRequested) {
       webPreferences: { preload: path.join(__dirname, "preload.js") },
     });
     window.setMenu(null);
-    pending = { resolve, window, audioRequested, sources: new Map() };
+    pending = { resolve, window, audioRequested, audioOnly, sources: new Map() };
     window.once("ready-to-show", () => window.show());
     window.on("closed", () => {
       if (pending?.window === window) {
@@ -166,6 +190,8 @@ function pickSource(audioRequested) {
 
 ipcMain.handle("picker:sources", async (event) => {
   if (!isOwnPage(event.senderFrame) || !pending) return null;
+  const audio = pending.audioRequested ? audioOptions() : null;
+  if (pending.audioOnly) return { audio, audioOnly: true, sources: [] };
   const hidden = new Set(ownWindowIds());
   const sources = await desktopCapturer.getSources({
     types: ["screen", "window"],
@@ -175,7 +201,8 @@ ipcMain.handle("picker:sources", async (event) => {
   const shown = sources.filter((s) => !hidden.has(s.id));
   pending.sources = new Map(shown.map((s) => [s.id, s.name]));
   return {
-    audio: pending.audioRequested ? { default: LOOPBACK_EXCLUDES_SELF, excludesSelf: LOOPBACK_EXCLUDES_SELF } : null,
+    audio,
+    audioOnly: false,
     sources: shown.map((s) => ({
       id: s.id,
       name: s.name,
@@ -186,17 +213,34 @@ ipcMain.handle("picker:sources", async (event) => {
   };
 });
 
+/** Apps start and stop playing while the picker is open: it re-asks. */
+ipcMain.handle("picker:audio", (event) => {
+  if (!isOwnPage(event.senderFrame) || !pending?.audioRequested) return null;
+  return audioOptions();
+});
+
 ipcMain.on("picker:done", (event, choice) => {
   if (!isOwnPage(event.senderFrame) || !pending) return;
-  const { resolve, window, sources } = pending;
+  const { resolve, window, sources, audioRequested, audioOnly } = pending;
   pending = null;
-  const name = typeof choice?.id === "string" ? sources.get(choice.id) : undefined;
-  resolve(name === undefined ? null : { source: { id: choice.id, name }, audio: choice.audio === true });
+  const raw = choice?.audio;
+  const audio = !audioRequested ? false : typeof raw === "string" && raw !== "none" ? raw : raw === true;
+  if (audioOnly) {
+    resolve(choice ? { source: null, audio } : null);
+  } else {
+    const name = typeof choice?.id === "string" ? sources.get(choice.id) : undefined;
+    resolve(name === undefined ? null : { source: { id: choice.id, name }, audio });
+  }
   window.close();
 });
 
-/** Wayland: the portal picker has no audio option, so ask once it closes. Off by default: Linux loopback echoes the room. */
-async function askSystemAudio() {
+/**
+ * Wayland: the portal picker has no audio option, so ask once it closes; with PipeWire capture in
+ * our own picker, otherwise here. Off by default: Linux loopback echoes the room.
+ * @returns {Promise<AudioChoice>}
+ */
+async function askAudio() {
+  if (appAudio.available()) return (await pickSource(true, true))?.audio ?? false;
   if (!mainWindow) return false;
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: "question",
@@ -211,6 +255,13 @@ async function askSystemAudio() {
   return response === 1;
 }
 
+/** The callback's audio for a picker answer. App audio reaches the page as a mic it records itself. */
+function screenAudio(audio) {
+  if (audio === true) return { audio: "loopback" };
+  if (typeof audio === "string") appAudio.link(audio);
+  return {};
+}
+
 async function handleDisplayMedia(request, callback) {
   // Denying = calling back without a source; the page gets AbortError and treats it as "closed".
   const deny = () => callback(null);
@@ -219,12 +270,12 @@ async function handleDisplayMedia(request, callback) {
     if (IS_WAYLAND) {
       const [source] = await desktopCapturer.getSources({ types: ["screen", "window"] });
       if (!source) return deny();
-      const audio = request.audioRequested && (await askSystemAudio());
-      return callback({ video: source, ...(audio ? { audio: "loopback" } : {}) });
+      const audio = request.audioRequested && (await askAudio());
+      return callback({ video: source, ...screenAudio(audio) });
     }
     const choice = await pickSource(request.audioRequested);
     if (!choice) return deny();
-    callback({ video: choice.source, ...(request.audioRequested && choice.audio ? { audio: "loopback" } : {}) });
+    callback({ video: choice.source, ...screenAudio(choice.audio) });
   } catch (error) {
     console.error("screen share failed:", error);
     deny();
@@ -316,6 +367,13 @@ ipcMain.handle("update:state", (event) => (isServerFrame(event.senderFrame) ? up
 ipcMain.handle("update:check", (event) => (isServerFrame(event.senderFrame) ? updater.check() : null));
 ipcMain.on("update:apply", (event) => {
   if (isServerFrame(event.senderFrame)) updater.apply();
+});
+
+// ---- Screen audio from one app -------------------------------------------------------------
+
+ipcMain.handle("screen-audio:claim", (event) => (isServerFrame(event.senderFrame) ? appAudio.claim() : null));
+ipcMain.on("screen-audio:release", (event) => {
+  if (isServerFrame(event.senderFrame)) appAudio.release();
 });
 
 // ---- Push-to-talk --------------------------------------------------------------------------
@@ -414,9 +472,14 @@ function createMainWindow() {
     event.preventDefault();
     showSetup(`${server} redirecionou para ${new URL(url).origin}. Confira o endereço do servidor.`);
   });
-  // A reload or a new page drops the room without unmounting it: stop listening for its key.
-  webContents.on("did-navigate", () => ptt.stop());
-  webContents.on("render-process-gone", () => ptt.stop());
+  // A reload or a new page drops the room without unmounting it: stop listening for its key and
+  // routing app audio to its screen.
+  const dropRoom = () => {
+    ptt.stop();
+    appAudio.release();
+  };
+  webContents.on("did-navigate", dropRoom);
+  webContents.on("render-process-gone", dropRoom);
   webContents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // -3 = ERR_ABORTED: a navigation replaced this one, not a failure.
     if (!isMainFrame || code === -3 || !isServerUrl(url)) return;
@@ -450,5 +513,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("window-all-closed", () => app.quit());
-  app.on("will-quit", () => ptt.stop());
+  app.on("will-quit", () => {
+    ptt.stop();
+    appAudio.release();
+  });
 }

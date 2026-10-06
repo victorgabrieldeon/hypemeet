@@ -2,6 +2,7 @@ import { Room, RoomEvent } from "livekit-client";
 import { Check, ChevronUp } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { canPickSpeaker, saveDevice, type DeviceKind } from "./devices";
+import { isScreenAudioDevice } from "./model";
 
 /** Closes a popover on a pointer press outside `ref` or on Escape, while `open`. */
 export function useDismiss(ref: RefObject<HTMLElement | null>, open: boolean, close: () => void) {
@@ -169,7 +170,7 @@ export function DeviceMenu({
    {kinds
     .filter((kind) => kind !== "audiooutput" || canPickSpeaker)
     .map((kind) => {
-     const ofKind = devices.filter((d) => d.kind === kind && d.deviceId);
+     const ofKind = devices.filter((d) => d.kind === kind && d.deviceId && !isScreenAudioDevice(d));
      const activeId = room.getActiveDevice(kind);
      // Unknown/unset active id → the browser's "default" entry (or the first one) is what's in use.
      const selected =

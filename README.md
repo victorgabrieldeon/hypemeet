@@ -117,8 +117,16 @@ produção ou do `dev:lan`) numa janela própria e adiciona o que a aba do naveg
 
 - **Seletor de tela nativo** (telas e janelas com miniatura), uma vez por tela compartilhada.
 - **Áudio do sistema** junto da tela. No Windows e no macOS (14.2+) o som da própria chamada fica de
-  fora; no Linux não dá pra excluir, então vem desligado e o seletor avisa do eco. No Wayland o
-  seletor é o do sistema (portal do PipeWire), que não pergunta de áudio: o app pergunta logo depois.
+  fora.
+- **Áudio de um app ou de uma aba só** no Linux (PipeWire): o campo "Áudio" do seletor lista o que
+  está tocando — cada app e, nos navegadores derivados do Firefox (Firefox, Zen, LibreWolf…), cada
+  aba pelo título; no Chrome/Chromium as abas não se distinguem, então é o navegador inteiro.
+  Escolhendo uma janela, o app já pré-seleciona a aba/app dela. "Todo o som do PC" também deixa a
+  chamada de fora. Usa o [`@vencord/venmic`](https://github.com/Vencord/venmic) (o mesmo do
+  Vesktop): ele cria um microfone virtual (`vencord-screen-share`) ligado só aos streams escolhidos,
+  e a página grava esse microfone como o áudio da tela. Um microfone só, então uma tela por vez com
+  áudio. Sem PipeWire, volta ao áudio do sistema inteiro (com eco). No Wayland o seletor de tela é o
+  do sistema (portal), que não pergunta de áudio: o app pergunta logo depois.
 - **Pressione para falar** com o jogo em foco: no menu do microfone (setinha ao lado do botão), liga e
   escolhe uma tecla ou botão do mouse (meio ou laterais). Segurar abre o microfone, soltar fecha; com
   o microfone já aberto a tecla não faz nada. A tecla continua chegando ao jogo. Usa

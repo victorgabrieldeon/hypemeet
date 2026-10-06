@@ -1,6 +1,6 @@
 // Bridges: the app's own pages (setup, screen picker) get `desktop`; the HypeMeet site gets only
-// `desktopUpdates`, for its update button, and `desktopPtt`, for push-to-talk. main rejects IPC
-// from any frame that doesn't match.
+// `desktopUpdates`, for its update button, `desktopPtt`, for push-to-talk, and `desktopScreenAudio`,
+// for screen audio from a single app (Linux). main rejects IPC from any frame that doesn't match.
 const { contextBridge, ipcRenderer } = require("electron");
 
 if (location.protocol === "file:") {
@@ -8,6 +8,7 @@ if (location.protocol === "file:") {
     setupState: () => ipcRenderer.invoke("setup:state"),
     connect: (server, trustFingerprint) => ipcRenderer.invoke("setup:connect", server, trustFingerprint),
     pickerSources: () => ipcRenderer.invoke("picker:sources"),
+    pickerAudio: () => ipcRenderer.invoke("picker:audio"),
     pick: (choice) => ipcRenderer.send("picker:done", choice),
   });
 } else {
@@ -21,6 +22,12 @@ if (location.protocol === "file:") {
       ipcRenderer.on("update:state", handler);
       return () => ipcRenderer.removeListener("update:state", handler);
     },
+  });
+  contextBridge.exposeInMainWorld("desktopScreenAudio", {
+    /** Right after getDisplayMedia: the label of the mic carrying the picked app's audio, or null. */
+    claim: () => ipcRenderer.invoke("screen-audio:claim"),
+    /** The screen that claimed it stopped. */
+    release: () => ipcRenderer.send("screen-audio:release"),
   });
   contextBridge.exposeInMainWorld("desktopPtt", {
     state: () => ipcRenderer.invoke("ptt:state"),
