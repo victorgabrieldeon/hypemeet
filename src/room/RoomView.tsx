@@ -34,6 +34,7 @@ import {
   useRoomVersion,
   useScreenAudioCleanup,
   useSubscriptions,
+  useViewingAttribute,
   type TileModel,
 } from "./model";
 import { canSuppressNoise, useNoiseFilter } from "./noise";
@@ -117,6 +118,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
+  useViewingAttribute(room);
   useRoomSounds(room);
   const local = room.localParticipant;
   const [pinnedId, setPinnedId] = useState<string | null>(null);

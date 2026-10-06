@@ -22,6 +22,8 @@ import { detectOS, IS_DESKTOP_APP } from "../lib/downloads";
  */
 const SCREEN_PREFIX = "screen:";
 const AUDIO_SUFFIX = ":audio";
+/** Participant attribute: track sids (comma-separated) of the remote screens they are watching. */
+const VIEWING_ATTRIBUTE = "viewing";
 
 export type TileModel =
  | { kind: "camera"; id: string; participant: Participant }
@@ -33,13 +35,16 @@ export type TileModel =
   audio?: TrackPublication;
   /** 1-based position among this participant's screens; null when they share only one. */
   number: number | null;
+  /** Everyone watching it but its sharer, in tile order (local participant first). */
+  viewers: Participant[];
  };
 
 /** Screens first (they're what people came for), then cameras; local participant first in each group. */
 export function buildTiles(room: Room): TileModel[] {
  const screens: TileModel[] = [];
  const cameras: TileModel[] = [];
- for (const participant of [room.localParticipant, ...room.remoteParticipants.values()]) {
+ const everyone = [room.localParticipant, ...room.remoteParticipants.values()];
+ for (const participant of everyone) {
   cameras.push({ kind: "camera", id: `${participant.identity}:camera`, participant });
   const pubs = [...participant.trackPublications.values()];
   // Names embed a base36 timestamp, so sorting by name = order they were started (same for everyone).
@@ -51,7 +56,8 @@ export function buildTiles(room: Room): TileModel[] {
     (p) => p.source === Track.Source.ScreenShareAudio && p.trackName === video.trackName + AUDIO_SUFFIX,
    );
    const number = videos.length > 1 ? i + 1 : null;
-   screens.push({ kind: "screen", id: video.trackSid, participant, video, audio, number });
+   const viewers = everyone.filter((p) => p !== participant && isViewing(p, video));
+   screens.push({ kind: "screen", id: video.trackSid, participant, video, audio, number, viewers });
   });
  }
  return [...screens, ...cameras];
@@ -328,6 +334,26 @@ export function useSubscriptions(room: Room) {
    room.off(RoomEvent.TrackPublished, onPublished);
   };
  }, [room]);
+}
+
+/** Our own choice is read directly; others' from their attribute (published by useViewingAttribute). */
+function isViewing(participant: Participant, screen: TrackPublication): boolean {
+ if (participant.isLocal) return (screen as RemoteTrackPublication).isDesired;
+ return !!participant.attributes[VIEWING_ATTRIBUTE]?.split(",").includes(screen.trackSid);
+}
+
+/** Tells the room which screens we watch, so every screen tile can show its viewers. */
+export function useViewingAttribute(room: Room) {
+ const viewing = [...room.remoteParticipants.values()]
+  .flatMap((p) => [...p.trackPublications.values()])
+  .filter((pub) => pub.source === Track.Source.ScreenShare && pub.isDesired)
+  .map((pub) => pub.trackSid)
+  .sort()
+  .join(",");
+ useEffect(() => {
+  // "" deletes the attribute. Fails while disconnected; the next change sends the whole list again.
+  void room.localParticipant.setAttributes({ [VIEWING_ATTRIBUTE]: viewing }).catch(() => undefined);
+ }, [room, viewing]);
 }
 
 /** Starts or stops receiving a remote screen, its audio included. */

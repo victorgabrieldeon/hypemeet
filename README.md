@@ -22,6 +22,9 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   chegar (vídeo + som) quando você clica; "Parar de assistir" no tile corta de novo.
 - **Prévia da live**, como no Discord: enquanto você não assiste, o tile mostra uma miniatura da
   tela (selo "Ao vivo") atualizada a cada 10 s; quem acabou de entrar recebe a última na hora.
+- **Quem está assistindo**: o tile de cada tela mostra um olho com os rostos e o número de quem
+  assiste (nomes ao passar o mouse), inclusive pra quem transmite. Cada um publica as telas que
+  assiste no atributo `viewing` do participante.
 - **Sons da sala**: alguém entrou/saiu, você entrou/saiu, alguém entrou ao vivo (som próprio),
   sua tela começou, tela parou, mic ligado/mutado.
 - **Assistir junto** (pipoca na barra): link do YouTube (vídeo ou **live**) ou vídeo do computador

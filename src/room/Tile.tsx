@@ -8,6 +8,7 @@ import {
 } from "livekit-client";
 import {
   Activity,
+  Eye,
   EyeOff,
   Maximize,
   MicOff,
@@ -74,11 +75,39 @@ function VolumeControl({ participant, pub, label }: { participant: Participant; 
   );
 }
 
-function Pill({ children }: { children: ReactNode }) {
+function Pill({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <div className="type-link-sm flex max-w-full items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] text-ink backdrop-blur-md">
+    <div
+      title={title}
+      className="type-link-sm flex max-w-full items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] text-ink backdrop-blur-md"
+    >
       {children}
     </div>
+  );
+}
+
+const VIEWER_AVATARS = 3;
+const listFormat = new Intl.ListFormat("pt-BR");
+
+/** Who's watching a screen: an eye, the first faces stacked and the count; names on hover. */
+function Viewers({ viewers, compact }: { viewers: Participant[]; compact?: boolean }) {
+  const names = viewers.map((p) => (p.isLocal ? "você" : p.name || p.identity));
+  const shown = compact ? [] : viewers.slice(0, VIEWER_AVATARS);
+  const label = `Assistindo: ${listFormat.format(names)}`;
+  return (
+    <Pill title={label}>
+      <Eye className="size-3.5 shrink-0" aria-label={label} />
+      {shown.length > 0 && (
+        <div className="flex -space-x-1.5" aria-hidden>
+          {shown.map((p) => (
+            <Avatar key={p.identity} name={p.name || p.identity} size="xs" className="ring-2 ring-black/70" />
+          ))}
+        </div>
+      )}
+      <span className="tabular-nums" aria-hidden>
+        {viewers.length}
+      </span>
+    </Pill>
   );
 }
 
@@ -258,7 +287,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
     );
   }
 
-  const { video, audio, number } = tile;
+  const { video, audio, number, viewers } = tile;
   const screenLabel = number ? `tela ${number}` : "tela";
   const title = isLocal ? `Sua ${screenLabel}` : `${number ? `Tela ${number}` : "Tela"} de ${name}`;
   // Remote screens aren't received until the listener asks for them (see useSubscriptions).
@@ -313,6 +342,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             {audio && <Volume2 className="size-3.5 shrink-0 text-ink/75" aria-label="com áudio" />}
             <ConnectionBars quality={participant.connectionQuality} />
           </Pill>
+          {viewers.length > 0 && <Viewers viewers={viewers} compact={compact} />}
           {hovered && !compact && watching && video.track && <ScreenStats track={video.track} isLocal={isLocal} />}
         </div>
       </div>
