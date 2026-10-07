@@ -337,7 +337,7 @@ export function useSubscriptions(room: Room) {
 }
 
 /** Our own choice is read directly; others' from their attribute (published by useViewingAttribute). */
-function isViewing(participant: Participant, screen: TrackPublication): boolean {
+export function isViewing(participant: Participant, screen: TrackPublication): boolean {
  if (participant.isLocal) return (screen as RemoteTrackPublication).isDesired;
  return !!participant.attributes[VIEWING_ATTRIBUTE]?.split(",").includes(screen.trackSid);
 }

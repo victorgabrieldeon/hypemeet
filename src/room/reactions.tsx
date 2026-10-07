@@ -45,11 +45,18 @@ class ReactionStore {
   private byTile = new Map<string, FloatingReaction[]>();
   private listeners = new Set<() => void>();
   private nextId = 0;
+  private addListeners = new Set<(tileId: string) => void>();
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+
+  /** Calls back with the tile of every reaction shown, ours included. */
+  onAdd(listener: (tileId: string) => void) {
+    this.addListeners.add(listener);
+    return () => void this.addListeners.delete(listener);
+  }
 
   get(tileId: string): FloatingReaction[] {
     return this.byTile.get(tileId) ?? NONE;
@@ -68,6 +75,7 @@ class ReactionStore {
       phase: -Math.random() * 900,
     };
     this.set(tileId, [...list, reaction]);
+    for (const listener of this.addListeners) listener(tileId);
     setTimeout(() => this.set(tileId, this.get(tileId).filter((r) => r !== reaction)), reaction.duration);
   }
 
@@ -78,7 +86,7 @@ class ReactionStore {
   }
 }
 
-interface Reactions {
+export interface Reactions {
   store: ReactionStore;
   /** Sends a reaction to everyone (us included) over the tile `target`. False when throttled. */
   send(emoji: string, target: string): boolean;
