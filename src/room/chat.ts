@@ -5,14 +5,17 @@ import { RoomEvent, type ByteStreamReader, type Participant, type RemoteParticip
  * stored anywhere, so the conversation lives only in the browsers of whoever is in the room.
  *   text           → publishData on "chat" (one reliable packet; MAX_TEXT keeps it under the ~15 KB cap)
  *   text + image   → byte stream on "chat-image", chunked by LiveKit; the text rides in its attributes
+ *   poll           → a text message carrying the options; votes and the author closing it go on
+ *                    "chat-poll". Each voter's latest vote (by their own clock) wins.
  *   history        → on joining we ask the longest-present participant ("chat-sync"), who answers with
- *                    every message as one text stream on "chat-history". The chat survives as long as
- *                    someone stays and is gone once the room empties.
+ *                    every message (polls with their votes) as one text stream on "chat-history". The
+ *                    chat survives as long as someone stays and is gone once the room empties.
  */
 const TOPIC_TEXT = "chat";
 const TOPIC_IMAGE = "chat-image";
 const TOPIC_SYNC = "chat-sync";
 const TOPIC_HISTORY = "chat-history";
+const TOPIC_POLL = "chat-poll";
 
 export const MAX_TEXT = 2000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -23,6 +26,13 @@ const PNG_AS_IS_BYTES = 1.5 * 1024 * 1024;
 const MAX_HISTORY_BYTES = 80 * 1024 * 1024;
 const MAX_MESSAGES = 300;
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+export const MAX_QUESTION = 300;
+export const MAX_OPTION = 80;
+export const MIN_POLL_OPTIONS = 2;
+export const MAX_POLL_OPTIONS = 10;
+/** Poll events held while the history that has their poll is on its way. */
+const MAX_EARLY_EVENTS = 500;
 
 export interface ChatImage {
   blob: Blob;
@@ -40,8 +50,28 @@ export interface ChatMessage {
   text: string;
   /** "loading" while the bytes arrive; "lost" if the transfer broke off. */
   image?: ChatImage | "loading" | "lost";
+  /** `text` is the question. */
+  poll?: ChatPoll;
   /** Ours, and it didn't make it out. */
   failed?: boolean;
+}
+
+export interface PollVote {
+  /** Kept so the vote still has a name after its voter leaves. */
+  name: string;
+  /** Option indexes, ascending; empty once the vote is taken back. */
+  choices: number[];
+  /** The voter's clock, ms: their latest vote wins whatever order votes arrive in. */
+  at: number;
+}
+
+export interface ChatPoll {
+  options: string[];
+  multiple: boolean;
+  /** By voter identity. */
+  votes: Record<string, PollVote>;
+  /** Only the author closes it; votes stop counting from then on. */
+  closed: boolean;
 }
 
 export interface ChatState {
@@ -85,6 +115,35 @@ function fromDataUrl(url: unknown): Blob | null {
 
 const withUrl = (blob: Blob): ChatImage => ({ blob, url: URL.createObjectURL(blob) });
 
+/** A poll as it travels, votes aside. */
+function parsePoll(value: unknown): ChatPoll | null {
+  const { options, multiple, closed } = (value ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(options) || options.length < MIN_POLL_OPTIONS || options.length > MAX_POLL_OPTIONS) return null;
+  if (!options.every((o): o is string => typeof o === "string" && !!o.trim())) return null;
+  return { options: options.map((o) => o.slice(0, MAX_OPTION)), multiple: multiple === true, votes: {}, closed: closed === true };
+}
+
+function parseChoices(value: unknown, poll: ChatPoll): number[] | null {
+  if (!Array.isArray(value)) return null;
+  const choices = [...new Set(value)];
+  if (!choices.every((c): c is number => Number.isInteger(c) && c >= 0 && c < poll.options.length)) return null;
+  if (!poll.multiple && choices.length > 1) return null;
+  return choices.sort((a, b) => a - b);
+}
+
+function parseVote(value: unknown, poll: ChatPoll): PollVote | null {
+  const { name, choices, at } = (value ?? {}) as Record<string, unknown>;
+  const parsed = parseChoices(choices, poll);
+  if (typeof name !== "string" || !parsed || typeof at !== "number" || !Number.isFinite(at)) return null;
+  return { name, choices: parsed, at };
+}
+
+/** `votes` plus `vote`, unless what's there is as new or newer. */
+function withVote(votes: Record<string, PollVote>, identity: string, vote: PollVote) {
+  const current = votes[identity];
+  return current && current.at >= vote.at ? votes : { ...votes, [identity]: vote };
+}
+
 /**
  * Makes a picked/pasted/dropped file ready to send. Everything but GIFs (re-encoding would freeze
  * them) and small PNGs is re-encoded: that caps the size and strips metadata like a photo's GPS.
@@ -119,6 +178,8 @@ export class RoomChat {
   private visible = false;
   /** Who we asked for the history; only their answer is taken, and only once. */
   private historyFrom: string | null = null;
+  /** Votes and polls closing that came before the history holding their poll. */
+  private early: { data: Record<string, unknown>; identity: string; name: string }[] = [];
 
   constructor(private room: Room) {
     room.on(RoomEvent.Connected, this.requestHistory).on(RoomEvent.DataReceived, this.onData);
@@ -159,34 +220,81 @@ export class RoomChat {
     if (visible && this.state.unread) this.set({ ...this.state, unread: 0 });
   }
 
+  get identity() {
+    return this.room.localParticipant.identity;
+  }
+
   async send(text: string, image?: Blob) {
-    const local = this.room.localParticipant;
-    const message: ChatMessage = {
-      id: crypto.randomUUID(),
-      from: local.identity,
-      name: nameOf(local),
-      time: Date.now(),
-      text: text.slice(0, MAX_TEXT),
-      image: image && withUrl(image),
-    };
-    this.setMessages([...this.state.messages, message]);
+    const message = this.post({ text: text.slice(0, MAX_TEXT), image: image && withUrl(image) });
     try {
       if (image) {
-        await local.sendBytes(new Uint8Array(await image.arrayBuffer()), {
+        await this.room.localParticipant.sendBytes(new Uint8Array(await image.arrayBuffer()), {
           topic: TOPIC_IMAGE,
           mimeType: image.type,
           name: "imagem",
           attributes: { id: message.id, text: message.text },
         });
       } else {
-        await local.publishData(encoder.encode(JSON.stringify({ id: message.id, text: message.text })), {
-          reliable: true,
-          topic: TOPIC_TEXT,
-        });
+        await this.publish(TOPIC_TEXT, { id: message.id, text: message.text });
       }
     } catch {
       this.patch(message.id, { failed: true });
     }
+  }
+
+  async sendPoll(question: string, options: string[], multiple: boolean) {
+    const poll: ChatPoll = { options: options.map((o) => o.slice(0, MAX_OPTION)), multiple, votes: {}, closed: false };
+    const message = this.post({ text: question.slice(0, MAX_QUESTION), poll });
+    try {
+      await this.publish(TOPIC_TEXT, { id: message.id, text: message.text, poll: { options: poll.options, multiple } });
+    } catch {
+      this.patch(message.id, { failed: true });
+    }
+  }
+
+  /** Replaces our vote on a poll; no choices takes it back. */
+  vote(id: string, choices: number[]) {
+    const message = this.find(id);
+    if (!message?.poll || message.poll.closed || message.failed) return;
+    const local = this.room.localParticipant;
+    const previous = message.poll.votes[local.identity];
+    const vote: PollVote = {
+      name: nameOf(local),
+      choices: [...choices].sort((a, b) => a - b),
+      // Strictly after the last one even within the same millisecond.
+      at: Math.max(Date.now(), (previous?.at ?? 0) + 1),
+    };
+    this.patchPoll(id, (poll) => ({ ...poll, votes: { ...poll.votes, [local.identity]: vote } }));
+    this.publish(TOPIC_POLL, { poll: id, choices: vote.choices, at: vote.at }).catch(() =>
+      // Put the old vote back, unless we voted again meanwhile.
+      this.patchPoll(id, (poll) => {
+        if (poll.votes[local.identity] !== vote) return poll;
+        const { [local.identity]: _, ...votes } = poll.votes;
+        return { ...poll, votes: previous ? { ...votes, [local.identity]: previous } : votes };
+      }),
+    );
+  }
+
+  /** Our own polls only. */
+  closePoll(id: string) {
+    const message = this.find(id);
+    if (!message?.poll || message.poll.closed || message.from !== this.identity) return;
+    this.patchPoll(id, (poll) => ({ ...poll, closed: true }));
+    this.publish(TOPIC_POLL, { poll: id, close: true }).catch(() =>
+      this.patchPoll(id, (poll) => ({ ...poll, closed: false })),
+    );
+  }
+
+  /** Adds a message of ours. */
+  private post(content: Pick<ChatMessage, "text" | "image" | "poll">): ChatMessage {
+    const local = this.room.localParticipant;
+    const message: ChatMessage = { id: crypto.randomUUID(), from: local.identity, name: nameOf(local), time: Date.now(), ...content };
+    this.setMessages([...this.state.messages, message]);
+    return message;
+  }
+
+  private publish(topic: string, data: unknown) {
+    return this.room.localParticipant.publishData(encoder.encode(JSON.stringify(data)), { reliable: true, topic });
   }
 
   private set(state: ChatState) {
@@ -203,8 +311,12 @@ export class RoomChat {
     this.set({ messages, unread });
   }
 
+  private find(id: string) {
+    return this.state.messages.find((m) => m.id === id);
+  }
+
   private has(id: string) {
-    return this.state.messages.some((m) => m.id === id);
+    return !!this.find(id);
   }
 
   /** Returns false when the message is gone (dropped for being too old). */
@@ -214,6 +326,13 @@ export class RoomChat {
     return true;
   }
 
+  private patchPoll(id: string, update: (poll: ChatPoll) => ChatPoll) {
+    const poll = this.find(id)?.poll;
+    if (!poll) return;
+    const next = update(poll);
+    if (next !== poll) this.patch(id, { poll: next });
+  }
+
   private receive(message: ChatMessage) {
     if (this.has(message.id)) return;
     this.setMessages([...this.state.messages, message], this.state.unread + (this.visible ? 0 : 1));
@@ -221,21 +340,40 @@ export class RoomChat {
   }
 
   private onData = (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
-    if (topic !== TOPIC_SYNC && topic !== TOPIC_TEXT) return;
-    const data = parse(decoder.decode(payload)) as { id?: unknown; text?: unknown; identity?: unknown } | null;
+    if (topic !== TOPIC_SYNC && topic !== TOPIC_TEXT && topic !== TOPIC_POLL) return;
+    const data = parse(decoder.decode(payload)) as Record<string, unknown> | null;
     // A newcomer asks before we've heard they joined (signalling and data travel separately), so
     // `participant` is still undefined here; the request names who to answer instead.
     if (topic === TOPIC_SYNC && typeof data?.identity === "string") return void this.sendHistory(data.identity);
-    if (topic !== TOPIC_TEXT || !participant) return;
-    if (typeof data?.id !== "string" || typeof data.text !== "string" || !data.text.trim()) return;
+    if (!participant || !data) return;
+    if (topic === TOPIC_POLL) return this.onPollEvent(data, participant.identity, nameOf(participant));
+    if (topic !== TOPIC_TEXT || typeof data.id !== "string" || typeof data.text !== "string" || !data.text.trim()) return;
+    const poll = data.poll === undefined ? undefined : parsePoll(data.poll);
+    if (poll === null) return;
     this.receive({
       id: data.id,
       from: participant.identity,
       name: nameOf(participant),
       time: Date.now(),
-      text: data.text.slice(0, MAX_TEXT),
+      text: data.text.slice(0, poll ? MAX_QUESTION : MAX_TEXT),
+      poll,
     });
   };
+
+  private onPollEvent(data: Record<string, unknown>, identity: string, name: string) {
+    const message = typeof data.poll === "string" ? this.find(data.poll) : undefined;
+    const poll = message?.poll;
+    if (!poll) {
+      if (this.historyFrom && this.early.length < MAX_EARLY_EVENTS) this.early.push({ data, identity, name });
+      return;
+    }
+    if (data.close === true) {
+      if (identity === message.from) this.patchPoll(message.id, (p) => (p.closed ? p : { ...p, closed: true }));
+      return;
+    }
+    const vote = parseVote({ name, choices: data.choices, at: data.at }, poll);
+    if (vote && !poll.closed) this.patchPoll(message.id, (p) => ({ ...p, votes: withVote(p.votes, identity, vote) }));
+  }
 
   private async onImage(reader: ByteStreamReader, identity: string) {
     const { mimeType, size, attributes } = reader.info;
@@ -281,7 +419,7 @@ export class RoomChat {
     const entries = await Promise.all(
       this.state.messages
         .filter((m) => !m.failed && (m.text || typeof m.image === "object"))
-        .map(async ({ id, from, name, time, text, image }) => ({
+        .map(async ({ id, from, name, time, text, image, poll }) => ({
           id,
           from,
           name,
@@ -289,6 +427,7 @@ export class RoomChat {
           text,
           // Base64 inside one JSON keeps history atomic; "loading"/"lost" images go as text only.
           image: typeof image === "object" ? await toDataUrl(image.blob) : undefined,
+          poll,
         })),
     );
     if (!entries.length) return;
@@ -301,18 +440,47 @@ export class RoomChat {
     if (identity !== this.historyFrom || (reader.info.size ?? 0) > MAX_HISTORY_BYTES) return;
     this.historyFrom = null;
     const entries = parse(await reader.readAll().catch(() => ""));
+    const early = this.early;
+    this.early = [];
     if (!Array.isArray(entries)) return;
     const older: ChatMessage[] = [];
     for (const entry of entries.slice(-MAX_MESSAGES)) {
-      const { id, from, name, time, text, image } = (entry ?? {}) as Record<string, unknown>;
+      const { id, from, name, time, text, image, poll: rawPoll } = (entry ?? {}) as Record<string, unknown>;
       if (typeof id !== "string" || typeof from !== "string" || typeof name !== "string") continue;
-      if (typeof time !== "number" || typeof text !== "string" || this.has(id)) continue;
+      if (typeof time !== "number" || typeof text !== "string") continue;
+      const poll = rawPoll === undefined ? undefined : parsePoll(rawPoll);
+      if (poll === null || (poll && !text.trim())) continue;
+      if (poll) {
+        for (const [voter, raw] of Object.entries((rawPoll as { votes?: unknown }).votes ?? {})) {
+          const vote = parseVote(raw, poll);
+          if (vote) poll.votes[voter] = vote;
+        }
+      }
+      if (this.has(id)) {
+        // Already here (it came while we waited): the history may still know newer votes.
+        if (poll)
+          this.patchPoll(id, (p) => ({
+            ...p,
+            closed: p.closed || poll.closed,
+            votes: Object.entries(poll.votes).reduce((votes, [voter, vote]) => withVote(votes, voter, vote), p.votes),
+          }));
+        continue;
+      }
       const blob = fromDataUrl(image);
       if (!text && !blob) continue;
-      older.push({ id, from, name, time, text: text.slice(0, MAX_TEXT), image: blob ? withUrl(blob) : undefined });
+      older.push({
+        id,
+        from,
+        name,
+        time,
+        text: text.slice(0, poll ? MAX_QUESTION : MAX_TEXT),
+        image: blob ? withUrl(blob) : undefined,
+        poll,
+      });
     }
     // Before anything that arrived while we waited.
     if (older.length) this.setMessages([...older, ...this.state.messages]);
+    for (const { data, identity, name } of early) this.onPollEvent(data, identity, name);
   }
 }
 

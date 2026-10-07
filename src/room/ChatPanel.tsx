@@ -1,4 +1,4 @@
-import { ImageOff, ImagePlus, SendHorizontal, X } from "lucide-react";
+import { ChartBarBig, ImageOff, ImagePlus, SendHorizontal, X } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { Avatar, Spinner } from "../components/ui";
 import { MAX_TEXT, prepareImage, type ChatMessage, type ChatState, type RoomChat } from "./chat";
+import { PollCard, PollComposer } from "./Poll";
 
 /** Consecutive messages from the same person within this window share one name/avatar header. */
 const GROUP_MS = 5 * 60_000;
@@ -85,6 +86,7 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
   const [pending, setPending] = useState<{ blob: Blob; url: string } | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [writingPoll, setWritingPoll] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -189,14 +191,23 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
           As mensagens vão direto pra quem está na sala e somem quando todo mundo sair.
         </p>
         {messages.length === 0 && (
-          <p className="m-auto text-center text-sm text-soft">Ninguém falou nada ainda. Cola um link, uma imagem…</p>
+          <p className="m-auto text-center text-sm text-soft">Ninguém falou nada ainda. Cola um link, uma imagem, faz uma enquete…</p>
         )}
         {messages.map((message, i) => {
           const prev = messages[i - 1];
           const grouped = prev?.from === message.from && message.time - prev.time < GROUP_MS;
           const body = (
             <div className={`min-w-0 text-[15px] leading-snug break-words whitespace-pre-wrap ${message.failed ? "opacity-60" : ""}`}>
-              {message.text && <Linkified text={message.text} />}
+              {message.poll ? (
+                <PollCard
+                  message={{ ...message, poll: message.poll }}
+                  me={chat.identity}
+                  onVote={(choices) => chat.vote(message.id, choices)}
+                  onClosePoll={() => chat.closePoll(message.id)}
+                />
+              ) : (
+                message.text && <Linkified text={message.text} />
+              )}
               {message.image && <MessageImage image={message.image} onOpen={setViewing} onLoad={toBottom} />}
               {message.failed && <p className="mt-0.5 text-xs text-danger">Não enviada</p>}
             </div>
@@ -221,70 +232,95 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
       </div>
 
       <div className="border-t border-line p-3">
-        {(pending || preparing) && (
-          <div className="relative mb-2 inline-block">
-            {pending ? (
-              <img src={pending.url} alt="Imagem a enviar" className="max-h-28 rounded-md ring-1 ring-line" />
-            ) : (
-              <div className="grid size-20 place-items-center rounded-md bg-surface text-soft">
-                <Spinner className="size-5" />
-              </div>
-            )}
-            {pending && (
-              <button
-                type="button"
-                onClick={() => setPending(null)}
-                aria-label="Remover imagem"
-                className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-surface-hi text-ink ring-2 ring-panel transition hover:bg-danger"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-        <div className="flex items-end gap-1.5 rounded-md bg-surface-hi p-1.5 transition focus-within:shadow-[0_0_0_4px_rgb(88_101_242/0.15)]">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            aria-label="Enviar imagem"
-            title="Enviar imagem (ou cole/arraste aqui)"
-            className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface hover:text-ink"
-          >
-            <ImagePlus className="size-5" />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            className="hidden"
-            onChange={(e) => {
-              void attach(e.target.files?.[0]);
-              e.target.value = "";
+        {writingPoll ? (
+          <PollComposer
+            onCreate={(question, options, multiple) => {
+              stick.current = true;
+              void chat.sendPoll(question, options, multiple);
+              setWritingPoll(false);
+            }}
+            onCancel={() => {
+              setWritingPoll(false);
+              inputRef.current?.focus();
             }}
           />
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={draft}
-            maxLength={MAX_TEXT}
-            placeholder="Mensagem"
-            aria-label="Mensagem"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            className="field-sizing-content max-h-32 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] text-ink outline-none placeholder:text-soft/70"
-          />
-          <button
-            type="button"
-            onClick={send}
-            disabled={!draft.trim() && !pending}
-            aria-label="Enviar"
-            title="Enviar (Enter)"
-            className="grid size-9 shrink-0 place-items-center rounded-sm bg-blurple text-ink transition hover:brightness-110 disabled:bg-transparent disabled:text-soft/50"
-          >
-            <SendHorizontal className="size-5" />
-          </button>
-        </div>
+        ) : (
+          <>
+            {(pending || preparing) && (
+              <div className="relative mb-2 inline-block">
+                {pending ? (
+                  <img src={pending.url} alt="Imagem a enviar" className="max-h-28 rounded-md ring-1 ring-line" />
+                ) : (
+                  <div className="grid size-20 place-items-center rounded-md bg-surface text-soft">
+                    <Spinner className="size-5" />
+                  </div>
+                )}
+                {pending && (
+                  <button
+                    type="button"
+                    onClick={() => setPending(null)}
+                    aria-label="Remover imagem"
+                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-surface-hi text-ink ring-2 ring-panel transition hover:bg-danger"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="flex items-end gap-1.5 rounded-md bg-surface-hi p-1.5 transition focus-within:shadow-[0_0_0_4px_rgb(88_101_242/0.15)]">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Enviar imagem"
+                title="Enviar imagem (ou cole/arraste aqui)"
+                className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface hover:text-ink"
+              >
+                <ImagePlus className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setWritingPoll(true)}
+                aria-label="Criar enquete"
+                title="Criar enquete"
+                className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface hover:text-ink"
+              >
+                <ChartBarBig className="size-5" />
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => {
+                  void attach(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={draft}
+                maxLength={MAX_TEXT}
+                placeholder="Mensagem"
+                aria-label="Mensagem"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                className="field-sizing-content max-h-32 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] text-ink outline-none placeholder:text-soft/70"
+              />
+              <button
+                type="button"
+                onClick={send}
+                disabled={!draft.trim() && !pending}
+                aria-label="Enviar"
+                title="Enviar (Enter)"
+                className="grid size-9 shrink-0 place-items-center rounded-sm bg-blurple text-ink transition hover:brightness-110 disabled:bg-transparent disabled:text-soft/50"
+              >
+                <SendHorizontal className="size-5" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {viewing &&
