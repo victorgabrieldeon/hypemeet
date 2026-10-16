@@ -1,7 +1,8 @@
-import { EyeOff, FileVideo, Maximize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
+import { EyeOff, FileVideo, Maximize, Minimize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { buttonClass, Spinner } from "../components/ui";
 import { loadDevice } from "./devices";
+import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { positionAt, type WatchAction, type WatchControls, type WatchParty, type WatchSource, type WatchState } from "./watch";
 import { loadYouTube, YT_STATE, youTubeError, youTubeThumbnail, type YTPlayer } from "./youtube";
 
@@ -532,14 +533,14 @@ export function WatchPlayer({
     setScrub(null);
   }
 
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void ref.current?.requestFullscreen();
-  };
+  const fullscreen = useFullscreen(ref);
+  const toggleFullscreen = fullscreen.toggle;
+  const fullscreenLabel = fullscreen.active ? "Sair da tela cheia" : "Tela cheia";
+  const FullscreenIcon = fullscreen.active ? Minimize : Maximize;
 
   if (isYouTube) {
     return (
-      <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg bg-black ${className}`}>
+      <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg bg-black ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}>
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel pr-1.5 pl-3">
           <Popcorn className="size-4 shrink-0 text-blurple-hi" />
           {live && <LiveBadge />}
@@ -563,11 +564,11 @@ export function WatchPlayer({
           </button>
           <button
             onClick={toggleFullscreen}
-            aria-label="Tela cheia"
-            title="Tela cheia"
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
             className="grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
           >
-            <Maximize className="size-4" />
+            <FullscreenIcon className="size-4" />
           </button>
         </div>
         <div className="relative min-h-0 flex-1" aria-label={`Assistindo junto: ${watchTitle(source)}`}>
@@ -671,7 +672,7 @@ export function WatchPlayer({
         else return;
         e.preventDefault();
       }}
-      className={`group relative animate-pop overflow-hidden rounded-lg bg-black focus-visible:outline-offset-0 ${className}`}
+      className={`group relative animate-pop overflow-hidden rounded-lg bg-black focus-visible:outline-offset-0 ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}
     >
       {file && <FileMedia file={file} onMedia={setMedia} onError={setFailure} />}
 
@@ -760,8 +761,8 @@ export function WatchPlayer({
           <ControlIcon onClick={onMinimize} label="Minimizar">
             <Minimize2 className="size-4" />
           </ControlIcon>
-          <ControlIcon onClick={toggleFullscreen} label="Tela cheia">
-            <Maximize className="size-4" />
+          <ControlIcon onClick={toggleFullscreen} label={fullscreenLabel}>
+            <FullscreenIcon className="size-4" />
           </ControlIcon>
         </div>
       </div>

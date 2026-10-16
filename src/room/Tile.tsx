@@ -12,6 +12,7 @@ import {
   EyeOff,
   Maximize,
   MicOff,
+  Minimize,
   MonitorUp,
   MoveUpRight,
   Pencil,
@@ -26,6 +27,7 @@ import {
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Spinner } from "../components/ui";
 import { CasinoBadges, CasinoFrame, CasinoLayer, CasinoTileButton, PersonAvatar } from "./Casino";
+import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
@@ -241,10 +243,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [inkTool]);
 
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void ref.current?.requestFullscreen();
-  };
+  const fullscreen = useFullscreen(ref);
 
   const overlayBase = "absolute flex items-center gap-2 transition";
   const hoverOnly = compact ? "hidden" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100";
@@ -306,7 +305,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
       onDoubleClick={onTogglePin}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black"
+      className={`group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black ${fullscreen.filling ? FILL_CLASS : ""}`}
     >
       <CasinoFrame tile={tile}>
         {!watching ? (
@@ -398,8 +397,8 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           </IconButton>
         )}
         {watching && (
-          <IconButton onClick={toggleFullscreen} label="Tela cheia">
-            <Maximize className="size-4" />
+          <IconButton onClick={fullscreen.toggle} label={fullscreen.active ? "Sair da tela cheia" : "Tela cheia"}>
+            {fullscreen.active ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
           </IconButton>
         )}
       </div>
