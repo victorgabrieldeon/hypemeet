@@ -73,6 +73,8 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   o volume dos efeitos e da música, só seus. Tudo vai pelo data channel do LiveKit (tópico `casino`): o
   cliente de quem abriu a mesa é a autoridade e republica o estado a cada mudança; quem entra depois pede
   o estado ao chegar. Recarregar a página mantém a mesa (sessionStorage da aba).
+- **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
+  cada um, na sala daquele canal (veja [Atividade do Discord](#atividade-do-discord)).
 - **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
   sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
   porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
@@ -126,6 +128,8 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `LIVEKIT_HOST` | `LIVEKIT_URL` (dev: `http://localhost:7880`) | URL que o servidor usa para consultar a API do LiveKit (quem está online). Em produção dá para apontar direto para a rede interna, ex. `http://livekit:7880` |
 | `PORT` | `3001` | |
 | `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite das salas |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Liga a [atividade do Discord](#atividade-do-discord). Sem elas, `/api/discord/*` responde 503 |
+| `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado no link "Abrir fora do Discord" e no convite copiado de dentro da atividade |
 
 O `docker-compose.yml` usa `--dev` — **não** use em produção. Para produção rode o LiveKit com
 config própria (chaves fortes, TLS, portas UDP liberadas) ou use LiveKit Cloud.
@@ -145,6 +149,46 @@ LiveKit próprio:
 Variáveis do compose no Dokploy: `LIVEKIT_DOMAIN`, `LIVEKIT_NODE_IP` (IP público do servidor),
 `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres). As portas 7881/tcp e 7882/udp precisam
 estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio não chegam.
+
+## Atividade do Discord
+
+O HypeMeet também abre como **atividade** (o 🚀 do canal de voz). Quem abre entra direto, com o nome e
+a foto do Discord, na sala ligada àquele canal de voz: todo mundo do canal cai na mesma sala, e ela é
+uma sala normal, com código, então dá pra entrar também pelo site ou pelo app. "Convidar" abre o convite
+do próprio Discord e "Sair" fecha a atividade.
+
+Como funciona: o Discord serve a página em `https://<client id>.discordsays.com` num iframe e passa
+**todo** o tráfego pelo proxy dele. A página percebe isso pelo endereço (`src/lib/discord.ts`), carrega
+o [Embedded App SDK](https://github.com/discord/embedded-app-sdk), pede login (`identify` e `guilds`, este
+pra ler o nome do canal), troca o código no servidor (`/api/discord/token`, precisa do segredo) e pede a
+entrada na sala do canal (`/api/discord/join`). O canal → sala fica na tabela `discord_channels`. A foto
+vai no atributo `avatar` do participante e só é mostrada se for do CDN do Discord.
+
+**Configurar** em https://discord.com/developers/applications:
+
+1. Crie o app → **OAuth2**: copie *Client ID* e *Client Secret* para `DISCORD_CLIENT_ID` e
+   `DISCORD_CLIENT_SECRET` (e defina `PUBLIC_URL`). Em **OAuth2 → Redirects** adicione `https://127.0.0.1`
+   (o Discord exige um redirect cadastrado, mesmo sem usar).
+2. **Activities → Settings**: ative as atividades e marque as plataformas.
+3. **Activities → URL Mappings** (a ordem importa: o mais específico em cima):
+
+   | Prefixo | Destino |
+   | --- | --- |
+   | `/livekit` | `livekit.exemplo.com` |
+   | `/` | `meet.exemplo.com` |
+
+4. No Discord, entre num canal de voz → 🚀 → o app aparece na sua lista (apps seus ou do seu time).
+
+Para testar local, aponte o `/` para um túnel até o Vite (`cloudflared tunnel --url http://localhost:5173`):
+o Vite já repassa `/rtc` para o LiveKit, então o `/livekit` não é usado no dev.
+
+**Limites do Discord**: a doc das atividades diz que **WebRTC não é suportado** (o proxy só leva HTTP e
+WebSocket). A sinalização do LiveKit passa pelo `/livekit`, mas o áudio e o vídeo vão direto ao LiveKit
+(UDP 7882 / TCP 7881), fora do proxy; se o cliente do Discord barrar isso, a sala não conecta e a tela de
+erro oferece **Abrir fora do Discord** (a mesma sala no navegador). Pelo mesmo motivo, câmera, microfone
+e compartilhar tela dependem do que o iframe do Discord libera: a voz de verdade fica no próprio canal
+do Discord. O **assistir junto do YouTube** não roda dentro da atividade (o player é de `youtube.com`,
+bloqueado pelo CSP); o vídeo do computador funciona.
 
 ## App desktop (Windows / macOS / Linux)
 

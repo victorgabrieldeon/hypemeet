@@ -11,6 +11,11 @@ export interface JoinGrant {
   room: RoomInfo;
 }
 
+/** Joining from the Discord Activity: also carries the room's address on the open web. */
+export interface DiscordGrant extends JoinGrant {
+  webUrl: string;
+}
+
 export interface PresentPerson {
   identity: string;
   name: string;
@@ -50,4 +55,8 @@ export const api = {
   presence: (codes: string[]) => request<Presence>(`/api/presence?codes=${codes.map(encodeURIComponent).join(",")}`),
   joinRoom: (code: string, nickname: string) =>
     request<JoinGrant>("/api/token", { method: "POST", body: JSON.stringify({ code, nickname }) }),
+  discordToken: (code: string) =>
+    request<{ accessToken: string }>("/api/discord/token", { method: "POST", body: JSON.stringify({ code }) }),
+  discordJoin: (body: { accessToken: string; channelId: string; channelName: string | null }) =>
+    request<DiscordGrant>("/api/discord/join", { method: "POST", body: JSON.stringify(body) }),
 };

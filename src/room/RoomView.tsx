@@ -114,10 +114,14 @@ interface RoomViewProps {
   info: RoomInfo;
   initialDevices: { mic: boolean; camera: boolean };
   onLeave: () => void;
+  /** The room's link for "Convidar". Default: this site's /r/<code>. */
+  inviteUrl?: string;
+  /** Replaces copying the link (the Discord Activity opens Discord's own invite dialog). */
+  onInvite?: () => void;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin }: RoomViewProps) {
+export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -260,7 +264,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   }
 
   async function copy(kind: "code" | "link") {
-    const text = kind === "code" ? formatCode(info.code) : `${location.origin}/r/${info.code}`;
+    const text = kind === "code" ? formatCode(info.code) : (inviteUrl ?? `${location.origin}/r/${info.code}`);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(kind);
@@ -297,7 +301,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
           <span className="type-link-sm flex h-10 items-center gap-1.5 rounded-lg bg-surface px-3 text-soft">
             <Users className="size-4" /> {participantCount}
           </span>
-          <Button variant="primary" className="type-link-sm h-10 px-4" onClick={() => copy("link")}>
+          <Button variant="primary" className="type-link-sm h-10 px-4" onClick={onInvite ?? (() => copy("link"))}>
             {copied === "link" ? <Check className="size-4" /> : <Link2 className="size-4" />}
             <span className="hidden sm:inline">{copied === "link" ? "Link copiado" : "Convidar"}</span>
           </Button>

@@ -14,7 +14,7 @@ const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /** Public origin as the visitor sees it: behind Traefik the request itself is plain http. */
-function origin(req: Request): string {
+export function publicOrigin(req: Request): string {
   const url = new URL(req.url);
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || url.protocol.slice(0, -1);
   const host = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || url.host;
@@ -85,8 +85,8 @@ export function createLinkPreviews(opts: {
   const genericMeta = (req: Request): Meta => ({
     title: "HypeMeet",
     description: "Chamada de voz e vídeo pra galera. Sem conta, é só mandar o link.",
-    url: `${origin(req)}${new URL(req.url).pathname}`,
-    image: `${origin(req)}/og.png`,
+    url: `${publicOrigin(req)}${new URL(req.url).pathname}`,
+    image: `${publicOrigin(req)}/og.png`,
     imageAlt: "HypeMeet — chamada de voz e vídeo pra galera",
   });
 
@@ -103,7 +103,7 @@ export function createLinkPreviews(opts: {
       const room = opts.findRoom(code);
       if (!room) return page(genericMeta(req), "HypeMeet");
       const people = await presence.people(room.code);
-      const base = origin(req);
+      const base = publicOrigin(req);
       // The version pins this snapshot: WhatsApp/Discord cache images by URL, so a new crowd
       // must mean a new URL or the old faces stick around.
       const version = Bun.hash(JSON.stringify([room.name, people])).toString(36);

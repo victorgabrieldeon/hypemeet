@@ -180,18 +180,25 @@ function Lobby({
   );
 }
 
-function LiveRoom({
+export function LiveRoom({
   info,
   grant,
   devices,
   onLeave,
   onRejoin,
+  connectErrorExtra,
+  inviteUrl,
+  onInvite,
 }: {
   info: RoomInfo;
   grant: JoinGrant;
   devices: { mic: boolean; camera: boolean };
   onLeave: () => void;
   onRejoin: () => void;
+  /** Shown under the error when the room can't connect. */
+  connectErrorExtra?: ReactNode;
+  inviteUrl?: string;
+  onInvite?: () => void;
 }) {
   const [session, setSession] = useState<{ room: Room; chat: RoomChat; previews: ScreenPreviews } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -230,6 +237,7 @@ function LiveRoom({
           <h1 className="type-heading-sm text-2xl">Não foi possível conectar</h1>
           <p className="mt-2 break-words text-soft">{error}</p>
         </div>
+        {connectErrorExtra}
         <div className="flex gap-2">
           <Button className="flex-1" onClick={onLeave}>
             Início
@@ -254,7 +262,7 @@ function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} />
+      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} />
     </VolumeProvider>
   );
 }

@@ -336,6 +336,15 @@ export function useSubscriptions(room: Room) {
  }, [room]);
 }
 
+/**
+ * The Discord avatar the server puts on people who came in through the Activity. Only Discord's CDN
+ * counts: anyone can rewrite their own attributes, and an arbitrary URL would leak every viewer's IP.
+ */
+export function discordAvatar(participant: Participant): string | undefined {
+  const url = participant.attributes.avatar;
+  return url?.startsWith("https://cdn.discordapp.com/avatars/") ? url : undefined;
+}
+
 /** Our own choice is read directly; others' from their attribute (published by useViewingAttribute). */
 export function isViewing(participant: Participant, screen: TrackPublication): boolean {
  if (participant.isLocal) return (screen as RemoteTrackPublication).isDesired;

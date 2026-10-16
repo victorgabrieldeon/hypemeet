@@ -1,7 +1,8 @@
 import { AccessToken, ParticipantInfo_State, RoomServiceClient } from "livekit-server-sdk";
 import { join } from "node:path";
-import { createLinkPreviews } from "./preview";
-import { NAME_MAX, openRoomStore } from "./rooms";
+import { createDiscord } from "./discord";
+import { createLinkPreviews, publicOrigin } from "./preview";
+import { NAME_MAX, openRoomStore, type Room } from "./rooms";
 
 const PRODUCTION = process.env.NODE_ENV === "production";
 const PORT = Number(process.env.PORT ?? 3001);
@@ -20,11 +21,15 @@ const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET ?? "secret";
 // Server → LiveKit API (presence). Defaults to the public URL; set it to skip the proxy (e.g. http://livekit:7880).
 const LIVEKIT_HOST = process.env.LIVEKIT_HOST ?? LIVEKIT_URL ?? "http://localhost:7880";
 const PRESENCE_MAX_ROOMS = 30;
+// Where the site lives, for the "open outside Discord" link: inside the Activity the request comes
+// through Discord's proxy, so its own host may not be the site's.
+const PUBLIC_URL = process.env.PUBLIC_URL?.replace(/\/+$/, "") || null;
 
 const livekit = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
 const rooms = openRoomStore(DB_PATH);
 const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: rooms.get });
+const discord = createDiscord();
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -40,6 +45,27 @@ async function readJson(req: Request): Promise<Record<string, unknown> | null> {
 
 function cleanText(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
+}
+
+/** A LiveKit grant for one connection. `attributes` start on the participant (e.g. the Discord avatar). */
+async function joinGrant(room: Room, nickname: string, attributes?: Record<string, string>) {
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    // Identity must be unique per connection: the same person may open several tabs.
+    identity: `${nickname}#${crypto.randomUUID().slice(0, 8)}`,
+    name: nickname,
+    ttl: "6h",
+    attributes,
+  });
+  token.addGrant({
+    room: room.code,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true,
+    // Participant attributes carry shared state (the watch party lives on its host's).
+    canUpdateOwnMetadata: true,
+  });
+  return { token: await token.toJwt(), url: LIVEKIT_URL, room };
 }
 
 async function serveStatic(req: Request): Promise<Response> {
@@ -105,23 +131,44 @@ Bun.serve({
         if (!room) return error("Sala não encontrada", 404);
         const nickname = cleanText(body?.nickname, 32);
         if (!nickname) return error("Escolha um apelido", 400);
-
-        const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-          // Identity must be unique per connection: the same person may open several tabs.
-          identity: `${nickname}#${crypto.randomUUID().slice(0, 8)}`,
-          name: nickname,
-          ttl: "6h",
-        });
-        token.addGrant({
-          room: room.code,
-          roomJoin: true,
-          canPublish: true,
-          canSubscribe: true,
-          canPublishData: true,
-          // Participant attributes carry shared state (the watch party lives on its host's).
-          canUpdateOwnMetadata: true,
-        });
-        return json({ token: await token.toJwt(), url: LIVEKIT_URL, room });
+        return json(await joinGrant(room, nickname));
+      },
+    },
+    // Discord Activity sign-in, step 1: the code from the SDK's `authorize` → the access token its
+    // `authenticate` takes. Exchanging needs the client secret, so it happens here.
+    "/api/discord/token": {
+      async POST(req) {
+        if (!discord.enabled) return error("A atividade do Discord não está configurada no servidor", 503);
+        const body = await readJson(req);
+        if (typeof body?.code !== "string" || !body.code) return error("Pedido inválido", 400);
+        try {
+          return json({ accessToken: await discord.exchangeCode(body.code) });
+        } catch (err) {
+          console.error("discord token exchange failed:", err);
+          return error("O Discord não confirmou o login", 401);
+        }
+      },
+    },
+    // Step 2: who the token belongs to (their Discord name and avatar) and a grant for the room of the
+    // voice channel the Activity was opened in.
+    "/api/discord/join": {
+      async POST(req) {
+        if (!discord.enabled) return error("A atividade do Discord não está configurada no servidor", 503);
+        const body = await readJson(req);
+        const accessToken = typeof body?.accessToken === "string" ? body.accessToken : "";
+        const channelId = cleanText(body?.channelId, 32);
+        if (!accessToken || !/^\d+$/.test(channelId)) return error("Pedido inválido", 400);
+        let user;
+        try {
+          user = await discord.user(accessToken);
+        } catch (err) {
+          console.error("discord user lookup failed:", err);
+          return error("O Discord não confirmou o login", 401);
+        }
+        const room = rooms.forDiscordChannel(channelId, cleanText(body?.channelName, NAME_MAX) || "Discord");
+        const nickname = cleanText(user.name, 32) || "Discord";
+        const grant = await joinGrant(room, nickname, user.avatarUrl ? { avatar: user.avatarUrl } : undefined);
+        return json({ ...grant, webUrl: `${PUBLIC_URL ?? publicOrigin(req)}/r/${room.code}` });
       },
     },
     "/api/*": () => error("Not found", 404),

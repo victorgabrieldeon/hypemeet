@@ -11,6 +11,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), ...(lan ? [basicSsl()] : [])],
   server: {
     host: true,
+    // Testing the Discord Activity: Discord's proxy reaches the dev server through a cloudflared tunnel.
+    allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": "http://localhost:3001",
       // LiveKit signaling rides the page's own origin (ws:// or wss://), so it works from any device

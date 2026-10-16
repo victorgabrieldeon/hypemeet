@@ -28,7 +28,7 @@ import {
   type Throwable,
 } from "./casino";
 import { setMusic } from "./casinoAudio";
-import type { TileModel } from "./model";
+import { discordAvatar, type TileModel } from "./model";
 import type { Reactions } from "./reactions";
 
 const CasinoContext = createContext<CasinoStore | null>(null);
@@ -117,7 +117,7 @@ export function PersonAvatar({
 }) {
   const name = participant.name || participant.identity;
   const costume = costumeOf(participant);
-  if (!costume) return <Avatar name={name} size={size} className={className} />;
+  if (!costume) return <Avatar name={name} image={discordAvatar(participant)} size={size} className={className} />;
   return (
     <div
       title={`${name} perdeu uma aposta de zoeira`}
