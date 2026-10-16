@@ -110,6 +110,10 @@ export function DiscordActivity() {
       onRejoin={join}
       inviteUrl={grant.webUrl}
       onInvite={() => void sdk.commands.openInviteDialog().catch(() => undefined)}
+      onCast={async () => {
+        const { url } = await api.castLink(grant.token);
+        await sdk.commands.openExternalLink({ url });
+      }}
       connectErrorExtra={
         <div className="flex flex-col gap-3">
           <p className="text-sm text-soft">

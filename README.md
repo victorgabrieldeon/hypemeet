@@ -74,7 +74,8 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   cliente de quem abriu a mesa é a autoridade e republica o estado a cada mudança; quem entra depois pede
   o estado ao chegar. Recarregar a página mantém a mesa (sessionStorage da aba).
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
-  cada um, na sala daquele canal (veja [Atividade do Discord](#atividade-do-discord)).
+  cada um, na sala daquele canal. A tela sai de um transmissor no navegador e aparece como sua (veja
+  [Atividade do Discord](#atividade-do-discord)).
 - **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
   sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
   porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
@@ -182,12 +183,23 @@ vai no atributo `avatar` do participante e só é mostrada se for do CDN do Disc
 Para testar local, aponte o `/` para um túnel até o Vite (`cloudflared tunnel --url http://localhost:5173`):
 o Vite já repassa `/rtc` para o LiveKit, então o `/livekit` não é usado no dev.
 
+**Transmitir tela pela atividade.** O Discord não deixa a atividade capturar a tela, então o botão de
+tela da atividade abre um **transmissor** no navegador (`/transmitir`): você escolhe a tela lá e ela
+aparece na sala como sua, com o mesmo nome. O painel de tela da atividade lista o que está no ar e
+tem o **Parar**. Por baixo, o transmissor é uma segunda conexão que só manda telas: a atividade pede o
+link em `/api/cast` provando quem é com o próprio token da sala, e o servidor devolve um token que só
+publica tela, marcado com o atributo `castFor` (a identidade de quem pediu). Todo mundo mostra as telas
+dele sob o nome do dono e deixa o transmissor fora dos tiles, da contagem, dos sons e de quem responde
+histórico (`src/room/cast.ts`). O "Parar" vai pelo tópico `cast` e o transmissor só obedece ao dono. O
+token viaja no fragmento do link (`#t=…`), que não chega a servidor nenhum, e vale 15 min pra abrir. Se
+o dono sai da sala por mais de 20 s, as telas param. A Mesa ainda precisa ser aberta por quem publica
+a tela, então não funciona com o transmissor.
+
 **Limites do Discord**: a doc das atividades diz que **WebRTC não é suportado** (o proxy só leva HTTP e
 WebSocket). A sinalização do LiveKit passa pelo `/livekit`, mas o áudio e o vídeo vão direto ao LiveKit
-(UDP 7882 / TCP 7881), fora do proxy; se o cliente do Discord barrar isso, a sala não conecta e a tela de
-erro oferece **Abrir fora do Discord** (a mesma sala no navegador). Pelo mesmo motivo, câmera, microfone
-e compartilhar tela dependem do que o iframe do Discord libera: a voz de verdade fica no próprio canal
-do Discord. O **assistir junto do YouTube** não roda dentro da atividade (o player é de `youtube.com`,
+(UDP 7882 / TCP 7881), fora do proxy. No Discord desktop isso funciona; se algum cliente barrar, a sala
+não conecta e a tela de erro oferece **Abrir fora do Discord** (a mesma sala no navegador). Câmera e
+microfone dependem do que o iframe do Discord libera: a voz de verdade fica no próprio canal do Discord. O **assistir junto do YouTube** não roda dentro da atividade (o player é de `youtube.com`,
 bloqueado pelo CSP); o vídeo do computador funciona.
 
 ## App desktop (Windows / macOS / Linux)

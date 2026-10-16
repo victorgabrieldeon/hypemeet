@@ -1,5 +1,5 @@
 import type { LocalParticipant, LocalTrackPublication } from "livekit-client";
-import { Gamepad2, MonitorUp, Square, Type, Volume2, VolumeX, type LucideIcon } from "lucide-react";
+import { ExternalLink, Gamepad2, MonitorUp, Square, Type, Volume2, VolumeX, type LucideIcon } from "lucide-react";
 import { useReducer, useState } from "react";
 import { Button, Spinner } from "../components/ui";
 import { changeScreenMode, SCREEN_AUDIO_COPY, screenModeOf, type ScreenMode, type ScreenPrefs, type TileModel } from "./model";
@@ -54,10 +54,12 @@ interface ScreenPanelProps {
   starting: boolean;
   onStart: () => void;
   onError: (text: string) => void;
+  /** On a page of its own (the browser transmitter) instead of a popover above the dock. */
+  inline?: boolean;
 }
 
 /** Popover above the dock: every screen you're sending, live controls for each, and a new-share setup. */
-export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, onError }: ScreenPanelProps) {
+export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, onError, inline }: ScreenPanelProps) {
   // Mode lives on the capture track (no LiveKit event fires when it changes), so re-render by hand.
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [pending, setPending] = useState<string | null>(null);
@@ -82,9 +84,13 @@ export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, 
 
   return (
     <div
-      role="dialog"
+      role={inline ? undefined : "dialog"}
       aria-label="Transmissões"
-      className="absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 rounded-lg bg-panel p-3 shadow-float ring-1 ring-line"
+      className={
+        inline
+          ? "flex flex-col gap-3"
+          : "absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 rounded-lg bg-panel p-3 shadow-float ring-1 ring-line"
+      }
     >
       <div className="flex items-center justify-between px-1 pt-1">
         <h2 className="type-link">Transmissões</h2>
@@ -201,6 +207,77 @@ export function ScreenPanel({ screens, prefs, onPrefsChange, starting, onStart, 
         <Button variant="primary" className="type-link-sm h-11" disabled={starting} onClick={onStart}>
           {starting ? <Spinner className="size-4" /> : <MonitorUp className="size-4" />}
           {screens.length > 0 ? "Adicionar outra tela" : "Escolher tela"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Discord Activity's take on the panel: the screen is picked in the browser (a transmitter, see
+ * room/cast.ts) and shows up here as ours; this lists those screens and stops them remotely.
+ */
+export function CastPanel({
+  screens,
+  starting,
+  onStart,
+  onStop,
+}: {
+  /** Screens of our transmitters, in start order. */
+  screens: ScreenTile[];
+  starting: boolean;
+  onStart: () => void;
+  onStop: (screen: ScreenTile | "all") => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label="Transmissões"
+      className="absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 rounded-lg bg-panel p-3 shadow-float ring-1 ring-line"
+    >
+      <div className="flex items-center justify-between px-1 pt-1">
+        <h2 className="type-link">Transmissões</h2>
+        {screens.length > 1 && (
+          <button
+            type="button"
+            onClick={() => onStop("all")}
+            className="type-link-sm rounded-sm px-2 py-1 text-danger transition hover:bg-danger/15"
+          >
+            Parar todas
+          </button>
+        )}
+      </div>
+
+      {screens.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {screens.map((screen, i) => (
+            <li key={screen.id} className="flex items-center gap-2.5 rounded-md border border-line bg-surface p-3">
+              <span className="size-2 shrink-0 rounded-full bg-danger shadow-[0_0_8px_rgb(240_56_76/0.9)]" />
+              <p className="min-w-0 flex-1 truncate text-sm">
+                <span className="font-semibold">Tela {i + 1}</span>
+                <span className="text-soft"> · pelo navegador</span>
+              </p>
+              <button
+                type="button"
+                onClick={() => onStop(screen)}
+                className="type-link-sm flex h-8 items-center gap-1.5 rounded-sm bg-danger/15 px-2.5 text-danger transition hover:bg-danger hover:text-ink"
+              >
+                <Square className="size-3 fill-current" /> Parar
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-3">
+        <p className="type-label px-0.5 pt-1 text-soft">{screens.length > 0 ? "Nova transmissão" : "Transmitir tela"}</p>
+        <p className="px-0.5 text-sm text-soft">
+          O Discord não deixa atividades capturarem a tela, então você escolhe no navegador. A tela aparece aqui na
+          sala como sua; deixe a aba aberta enquanto transmite.
+        </p>
+        <Button variant="primary" className="type-link-sm h-11" disabled={starting} onClick={onStart}>
+          {starting ? <Spinner className="size-4" /> : <ExternalLink className="size-4" />}
+          Escolher tela no navegador
         </Button>
       </div>
     </div>

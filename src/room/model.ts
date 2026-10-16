@@ -12,6 +12,7 @@ import {
 } from "livekit-client";
 import { useEffect, useReducer } from "react";
 import { detectOS, IS_DESKTOP_APP } from "../lib/downloads";
+import { isTransmitter } from "./cast";
 
 /**
  * Every screen share is published as a pair:
@@ -39,13 +40,16 @@ export type TileModel =
   viewers: Participant[];
  };
 
-/** Screens first (they're what people came for), then cameras; local participant first in each group. */
+/**
+ * Screens first (they're what people came for), then cameras; local participant first in each group.
+ * Transmitters bring screens only: no camera tile of their own.
+ */
 export function buildTiles(room: Room): TileModel[] {
  const screens: TileModel[] = [];
  const cameras: TileModel[] = [];
  const everyone = [room.localParticipant, ...room.remoteParticipants.values()];
  for (const participant of everyone) {
-  cameras.push({ kind: "camera", id: `${participant.identity}:camera`, participant });
+  if (!isTransmitter(participant)) cameras.push({ kind: "camera", id: `${participant.identity}:camera`, participant });
   const pubs = [...participant.trackPublications.values()];
   // Names embed a base36 timestamp, so sorting by name = order they were started (same for everyone).
   const videos = pubs

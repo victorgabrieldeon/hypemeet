@@ -22,6 +22,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { Button, LogoMark, Spinner } from "../components/ui";
 import type { RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
+import { inDiscord, screenCaptureBlocked } from "../lib/discord";
 import { usePttState } from "../lib/ptt";
 import type { RoomChat } from "./chat";
 import { ChatPanel } from "./ChatPanel";
@@ -44,7 +45,8 @@ import { canSuppressNoise, useNoiseFilter } from "./noise";
 import { PushToTalkSection, usePushToTalk } from "./pushToTalk";
 import { InkProvider } from "./ink";
 import { ReactionBar, ReactionsProvider, reactionTarget, useReactions } from "./reactions";
-import { ScreenPanel } from "./ScreenPanel";
+import { CastPanel, ScreenPanel } from "./ScreenPanel";
+import { castOwnerOf, remotePeople, stopCast } from "./cast";
 import { SoundboardPanel } from "./SoundboardPanel";
 import { Stage } from "./Stage";
 import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
@@ -55,7 +57,10 @@ import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
   const name = (err as DOMException)?.name;
-  if (name === "NotAllowedError") return `Permissão negada para ${what}. Libere no cadeado da barra de endereço.`;
+  if (name === "NotAllowedError")
+    return inDiscord
+      ? `O Discord não libera ${what} para atividades. A voz fica no canal do Discord.`
+      : `Permissão negada para ${what}. Libere no cadeado da barra de endereço.`;
   if (name === "NotFoundError") return `Nenhum(a) ${what} encontrado(a).`;
   if (name === "NotReadableError") return `${what} está em uso por outro app.`;
   return `Não deu pra ativar ${what}: ${(err as Error)?.message ?? err}`;
@@ -118,10 +123,12 @@ interface RoomViewProps {
   inviteUrl?: string;
   /** Replaces copying the link (the Discord Activity opens Discord's own invite dialog). */
   onInvite?: () => void;
+  /** Where screens can't be captured (the Discord Activity): opens a browser transmitter for us. */
+  onCast?: () => Promise<void>;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite }: RoomViewProps) {
+export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -216,6 +223,12 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const myScreens = tiles.filter(
     (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
   );
+  // What our browser transmitters send, shown as ours (Discord Activity).
+  const castScreens = tiles.filter(
+    (t): t is Extract<TileModel, { kind: "screen" }> =>
+      t.kind === "screen" && castOwnerOf(t.participant) === local.identity,
+  );
+  const sendingCount = myScreens.length + castScreens.length;
   const reactionTargetTile = reactionTarget(tiles, pinnedId);
   const micOn = local.isMicrophoneEnabled;
   const cameraOn = local.isCameraEnabled;
@@ -263,6 +276,26 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     }
   }
 
+  async function startCast() {
+    if (!onCast) return;
+    setBusy("screen");
+    try {
+      await onCast();
+    } catch (e) {
+      setToast({ text: `Não deu pra abrir o navegador: ${(e as Error).message}`, tone: "error" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function stopCastScreen(screen: Extract<TileModel, { kind: "screen" }> | "all") {
+    const targets =
+      screen === "all"
+        ? [...new Set(castScreens.map((s) => s.participant))].map((t) => stopCast(local, t, "all"))
+        : [stopCast(local, screen.participant, screen.video.trackSid)];
+    Promise.all(targets).catch(() => setToast({ text: "Não deu pra parar a transmissão", tone: "error" }));
+  }
+
   async function copy(kind: "code" | "link") {
     const text = kind === "code" ? formatCode(info.code) : (inviteUrl ?? `${location.origin}/r/${info.code}`);
     try {
@@ -273,7 +306,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     }
   }
 
-  const participantCount = room.remoteParticipants.size + 1;
+  const participantCount = remotePeople(room).length + 1;
   const hasRemoteScreenAudio = [...room.remoteParticipants.values()].some((p) =>
     [...p.audioTrackPublications.values()].some((pub) => pub.source === Track.Source.ScreenShareAudio),
   );
@@ -413,31 +446,39 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
         <div ref={screensRef} className="contents">
           <ControlButton
             tone="accent"
-            on={myScreens.length > 0}
+            on={sendingCount > 0}
             expanded={screensOpen}
             onClick={() => setScreensOpen(!screensOpen)}
             label="Transmissões de tela"
           >
             <MonitorUp className="size-5" />
-            {myScreens.length > 0 && (
+            {sendingCount > 0 && (
               <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-ink text-[11px] font-bold text-ink-dark ring-2 ring-panel">
-                {myScreens.length}
+                {sendingCount}
               </span>
             )}
           </ControlButton>
-          {screensOpen && (
-            <ScreenPanel
-              screens={myScreens}
-              prefs={screenPrefs}
-              onPrefsChange={(prefs) => {
-                setScreenPrefs(prefs);
-                saveScreenPrefs(prefs);
-              }}
-              starting={busy === "screen"}
-              onStart={() => void addScreen()}
-              onError={(text) => setToast({ text, tone: "error" })}
-            />
-          )}
+          {screensOpen &&
+            (screenCaptureBlocked && onCast ? (
+              <CastPanel
+                screens={castScreens}
+                starting={busy === "screen"}
+                onStart={() => void startCast()}
+                onStop={stopCastScreen}
+              />
+            ) : (
+              <ScreenPanel
+                screens={myScreens}
+                prefs={screenPrefs}
+                onPrefsChange={(prefs) => {
+                  setScreenPrefs(prefs);
+                  saveScreenPrefs(prefs);
+                }}
+                starting={busy === "screen"}
+                onStart={() => void addScreen()}
+                onError={(text) => setToast({ text, tone: "error" })}
+              />
+            ))}
         </div>
         {/* Stays open after a pick so you can spam reactions; anchored to the footer like the screens panel. */}
         <div ref={reactionsRef} className="contents">

@@ -55,6 +55,8 @@ export const api = {
   presence: (codes: string[]) => request<Presence>(`/api/presence?codes=${codes.map(encodeURIComponent).join(",")}`),
   joinRoom: (code: string, nickname: string) =>
     request<JoinGrant>("/api/token", { method: "POST", body: JSON.stringify({ code, nickname }) }),
+  /** A browser-transmitter link for whoever holds this room token (see room/cast.ts). */
+  castLink: (token: string) => request<{ url: string }>("/api/cast", { method: "POST", body: JSON.stringify({ token }) }),
   discordToken: (code: string) =>
     request<{ accessToken: string }>("/api/discord/token", { method: "POST", body: JSON.stringify({ code }) }),
   discordJoin: (body: { accessToken: string; channelId: string; channelName: string | null }) =>

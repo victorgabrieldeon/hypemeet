@@ -1,5 +1,6 @@
 import { RoomEvent, Track, type Participant, type RemoteParticipant, type Room } from "livekit-client";
 import * as sfx from "./casinoAudio";
+import { remotePeople } from "./cast";
 import { isViewing } from "./model";
 
 /**
@@ -800,7 +801,7 @@ export class CasinoStore {
     const screens = [...this.room.localParticipant.trackPublications.values()].filter(
       (p) => p.source === Track.Source.ScreenShare,
     );
-    const remotes = [...this.room.remoteParticipants.values()];
+    const remotes = remotePeople(this.room);
     return screens.length ? remotes.filter((p) => screens.some((pub) => isViewing(p, pub))) : remotes;
   }
 

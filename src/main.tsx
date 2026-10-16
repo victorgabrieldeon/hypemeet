@@ -8,6 +8,7 @@ import { inDiscord } from "./lib/discord";
 
 // livekit-client is most of the bundle; only fetch it when entering a room.
 const RoomPage = lazy(() => import("./pages/RoomPage").then((m) => ({ default: m.RoomPage })));
+const CastPage = lazy(() => import("./pages/CastPage").then((m) => ({ default: m.CastPage })));
 // Inside Discord the page is the Activity (and only there does the Discord SDK get loaded).
 const DiscordActivity = lazy(() => import("./pages/DiscordActivity").then((m) => ({ default: m.DiscordActivity })));
 
@@ -27,6 +28,14 @@ createRoot(document.getElementById("root")!).render(
             element={
               <Suspense fallback={null}>
                 <RoomPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/transmitir"
+            element={
+              <Suspense fallback={null}>
+                <CastPage />
               </Suspense>
             }
           />

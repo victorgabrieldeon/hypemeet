@@ -1,5 +1,6 @@
 import { RoomEvent, RpcError, type Participant, type RemoteParticipant, type Room } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { remotePeople } from "./cast";
 
 /**
  * Watch party ("Assistir junto"): everyone plays the same YouTube video or local file on their own
@@ -301,7 +302,7 @@ export function useWatchParty(room: Room): WatchControls {
     const onLeft = (participant: RemoteParticipant) => {
       const { party, offset } = latest.current;
       if (party?.host.identity !== participant.identity) return;
-      const [heir] = [room.localParticipant, ...room.remoteParticipants.values()].sort(byJoinOrder);
+      const [heir] = [room.localParticipant, ...remotePeople(room)].sort(byJoinOrder);
       if (heir !== room.localParticipant) return;
       const { state } = party;
       const now = Date.now();

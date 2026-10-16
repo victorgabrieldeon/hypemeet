@@ -1,4 +1,5 @@
 import { RoomEvent, type ByteStreamReader, type Participant, type RemoteParticipant, type Room, type TextStreamReader } from "livekit-client";
+import { remotePeople } from "./cast";
 
 /**
  * Room chat, sent peer to peer over LiveKit's data channel: nothing goes through our server or is
@@ -401,7 +402,8 @@ export class RoomChat {
 
   private requestHistory = () => {
     // Whoever has been here longest has seen the most.
-    const [elder] = [...this.room.remoteParticipants.values()].sort(
+    // Transmitters carry no chat.
+    const [elder] = remotePeople(this.room).sort(
       (a, b) => (a.joinedAt?.getTime() ?? Infinity) - (b.joinedAt?.getTime() ?? Infinity),
     );
     if (!elder) return;

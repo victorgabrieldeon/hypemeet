@@ -1,0 +1,213 @@
+import { DisconnectReason, Room, RoomEvent } from "livekit-client";
+import { useEffect, useState, type ReactNode } from "react";
+import { Logo, Spinner, glowCardClass } from "../components/ui";
+import { api } from "../lib/api";
+import { obeyOwner } from "../room/cast";
+import { loadScreenPrefs, saveScreenPrefs } from "../room/devices";
+import { buildTiles, SCREEN_AUDIO_COPY, startScreenShare, useRoomVersion, useScreenAudioCleanup, type TileModel } from "../room/model";
+import { ScreenPreviews } from "../room/previews";
+import { ScreenPanel } from "../room/ScreenPanel";
+
+// The browser transmitter opened from the Discord Activity (see room/cast.ts): it joins the room only
+// to send screens, which everyone sees as its owner's.
+
+/** How long the owner may be gone (a reconnect, a reloaded Activity) before the screens stop. */
+const OWNER_GRACE_MS = 20_000;
+
+interface CastLink {
+  token: string;
+  /** LiveKit URL; null → this origin (dev proxy). */
+  url: string | null;
+  owner: string;
+  name: string;
+  code: string;
+}
+
+/** The link carries the grant in its fragment: `#t=<room token>&u=<livekit url>`. */
+function readLink(): CastLink | null {
+  const params = new URLSearchParams(location.hash.slice(1));
+  const token = params.get("t");
+  const payload = token?.split(".")[1];
+  if (!token || !payload) return null;
+  try {
+    const bytes = Uint8Array.from(atob(payload.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as {
+      name?: string;
+      video?: { room?: string };
+      attributes?: { castFor?: string };
+    };
+    const owner = claims.attributes?.castFor;
+    const code = claims.video?.room;
+    if (!owner || !code) return null;
+    return { token, url: params.get("u"), owner, name: claims.name ?? "", code };
+  } catch {
+    return null;
+  }
+}
+
+function Card({ children }: { children: ReactNode }) {
+  return (
+    <div className="aurora grid min-h-full place-items-center px-4 py-10">
+      <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>{children}</div>
+    </div>
+  );
+}
+
+function Notice({ title, text }: { title: string; text: string }) {
+  return (
+    <Card>
+      <Logo />
+      <div>
+        <h1 className="type-heading-sm text-2xl">{title}</h1>
+        <p className="mt-2 break-words text-soft">{text}</p>
+      </div>
+    </Card>
+  );
+}
+
+export function CastPage() {
+  const [link] = useState(readLink);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [roomName, setRoomName] = useState<string | null>(null);
+  const [ended, setEnded] = useState<{ title: string; text: string } | null>(null);
+
+  useEffect(() => {
+    document.title = "Transmitir · HypeMeet";
+    if (link) api.getRoom(link.code).then((r) => setRoomName(r.name), () => undefined);
+  }, [link]);
+
+  useEffect(() => {
+    if (!link) return;
+    const instance = new Room({ dynacast: true });
+    const previews = new ScreenPreviews(instance);
+    const stopObeying = obeyOwner(instance, link.owner);
+    let cancelled = false;
+    let ownerGone: ReturnType<typeof setTimeout> | undefined;
+
+    const checkOwner = () => {
+      clearTimeout(ownerGone);
+      if (instance.remoteParticipants.has(link.owner)) return;
+      ownerGone = setTimeout(() => {
+        setEnded({ title: "Transmissão encerrada", text: "Você saiu da sala no Discord, então suas telas pararam." });
+        void instance.disconnect();
+      }, OWNER_GRACE_MS);
+    };
+    instance
+      .on(RoomEvent.ParticipantConnected, checkOwner)
+      .on(RoomEvent.ParticipantDisconnected, checkOwner)
+      .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+        if (cancelled || reason === DisconnectReason.CLIENT_INITIATED) return;
+        setEnded({ title: "A conexão caiu", text: "Abra a atividade no Discord e escolha a tela de novo." });
+      });
+
+    instance
+      .connect(link.url ?? location.origin.replace(/^http/, "ws"), link.token, { autoSubscribe: false })
+      .then(() => {
+        if (cancelled) return;
+        checkOwner();
+        setRoom(instance);
+      })
+      .catch(
+        () =>
+          !cancelled &&
+          setEnded({
+            title: "Esse link não vale mais",
+            text: "Ele expira em 15 minutos. Peça um novo no Discord: Transmissões → Escolher tela no navegador.",
+          }),
+      );
+    return () => {
+      cancelled = true;
+      clearTimeout(ownerGone);
+      stopObeying();
+      previews.dispose();
+      void instance.disconnect();
+    };
+  }, [link]);
+
+  if (!link) return <Notice title="Link inválido" text="Abra este link pelo botão de transmitir da atividade no Discord." />;
+  if (ended) return <Notice {...ended} />;
+  if (!room) {
+    return (
+      <div className="grid h-full place-items-center">
+        <div className="flex flex-col items-center gap-4 text-soft">
+          <Spinner className="size-7" /> Conectando…
+        </div>
+      </div>
+    );
+  }
+  return <Transmitter room={room} name={link.name} roomName={roomName} />;
+}
+
+function Transmitter({ room, name, roomName }: { room: Room; name: string; roomName: string | null }) {
+  useRoomVersion(room);
+  useScreenAudioCleanup(room);
+  const local = room.localParticipant;
+  const [prefs, setPrefs] = useState(loadScreenPrefs);
+  const [starting, setStarting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const screens = buildTiles(room).filter(
+    (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
+  );
+  const live = screens.length > 0;
+
+  // Closing the tab ends the screens: ask first.
+  useEffect(() => {
+    if (!live) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [live]);
+
+  async function start() {
+    setStarting(true);
+    setMessage(null);
+    try {
+      const withAudio = await startScreenShare(local, prefs);
+      if (prefs.audio && !withAudio) setMessage(SCREEN_AUDIO_COPY.missing);
+    } catch (e) {
+      const errorName = (e as DOMException)?.name;
+      // User closed the picker: not an error.
+      if (errorName !== "NotAllowedError" && errorName !== "AbortError")
+        setMessage(`Não deu pra compartilhar a tela: ${(e as Error).message}`);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <Card>
+      <Logo />
+      <div>
+        <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha a tela"}</h1>
+        <p className="mt-2 text-soft">
+          Transmitindo como <span className="font-semibold text-ink">{name}</span>
+          {roomName && (
+            <>
+              {" "}
+              em <span className="font-semibold text-ink">{roomName}</span>
+            </>
+          )}
+          . Quem está na atividade do Discord vê a tela como sua.
+        </p>
+      </div>
+      <ScreenPanel
+        inline
+        screens={screens}
+        prefs={prefs}
+        onPrefsChange={(next) => {
+          setPrefs(next);
+          saveScreenPrefs(next);
+        }}
+        starting={starting}
+        onStart={() => void start()}
+        onError={setMessage}
+      />
+      {message && (
+        <p role="status" className="text-sm text-soft">
+          {message}
+        </p>
+      )}
+      {live && <p className="text-sm text-soft">Pode minimizar esta aba, mas não feche: fechar para as telas.</p>}
+    </Card>
+  );
+}

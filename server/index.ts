@@ -1,4 +1,4 @@
-import { AccessToken, ParticipantInfo_State, RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken, ParticipantInfo_State, RoomServiceClient, TokenVerifier, TrackSource } from "livekit-server-sdk";
 import { join } from "node:path";
 import { createDiscord } from "./discord";
 import { createLinkPreviews, publicOrigin } from "./preview";
@@ -26,6 +26,10 @@ const PRESENCE_MAX_ROOMS = 30;
 const PUBLIC_URL = process.env.PUBLIC_URL?.replace(/\/+$/, "") || null;
 
 const livekit = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+const verifier = new TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+// Participant attribute of a transmitter: a browser tab that only sends screens on behalf of someone
+// already in the room (the Discord Activity can't capture the screen). Mirrors src/room/cast.ts.
+const CAST_FOR = "castFor";
 
 const rooms = openRoomStore(DB_PATH);
 const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: rooms.get });
@@ -111,7 +115,7 @@ Bun.serve({
           const entries = await Promise.all(
             live.map(async (r) => {
               const people = (await livekit.listParticipants(r.name))
-                .filter((p) => p.state !== ParticipantInfo_State.DISCONNECTED)
+                .filter((p) => p.state !== ParticipantInfo_State.DISCONNECTED && !p.attributes[CAST_FOR])
                 .sort((a, b) => Number(a.joinedAt - b.joinedAt))
                 .map((p) => ({ identity: p.identity, name: p.name || p.identity.split("#")[0] }));
               return [r.name, people] as const;
@@ -169,6 +173,37 @@ Bun.serve({
         const nickname = cleanText(user.name, 32) || "Discord";
         const grant = await joinGrant(room, nickname, user.avatarUrl ? { avatar: user.avatarUrl } : undefined);
         return json({ ...grant, webUrl: `${PUBLIC_URL ?? publicOrigin(req)}/r/${room.code}` });
+      },
+    },
+    // A transmitter link for someone in a room: proven by their own room token, it lets a browser tab
+    // send screens that show up as theirs. The grant rides in the URL fragment, which never reaches a server.
+    "/api/cast": {
+      async POST(req) {
+        const body = await readJson(req);
+        const claims = typeof body?.token === "string" ? await verifier.verify(body.token).catch(() => null) : null;
+        const room = claims?.sub && claims.video?.room ? rooms.get(claims.video.room) : null;
+        if (!claims?.sub || !room || claims.attributes?.[CAST_FOR]) return error("Entrada na sala inválida", 401);
+        const name = claims.name || claims.sub.split("#")[0]!;
+        const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+          identity: `${name}#tx-${crypto.randomUUID().slice(0, 8)}`,
+          name,
+          // Only to open the link; LiveKit renews the token of whoever is connected.
+          ttl: "15m",
+          attributes: { [CAST_FOR]: claims.sub },
+        });
+        token.addGrant({
+          room: room.code,
+          roomJoin: true,
+          canPublish: true,
+          canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
+          // Never subscribes to anything; this is what delivers the owner's "stop" messages.
+          canSubscribe: true,
+          // Screen previews and the owner's controls ride the data channel.
+          canPublishData: true,
+          canUpdateOwnMetadata: false,
+        });
+        const fragment = new URLSearchParams({ t: await token.toJwt(), ...(LIVEKIT_URL ? { u: LIVEKIT_URL } : {}) });
+        return json({ url: `${PUBLIC_URL ?? publicOrigin(req)}/transmitir#${fragment}` });
       },
     },
     "/api/*": () => error("Not found", 404),

@@ -1,4 +1,5 @@
-import { DisconnectReason, RoomEvent, Track, type Room, type TrackPublication } from "livekit-client";
+import { DisconnectReason, RoomEvent, Track, type Participant, type Room, type TrackPublication } from "livekit-client";
+import { isTransmitter } from "./cast";
 import { useEffect } from "react";
 import { canPickSpeaker, loadDevice } from "./devices";
 
@@ -83,8 +84,9 @@ export function playCue(cue: Cue) {
  */
 export function useRoomSounds(room: Room) {
  useEffect(() => {
-  const joined = () => playCue("join");
-  const left = () => playCue("leave");
+  // A transmitter coming or going isn't someone arriving: its screens get their own cues.
+  const joined = (p: Participant) => !isTransmitter(p) && playCue("join");
+  const left = (p: Participant) => !isTransmitter(p) && playCue("leave");
   const published = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("goLive");
   const localPublished = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("screenStart");
   const unpublished = (pub: TrackPublication) => pub.source === Track.Source.ScreenShare && playCue("screenStop");

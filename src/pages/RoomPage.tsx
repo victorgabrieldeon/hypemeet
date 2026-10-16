@@ -189,6 +189,7 @@ export function LiveRoom({
   connectErrorExtra,
   inviteUrl,
   onInvite,
+  onCast,
 }: {
   info: RoomInfo;
   grant: JoinGrant;
@@ -199,6 +200,7 @@ export function LiveRoom({
   connectErrorExtra?: ReactNode;
   inviteUrl?: string;
   onInvite?: () => void;
+  onCast?: () => Promise<void>;
 }) {
   const [session, setSession] = useState<{ room: Room; chat: RoomChat; previews: ScreenPreviews } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,7 +264,7 @@ export function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} />
+      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} />
     </VolumeProvider>
   );
 }
