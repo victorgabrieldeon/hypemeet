@@ -44,8 +44,8 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   o mic desligado/mutado (inclusive push-to-talk solto) o som só toca pra você, porque o servidor não
   repassa áudio de mic mutado.
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
-  cada um, na sala daquele canal. A tela sai de um transmissor no navegador e aparece como sua (veja
-  [Atividade do Discord](#atividade-do-discord)).
+  cada um, na sala daquele canal. A tela sai de um transmissor no navegador e aparece como sua, e a tela
+  cheia ocupa a atividade inteira (veja [Atividade do Discord](#atividade-do-discord)).
 - **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
   sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
   porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
@@ -100,7 +100,7 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `PORT` | `3001` | |
 | `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite das salas |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Liga a [atividade do Discord](#atividade-do-discord). Sem elas, `/api/discord/*` responde 503 |
-| `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado no link "Abrir fora do Discord" e no convite copiado de dentro da atividade |
+| `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) |
 
 O `docker-compose.yml` usa `--dev` — **não** use em produção. Para produção rode o LiveKit com
 config própria (chaves fortes, TLS, portas UDP liberadas) ou use LiveKit Cloud.
@@ -123,54 +123,139 @@ estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio n�
 
 ## Atividade do Discord
 
-O HypeMeet também abre como **atividade** (o 🚀 do canal de voz). Quem abre entra direto, com o nome e
-a foto do Discord, na sala ligada àquele canal de voz: todo mundo do canal cai na mesma sala, e ela é
-uma sala normal, com código, então dá pra entrar também pelo site ou pelo app. "Convidar" abre o convite
-do próprio Discord e "Sair" fecha a atividade.
+O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de voz):
 
-Como funciona: o Discord serve a página em `https://<client id>.discordsays.com` num iframe e passa
-**todo** o tráfego pelo proxy dele. A página percebe isso pelo endereço (`src/lib/discord.ts`), carrega
-o [Embedded App SDK](https://github.com/discord/embedded-app-sdk), pede login (`identify` e `guilds`, este
-pra ler o nome do canal), troca o código no servidor (`/api/discord/token`, precisa do segredo) e pede a
-entrada na sala do canal (`/api/discord/join`). O canal → sala fica na tabela `discord_channels`. A foto
-vai no atributo `avatar` do participante e só é mostrada se for do CDN do Discord.
+- **Entra direto**, sem lobby, com o nome e a foto do Discord. A foto aparece também pra quem está no
+  site ou no app.
+- **Uma sala por canal de voz**: todo mundo do canal cai na mesma sala, criada na primeira vez que alguém
+  abre a atividade ali. É uma sala normal, com código, então dá pra entrar também pelo site ou pelo app
+  desktop.
+- **Convidar** abre o convite do próprio Discord; **Sair** fecha a atividade.
+- **Transmitir tela**: o Discord não deixa a atividade capturar a tela, então o botão de tela abre um
+  **transmissor no navegador**. Você escolhe a tela lá e ela aparece na sala como sua, com o mesmo nome.
+  O painel de tela da atividade lista o que está no ar e tem **Parar** / **Parar todas**. Deixe a aba
+  do navegador aberta (pode minimizar); sair da atividade para as telas depois de 20 s.
+- **Tela cheia**: o iframe do Discord não libera a tela cheia do navegador, então lá o botão "Tela cheia"
+  do tile faz a tela ocupar a atividade inteira (Esc sai). Junto com a tela cheia do próprio Discord
+  (canto inferior direito da chamada, ou ↗ pra abrir em janela), cobre a tela toda.
+- A voz continua sendo a do canal do Discord: microfone e câmera dependem do que o Discord libera pra
+  atividades.
 
-**Configurar** em https://discord.com/developers/applications:
+### Configurar o app no Discord
 
-1. Crie o app → **OAuth2**: copie *Client ID* e *Client Secret* para `DISCORD_CLIENT_ID` e
-   `DISCORD_CLIENT_SECRET` (e defina `PUBLIC_URL`). Em **OAuth2 → Redirects** adicione `https://127.0.0.1`
-   (o Discord exige um redirect cadastrado, mesmo sem usar).
-2. **Activities → Settings**: ative as atividades e marque as plataformas.
-3. **Activities → URL Mappings** (a ordem importa: o mais específico em cima):
+Tudo em https://discord.com/developers/applications → seu app:
+
+1. **OAuth2**: copie o *Client ID* e o *Client Secret* (vão nas variáveis abaixo). Em **Redirects**
+   adicione `https://127.0.0.1`: o Discord exige um redirect cadastrado, mesmo sem usar.
+2. **Activities → Settings**: ative as atividades e marque as plataformas (Desktop, Web, Mobile). A
+   atividade só aparece nas plataformas marcadas.
+3. **Activities → URL Mappings**. A ordem importa: o mais específico em cima.
 
    | Prefixo | Destino |
    | --- | --- |
    | `/livekit` | `livekit.exemplo.com` |
    | `/` | `meet.exemplo.com` |
 
-4. No Discord, entre num canal de voz → 🚀 → o app aparece na sua lista (apps seus ou do seu time).
+   O destino vai **sem** `https://`. O `/` é o site; o `/livekit` é a sinalização do LiveKit.
+4. **Installation**:
+   - **Installation Contexts**: marque **User Install** (usar em qualquer lugar) e/ou **Guild Install**
+     (adicionar a servidores).
+   - **Install Link**: *Discord Provided Link*.
+   - **Default Install Settings**: só o escopo `applications.commands`. Não precisa de `bot` nem de
+     permissões (com `bot`, a tela de instalação passa a pedir coisas como "Enviar mensagens").
+5. Opcional: ícone e descrição em **General Information** e a capa da atividade em **Activities → Art
+   Assets** (é o que aparece na lista do 🚀).
 
-Para testar local, aponte o `/` para um túnel até o Vite (`cloudflared tunnel --url http://localhost:5173`):
-o Vite já repassa `/rtc` para o LiveKit, então o `/livekit` não é usado no dev.
+### Variáveis no servidor
 
-**Transmitir tela pela atividade.** O Discord não deixa a atividade capturar a tela, então o botão de
-tela da atividade abre um **transmissor** no navegador (`/transmitir`): você escolhe a tela lá e ela
-aparece na sala como sua, com o mesmo nome. O painel de tela da atividade lista o que está no ar e
-tem o **Parar**. Por baixo, o transmissor é uma segunda conexão que só manda telas: a atividade pede o
-link em `/api/cast` provando quem é com o próprio token da sala, e o servidor devolve um token que só
-publica tela, marcado com o atributo `castFor` (a identidade de quem pediu). Todo mundo mostra as telas
-dele sob o nome do dono e deixa o transmissor fora dos tiles, da contagem, dos sons e de quem responde
-histórico (`src/room/cast.ts`). O "Parar" vai pelo tópico `cast` e o transmissor só obedece ao dono. O
-token viaja no fragmento do link (`#t=…`), que não chega a servidor nenhum, e vale 15 min pra abrir. Se
-o dono sai da sala por mais de 20 s, as telas param. A Mesa ainda precisa ser aberta por quem publica
-a tela, então não funciona com o transmissor.
+| Variável | |
+| --- | --- |
+| `DISCORD_CLIENT_ID` | *Client ID* do app |
+| `DISCORD_CLIENT_SECRET` | *Client Secret* do app. Nunca vai pro git: local fica no `.env` (ignorado), em produção nas variáveis do Dokploy |
+| `PUBLIC_URL` | Endereço do site, ex. `https://meet.exemplo.com`. Usado nos links que saem da atividade (transmissor, "Abrir fora do Discord", convite copiado): lá dentro o pedido chega pelo proxy do Discord, então o servidor não sabe o próprio endereço |
 
-**Limites do Discord**: a doc das atividades diz que **WebRTC não é suportado** (o proxy só leva HTTP e
-WebSocket). A sinalização do LiveKit passa pelo `/livekit`, mas o áudio e o vídeo vão direto ao LiveKit
-(UDP 7882 / TCP 7881), fora do proxy. No Discord desktop isso funciona; se algum cliente barrar, a sala
-não conecta e a tela de erro oferece **Abrir fora do Discord** (a mesma sala no navegador). Câmera e
-microfone dependem do que o iframe do Discord libera: a voz de verdade fica no próprio canal do Discord. O **assistir junto do YouTube** não roda dentro da atividade (o player é de `youtube.com`,
-bloqueado pelo CSP); o vídeo do computador funciona.
+No Dokploy elas já estão no `docker-compose.prod.yml`; é só preencher e fazer redeploy. Sem as duas
+primeiras, `/api/discord/*` responde 503 ("A atividade do Discord não está configurada no servidor").
+Se o segredo vazar, gere outro em **OAuth2 → Reset Secret** e troque a variável.
+
+### Instalar e abrir
+
+- **Pra você, enquanto desenvolve**: ligue o **Modo de desenvolvedor** (Configurações → Avançado), entre
+  num canal de voz e clique no 🚀. Apps seus (ou do seu time) aparecem sozinhos.
+- **No seu usuário** (usar em qualquer servidor ou DM):
+  `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&integration_type=1&scope=applications.commands`
+- **Num servidor** (aparece pra todo mundo de lá; precisa de **Gerenciar Servidor**):
+  `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&integration_type=0&scope=applications.commands`
+
+Depois é só entrar num canal de voz → 🚀 → **HypeMeet**. Quem não enxergar o app enquanto ele não passa
+pela verificação do Discord pode ser adicionado em **App Testers** no portal. O canal precisa deixar
+**Usar Atividades** (vem ligado por padrão).
+
+**Permissões que aparecem pra quem abre.** Na primeira vez o Discord pede login com os escopos
+`identify` (nome, avatar e banner) e `guilds` ("saber em quais servidores você está"), este usado pra
+tentar ler o nome do canal. Pedidos como "enviar mensagens" não vêm do HypeMeet: vêm da configuração de
+instalação (veja o passo 4 acima). Pra ver a tela de permissões de novo depois de mudar algo:
+Configurações → **Aplicativos autorizados** → HypeMeet → **Desautorizar**, e abra a atividade outra vez.
+
+### Testar local
+
+1. Crie o `.env` com `DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET` (ignorado pelo git).
+2. `bun run livekit` e `bun run dev`.
+3. Abra um túnel até o Vite: `cloudflared tunnel --url http://localhost:5173`. Ele imprime um endereço
+   `https://<algo>.trycloudflare.com` (o Vite aceita esses hosts: `allowedHosts` no `vite.config.ts`).
+4. Ponha esse endereço no `.env` como `PUBLIC_URL` (pro link do transmissor abrir no túnel) e reinicie
+   o `bun run dev`.
+5. No portal, troque o mapping `/` pelo endereço do túnel, sem `https://`. O `/livekit` não é usado no
+   dev: o Vite já repassa `/rtc` pro LiveKit local.
+6. Abra a atividade no Discord. Mudanças no front chegam com o recarregar da atividade.
+
+O endereço do túnel muda toda vez que ele reinicia. Ao terminar, volte o mapping `/` pra produção:
+enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
+
+### Como funciona por dentro
+
+- **Detecção** (`src/lib/discord.ts`): o Discord serve a página em `https://<client id>.discordsays.com`
+  com `frame_id` na URL. Nesse caso o `main.tsx` mostra a atividade (`src/pages/DiscordActivity.tsx`)
+  no lugar das rotas, e só aí carrega o [Embedded App SDK](https://github.com/discord/embedded-app-sdk).
+- **Proxy**: todo o tráfego da atividade passa pelo proxy do Discord, que só leva HTTP e WebSocket. O
+  `/api` funciona como está (mapping `/`); a URL do LiveKit é trocada por
+  `wss://<client id>.discordsays.com/livekit` (mapping `/livekit`).
+- **Login**: `sdk.ready()` → `authorize` (consentimento só na primeira vez) → `/api/discord/token` troca o
+  código pelo token de acesso (precisa do segredo, por isso no servidor) → `authenticate` →
+  `/api/discord/join` confere o token na API do Discord, acha ou cria a sala do canal (tabela
+  `discord_channels`) e devolve a entrada na sala, com a foto no atributo `avatar` do participante. Os
+  outros clientes só mostram a foto se ela vier de `cdn.discordapp.com/avatars/`: qualquer um edita os
+  próprios atributos, e uma URL qualquer vazaria o IP de quem olha.
+- **Transmissor** (`src/room/cast.ts`, `src/pages/CastPage.tsx`): a atividade pede um link em `/api/cast`
+  provando quem é com o próprio token da sala. O servidor devolve `/transmitir#t=<token>`: um token
+  LiveKit que **só publica tela**, vale 15 min pra abrir e leva o atributo `castFor` com a identidade de
+  quem pediu. O token vai no fragmento (`#`), que o navegador não manda a servidor nenhum. Todos os
+  clientes mostram as telas do transmissor sob o nome do dono e deixam o transmissor fora dos tiles, da
+  contagem de pessoas, dos sons de entrada/saída, de quem manda o histórico do chat e da herança do
+  assistir junto. O "Parar" da atividade vai pelo tópico `cast` do data channel e o transmissor só
+  obedece ao dono. Se o dono some da sala por mais de 20 s, o transmissor encerra.
+- **Tela cheia** (`src/room/fullscreen.ts`): usa a tela cheia do navegador quando a página pode e, quando
+  não pode (o iframe do Discord), põe o elemento `fixed` por cima da página inteira.
+- **Captura de tela bloqueada** (`screenCaptureBlocked`): dentro do Discord, sem `display-capture`
+  liberado no iframe, o painel de tela vira o do transmissor em vez do seletor normal.
+
+### Limites e problemas comuns
+
+| Sintoma | O que é |
+| --- | --- |
+| O HypeMeet não aparece no 🚀 | Plataforma não marcada em **Activities → Settings**; Modo de desenvolvedor desligado; app não instalado no usuário/servidor; pessoa fora de **App Testers** |
+| "A atividade do Discord não está configurada no servidor" | Faltam `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` no servidor |
+| "O Discord não confirmou o login" | Segredo errado ou trocado no portal sem atualizar a variável |
+| A atividade abre mas a sala não conecta | Mapping `/livekit` faltando ou errado, ou portas 7881/tcp e 7882/udp fechadas. A doc do Discord diz que **WebRTC não é suportado** nas atividades: a sinalização passa pelo proxy, mas áudio e vídeo vão direto ao LiveKit. No Discord desktop funciona; se algum cliente barrar, a tela de erro oferece **Abrir fora do Discord** |
+| Abre uma página em branco / do Cloudflare | O mapping `/` aponta pra um túnel que não está mais no ar |
+| "Esse link não vale mais" no transmissor | O link vale 15 min pra abrir: peça outro no botão de tela da atividade |
+| Transmissão sem o som do PC | No navegador, Linux e macOS só mandam som de uma aba; o som do sistema precisa do app desktop |
+
+Ainda não funciona dentro da atividade:
+- **Assistir junto do YouTube**: o player é do `youtube.com`, bloqueado pela política de segurança das
+  atividades. O vídeo do computador funciona.
+- **Mesa** com a tela do transmissor: a mesa é aberta por quem publica a tela, e quem publica é o
+  transmissor no navegador, não a atividade.
 
 ## App desktop (Windows / macOS / Linux)
 
