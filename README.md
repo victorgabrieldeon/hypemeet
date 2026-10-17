@@ -251,11 +251,8 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
 | "Esse link não vale mais" no transmissor | O link vale 15 min pra abrir: peça outro no botão de tela da atividade |
 | Transmissão sem o som do PC | No navegador, Linux e macOS só mandam som de uma aba; o som do sistema precisa do app desktop |
 
-Ainda não funciona dentro da atividade:
-- **Assistir junto do YouTube**: o player é do `youtube.com`, bloqueado pela política de segurança das
-  atividades. O vídeo do computador funciona.
-- **Mesa** com a tela do transmissor: a mesa é aberta por quem publica a tela, e quem publica é o
-  transmissor no navegador, não a atividade.
+**Ainda não funciona dentro da atividade**: o assistir junto do **YouTube**. O player é do
+`youtube.com`, bloqueado pela política de segurança das atividades; o vídeo do computador funciona.
 
 ## App desktop (Windows / macOS / Linux)
 
