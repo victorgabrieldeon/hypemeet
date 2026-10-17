@@ -350,7 +350,7 @@ export function discordAvatar(participant: Participant): string | undefined {
 }
 
 /** Our own choice is read directly; others' from their attribute (published by useViewingAttribute). */
-export function isViewing(participant: Participant, screen: TrackPublication): boolean {
+function isViewing(participant: Participant, screen: TrackPublication): boolean {
  if (participant.isLocal) return (screen as RemoteTrackPublication).isDesired;
  return !!participant.attributes[VIEWING_ATTRIBUTE]?.split(",").includes(screen.trackSid);
 }

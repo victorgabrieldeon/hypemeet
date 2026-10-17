@@ -43,36 +43,6 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   voz, e você ouve uma cópia na sua saída de áudio. Um som por vez (outro clique corta o anterior). Com
   o mic desligado/mutado (inclusive push-to-talk solto) o som só toca pra você, porque o servidor não
   repassa áudio de mic mutado.
-- **Mesa** (botão de dados na barra), pra quem joga cassino ao vivo: quem transmite abre a mesa com a
-  banca inicial (meta e limite opcionais) e vai digitando o saldo (`1.250`, `+150`, `-80`). Nada vale
-  dinheiro: é só um número que a sala acompanha. A partir daí:
-  - **Placar** no canto da tela (saldo, ▲/▼ na noite, gráfico e sequência) e **narrador** que comenta
-    cada mudança ("VIRADA HISTÓRICA", "o saldo está em queda livre"…).
-  - **Cadeira da sorte** 🍀 pra quem assistia na última vitória (e "Fulano levou a sorte embora" se a
-    pessoa sai e vêm duas perdas), **pé-frio da noite** 🧊 pra quem assistiu à pior sequência de perdas
-    até a próxima vitória, e um **amuleto** que passa pra outra pessoa a cada vitória. Os selos aparecem
-    ao lado do nome.
-  - **Ritual** 🙏: 5 s pra galera clicar antes do bônus; o tile mostra quantos rezaram.
-  - **Modo novela**: três perdas seguidas deixam a tela em preto e branco com música triste pra quem
-    assiste; a cor volta de uma vez na vitória.
-  - **Vai pagar…** ⏳: qualquer um aperta, a tela dá um zoom lento com rufar de tambor até alguém marcar
-    "Pagou!"/"Não pagou" (ou o saldo mudar).
-  - **Placa de luto** "🕯️ Aqui jazia R$ 300" nas perdas grandes e **luzes de boate** em todos os tiles
-    nas vitórias grandes.
-  - **Apostas de zoeira**: alguém propõe ("paga mais de 100x?"), cada um escolhe sim/não e quem errar
-    vira 🤡/🐔/🥔… no avatar por 1 hora (o app aplica e desfaz sozinho).
-  - **Comentário fixado** 📌 por cima da tela por 10 s (um a cada 2 min por pessoa), **"Para!"** 🛑 e o
-    placar do **"eu avisei"**: se veio perda até 2 min depois de alguém mandar parar, a sala vota se vale
-    ponto.
-  - **Tomate e flor** 🍅🌹: clique pra jogar ou arraste até a tela; voa, bate e faz barulho.
-  - **Termômetro de nervoso** na câmera de quem joga: a borda esquenta com as reações da sala.
-  - **Trilha de cassino** que quem transmite liga pra sala toda e acelera com o hype, e **alerta de
-    hora de parar**: bater a meta ou o limite toca uma sirene e a galera vota se sai ou continua.
-
-  As ações rápidas ficam no 🎰 da barra do tile (ao passar o mouse) e no painel da Mesa, que também tem
-  o volume dos efeitos e da música, só seus. Tudo vai pelo data channel do LiveKit (tópico `casino`): o
-  cliente de quem abriu a mesa é a autoridade e republica o estado a cada mudança; quem entra depois pede
-  o estado ao chegar. Recarregar a página mantém a mesa (sessionStorage da aba).
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
   cada um, na sala daquele canal. A tela sai de um transmissor no navegador e aparece como sua (veja
   [Atividade do Discord](#atividade-do-discord)).

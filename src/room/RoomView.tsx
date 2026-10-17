@@ -2,7 +2,6 @@ import { ConnectionState, Track, type Room } from "livekit-client";
 import {
   Check,
   Copy,
-  Dices,
   Link2,
   Megaphone,
   MessageSquare,
@@ -26,8 +25,6 @@ import { inDiscord, screenCaptureBlocked } from "../lib/discord";
 import { usePttState } from "../lib/ptt";
 import type { RoomChat } from "./chat";
 import { ChatPanel } from "./ChatPanel";
-import { CasinoLiveDot, CasinoProvider, useCasinoRoom } from "./Casino";
-import { CasinoPanel } from "./CasinoPanel";
 import { RoomAudio } from "./media";
 import { loadNoiseFilter, loadScreenPrefs, saveNoiseFilter, saveScreenPrefs } from "./devices";
 import { DeviceMenu, MenuChevron, MenuSection, MenuToggle, useDismiss } from "./menus";
@@ -148,10 +145,6 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const [soundsOpen, setSoundsOpen] = useState(false);
   const soundsRef = useRef<HTMLDivElement>(null);
   useDismiss(soundsRef, soundsOpen, () => setSoundsOpen(false));
-  const casino = useCasinoRoom(room, reactions);
-  const [casinoOpen, setCasinoOpen] = useState(false);
-  const casinoRef = useRef<HTMLDivElement>(null);
-  useDismiss(casinoRef, casinoOpen, () => setCasinoOpen(false));
   const watch = useWatchParty(room);
   const [watchOpen, setWatchOpen] = useState(false);
   const watchRef = useRef<HTMLDivElement>(null);
@@ -311,7 +304,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     [...p.audioTrackPublications.values()].some((pub) => pub.source === Track.Source.ScreenShareAudio),
   );
 
-  const layout = (
+  return (
     <div className="flex h-full flex-col gap-3 bg-canvas p-3 sm:gap-4 sm:p-4">
       <RoomAudio room={room} />
 
@@ -540,19 +533,6 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
             />
           )}
         </div>
-        <div ref={casinoRef} className="contents">
-          <ControlButton
-            tone="plain"
-            on={casinoOpen}
-            expanded={casinoOpen}
-            onClick={() => setCasinoOpen(!casinoOpen)}
-            label="Mesa (cassino ao vivo)"
-          >
-            <Dices className="size-5" />
-            <CasinoLiveDot />
-          </ControlButton>
-          {casinoOpen && <CasinoPanel onError={(text) => setToast({ text, tone: "error" })} />}
-        </div>
         <ControlButton
           tone="plain"
           on={chatOpen}
@@ -620,6 +600,4 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       )}
     </div>
   );
-
-  return <CasinoProvider store={casino}>{layout}</CasinoProvider>;
 }

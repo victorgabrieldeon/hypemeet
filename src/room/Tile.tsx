@@ -25,13 +25,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Spinner } from "../components/ui";
-import { CasinoBadges, CasinoFrame, CasinoLayer, CasinoTileButton, PersonAvatar } from "./Casino";
+import { Avatar, Spinner } from "../components/ui";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
-import { volumeKey, watchScreen, type TileModel } from "./model";
+import { discordAvatar, volumeKey, watchScreen, type TileModel } from "./model";
 import { useScreenPreview } from "./previews";
 import { ConnectionBars, formatBitrate, useVideoStats } from "./quality";
 import { ReactionLayer } from "./reactions";
@@ -103,7 +102,7 @@ function Viewers({ viewers, compact }: { viewers: Participant[]; compact?: boole
       {shown.length > 0 && (
         <div className="flex -space-x-1.5" aria-hidden>
           {shown.map((p) => (
-            <PersonAvatar key={p.identity} participant={p} size="xs" className="ring-2 ring-black/70" />
+            <Avatar key={p.identity} name={p.name || p.identity} image={discordAvatar(p)} size="xs" className="ring-2 ring-black/70" />
           ))}
         </div>
       )}
@@ -262,31 +261,26 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           : "border-line"
           }`}
       >
-        <CasinoFrame tile={tile}>
-          {cameraOn ? (
-            <VideoView track={camera.track!} mirror={isLocal} fit="cover" />
-          ) : (
-            <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_40%,rgb(88_101_242/0.28),transparent_70%)]">
-              <PersonAvatar participant={participant} size={compact ? "sm" : "lg"} />
-            </div>
-          )}
-        </CasinoFrame>
+        {cameraOn ? (
+          <VideoView track={camera.track!} mirror={isLocal} fit="cover" />
+        ) : (
+          <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_40%,rgb(88_101_242/0.28),transparent_70%)]">
+            <Avatar name={name} image={discordAvatar(participant)} size={compact ? "sm" : "lg"} />
+          </div>
+        )}
         <div className={`${overlayBase} bottom-2 left-2 max-w-[calc(100%-1rem)]`}>
           <Pill>
             {!micOn && <MicOff className="size-3.5 shrink-0 text-danger" />}
             <span className="truncate">{isLocal ? `${name} (você)` : name}</span>
-            <CasinoBadges identity={participant.identity} />
             <ConnectionBars quality={participant.connectionQuality} />
           </Pill>
         </div>
         <div className={`${overlayBase} top-2 right-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
           {!isLocal && mic && <VolumeControl participant={participant} pub={mic} label={`microfone de ${name}`} />}
-          <CasinoTileButton tile={tile} placement="down" />
           <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </IconButton>
         </div>
-        <CasinoLayer tile={tile} compact={compact} />
         <ReactionLayer tileId={tile.id} compact={compact} />
       </div>
     );
@@ -307,35 +301,33 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
       onMouseLeave={() => setHovered(false)}
       className={`group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black ${fullscreen.filling ? FILL_CLASS : ""}`}
     >
-      <CasinoFrame tile={tile}>
-        {!watching ? (
-          <div className="relative grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
-            {preview && (
-              <>
-                <img src={preview} alt="" draggable={false} className="absolute inset-0 size-full object-contain" />
-                <div className="absolute inset-0 bg-black/40 transition group-hover:bg-black/55" />
-              </>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                watchScreen(tile, true);
-              }}
-              onDoubleClick={(e) => e.stopPropagation()}
-              className={`type-link-sm relative flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
-            >
-              <Play className={compact ? "size-3.5" : "size-4"} /> {compact ? "Assistir" : "Ver transmissão"}
-            </button>
-          </div>
-        ) : video.track ? (
-          <VideoView track={video.track} fit="contain" onAspect={setAspect} />
-        ) : (
-          <div className="grid size-full place-items-center text-soft">
-            <Spinner />
-          </div>
-        )}
-        {showing && <InkLayer screen={video.trackSid} aspect={aspect} tool={tool} />}
-      </CasinoFrame>
+      {!watching ? (
+        <div className="relative grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
+          {preview && (
+            <>
+              <img src={preview} alt="" draggable={false} className="absolute inset-0 size-full object-contain" />
+              <div className="absolute inset-0 bg-black/40 transition group-hover:bg-black/55" />
+            </>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              watchScreen(tile, true);
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className={`type-link-sm relative flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+          >
+            <Play className={compact ? "size-3.5" : "size-4"} /> {compact ? "Assistir" : "Ver transmissão"}
+          </button>
+        </div>
+      ) : video.track ? (
+        <VideoView track={video.track} fit="contain" onAspect={setAspect} />
+      ) : (
+        <div className="grid size-full place-items-center text-soft">
+          <Spinner />
+        </div>
+      )}
+      {showing && <InkLayer screen={video.trackSid} aspect={aspect} tool={tool} />}
       <div className={`${overlayBase} top-2 left-2 ${tool ? "max-w-[calc(50%-1rem)]" : "max-w-[calc(100%-1rem)]"}`}>
         <div className="flex min-w-0 flex-col items-start gap-1.5">
           <Pill>
@@ -378,7 +370,6 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             <X className="size-4" /> Parar
           </button>
         )}
-        <CasinoTileButton tile={tile} />
         {!isLocal && watching && (
           <IconButton onClick={() => watchScreen(tile, false)} label="Parar de assistir">
             <EyeOff className="size-4" />
@@ -402,7 +393,6 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           </IconButton>
         )}
       </div>
-      <CasinoLayer tile={tile} compact={compact} inkActive={!!tool} />
       <ReactionLayer tileId={tile.id} compact={compact} />
     </div>
   );
