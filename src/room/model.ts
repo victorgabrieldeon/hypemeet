@@ -116,7 +116,12 @@ interface ScreenCaptureOptions extends DisplayMediaStreamOptions {
  windowAudio: "window" | "system" | "exclude";
  selfBrowserSurface: "include" | "exclude";
  surfaceSwitching: "include" | "exclude";
+ /** Offer this very tab first (and only, in Chrome). */
+ preferCurrentTab?: boolean;
 }
+
+/** Chromium's Region Capture (cropping a capture of our own tab to one element), untyped in lib.dom. */
+const CropTarget = (window as { CropTarget?: { fromElement(element: Element): Promise<object> } }).CropTarget;
 
 /** What a new screen share starts with; remembered between sessions. */
 export interface ScreenPrefs {
@@ -208,24 +213,31 @@ async function openAppAudio(): Promise<MediaStreamTrack | null> {
 export const isScreenAudioDevice = (device: MediaDeviceInfo) => device.label === "vencord-screen-share";
 
 /**
- * Opens the browser picker and publishes the chosen surface. Resolves to whether audio is being
- * sent — false when it wasn't requested or the user/browser didn't provide it.
+ * Opens the browser picker and publishes the chosen surface. With `region`, captures this tab instead,
+ * cropped to that element where the browser can. Resolves to the screen's track name and whether audio
+ * is being sent — false when it wasn't requested or the user/browser didn't provide it.
  */
-export async function startScreenShare(participant: LocalParticipant, prefs: ScreenPrefs): Promise<boolean> {
+export async function startScreenShare(
+ participant: LocalParticipant,
+ prefs: ScreenPrefs,
+ region?: Element,
+): Promise<{ name: string; audio: boolean }> {
  const preset = SCREEN_MODES[prefs.mode];
  // Fixed-width base36 ms timestamp (8 chars until year 2059) + random suffix for uniqueness.
  const name = `${SCREEN_PREFIX}${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 4)}`;
  // Called directly instead of createScreenTracks(): LiveKit drops unknown options like windowAudio.
  const options: ScreenCaptureOptions = {
   video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: preset.frameRate },
-  // Raw audio: voice processing would wreck music/game audio.
+  // Raw audio: voice processing would wreck music/game audio. In our own tab, its playout is what we send.
   audio: prefs.audio
-   ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true }
+   ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: !region }
    : false,
-  systemAudio: prefs.audio ? "include" : "exclude",
-  windowAudio: prefs.audio ? "window" : "exclude",
-  selfBrowserSurface: "exclude",
-  surfaceSwitching: "include",
+  systemAudio: prefs.audio && !region ? "include" : "exclude",
+  windowAudio: prefs.audio && !region ? "window" : "exclude",
+  selfBrowserSurface: region ? "include" : "exclude",
+  // Switching away would leave the crop pointing at nothing.
+  surfaceSwitching: region ? "exclude" : "include",
+  preferCurrentTab: !!region,
  };
  const stream = await navigator.mediaDevices.getDisplayMedia(options);
  const [video] = stream.getVideoTracks();
@@ -234,7 +246,12 @@ export async function startScreenShare(participant: LocalParticipant, prefs: Scr
   throw new DOMException("no video track", "NotFoundError");
  }
  video.contentHint = preset.contentHint;
- const appAudio = await openAppAudio();
+ // Fails when another surface was picked after all: that one goes uncropped.
+ if (region && CropTarget)
+  await (video as MediaStreamTrack & { cropTo(target: object): Promise<void> })
+   .cropTo(await CropTarget.fromElement(region))
+   .catch(() => undefined);
+ const appAudio = region ? null : await openAppAudio();
  if (appAudio) appAudioScreen = name;
  // Video first so receivers always see the screen before (or with) its audio.
  const tracks = [video, ...(appAudio ? [appAudio] : stream.getAudioTracks().slice(0, 1))];
@@ -266,7 +283,7 @@ export async function startScreenShare(participant: LocalParticipant, prefs: Scr
   if (appAudioScreen === name) releaseAppAudio();
   throw err;
  }
- return tracks.length > 1;
+ return { name, audio: tracks.length > 1 };
 }
 
 /** A live screen's current mode, read back from its capture track (set at start or by changeScreenMode). */

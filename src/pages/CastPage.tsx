@@ -1,13 +1,14 @@
 import { DisconnectReason, Room, RoomEvent } from "livekit-client";
-import { Video, VideoOff } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Logo, Spinner, glowCardClass } from "../components/ui";
+import { ArrowRight, Video, VideoOff } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Button, inputClass, Logo, Spinner, glowCardClass } from "../components/ui";
 import { api } from "../lib/api";
 import { obeyOwner } from "../room/cast";
 import { deviceRoomOptions, loadScreenPrefs, saveScreenPrefs } from "../room/devices";
 import { buildTiles, SCREEN_AUDIO_COPY, startScreenShare, useRoomVersion, useScreenAudioCleanup, type TileModel } from "../room/model";
 import { ScreenPreviews } from "../room/previews";
 import { ScreenPanel } from "../room/ScreenPanel";
+import { parseYouTube } from "../room/youtube";
 
 // The browser transmitter opened from the Discord Activity (see room/cast.ts): it joins the room only
 // to send screens and a camera, which everyone sees as its owner's.
@@ -165,6 +166,21 @@ function Transmitter({
   const cameraOn = local.isCameraEnabled;
   const [cameraBusy, setCameraBusy] = useState(false);
   const live = screens.length > 0 || cameraOn;
+  // YouTube can't play in the Activity, so it plays here and this tab is sent, cropped to the player.
+  const player = useRef<HTMLDivElement>(null);
+  const [videoLink, setVideoLink] = useState("");
+  const [video, setVideo] = useState<{ videoId: string; start: number } | null>(null);
+  /** Track name of the player's capture, once it's on air. */
+  const [playerScreen, setPlayerScreen] = useState<string | null>(null);
+  const playerLive = screens.some((s) => s.video.trackName === playerScreen);
+
+  // Stopped (here, from Discord or by the browser's bar): the video goes with it.
+  useEffect(() => {
+    if (playerScreen && !playerLive) {
+      setPlayerScreen(null);
+      setVideo(null);
+    }
+  }, [playerScreen, playerLive]);
 
   async function setCamera(on: boolean) {
     setCameraBusy(true);
@@ -198,72 +214,139 @@ function Transmitter({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [live]);
 
-  async function start() {
+  /** Opens the picker (for this tab, with `region`); resolves to the new screen's track name, or null. */
+  async function start(region?: Element): Promise<string | null> {
     setStarting(true);
     setMessage(null);
     try {
-      const withAudio = await startScreenShare(local, prefs);
-      if (prefs.audio && !withAudio) setMessage(SCREEN_AUDIO_COPY.missing);
+      const { name, audio } = await startScreenShare(local, region ? { mode: "motion", audio: true } : prefs, region);
+      if (region && !audio)
+        setMessage("O vídeo foi sem som. Pare e transmita de novo deixando ligado o áudio da aba no seletor.");
+      else if (prefs.audio && !audio) setMessage(SCREEN_AUDIO_COPY.missing);
+      return name;
     } catch (e) {
       const errorName = (e as DOMException)?.name;
       // User closed the picker: not an error.
       if (errorName !== "NotAllowedError" && errorName !== "AbortError")
         setMessage(`Não deu pra compartilhar a tela: ${(e as Error).message}`);
+      return null;
     } finally {
       setStarting(false);
     }
   }
 
+  async function playVideo(e: FormEvent) {
+    e.preventDefault();
+    const parsed = parseYouTube(videoLink);
+    if (!parsed) return setMessage("Isso não parece um link de vídeo do YouTube.");
+    setVideo(parsed);
+    // Already on air: the crop just shows the new video.
+    if (playerLive) return;
+    const name = await start(player.current!);
+    if (name) setPlayerScreen(name);
+    else setVideo(null);
+  }
+
   return (
-    <Card>
-      <Logo />
-      <div>
-        <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha o que transmitir"}</h1>
-        <p className="mt-2 text-soft">
-          Transmitindo como <span className="font-semibold text-ink">{name}</span>
-          {roomName && (
-            <>
-              {" "}
-              em <span className="font-semibold text-ink">{roomName}</span>
-            </>
-          )}
-          . Quem está na atividade do Discord vê tudo como seu. Pra um vídeo do YouTube, abra ele noutra aba e
-          escolha essa aba, com o som.
-        </p>
+    <div
+      className={`aurora flex min-h-full flex-col items-center justify-center gap-6 px-4 py-10 ${video ? "lg:flex-row lg:items-start" : ""}`}
+    >
+      {/* Always mounted: the crop target has to exist when the picker opens. Square: the crop is a rectangle.
+          Sticky and on top: the crop sends whatever covers it, and nothing if it scrolls away. */}
+      <div
+        ref={player}
+        className={video ? "sticky top-0 z-10 aspect-video w-full max-w-7xl bg-black lg:top-10 lg:flex-1" : "hidden"}
+      >
+        {video && playerScreen ? (
+          <iframe
+            key={`${video.videoId}:${video.start}`}
+            src={`https://www.youtube.com/embed/${video.videoId}?autoplay=1&start=${video.start}&fs=0&rel=0&playsinline=1`}
+            title="Vídeo do YouTube"
+            allow="autoplay; encrypted-media"
+            // YouTube refuses embeds without a Referer (error 153), whatever policy the page is served with.
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="size-full"
+          />
+        ) : (
+          <p className="grid size-full place-items-center px-4 text-center text-soft">
+            No seletor, escolha esta aba e deixe o áudio dela ligado.
+          </p>
+        )}
       </div>
-      <div className="flex items-center gap-3 rounded-md border border-line bg-surface p-3">
-        <p className="min-w-0 flex-1 text-sm">
-          <span className="block font-medium">Câmera</span>
-          <span className="block text-xs text-soft">{cameraOn ? "No ar, no seu quadro da sala" : "Aparece no seu quadro da sala"}</span>
-        </p>
-        <button
-          type="button"
-          disabled={cameraBusy}
-          onClick={() => void setCamera(!cameraOn)}
-          className="type-link-sm flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-surface-hi px-3 text-ink transition hover:bg-blurple/25 disabled:opacity-60"
-        >
-          {cameraBusy ? <Spinner className="size-4" /> : cameraOn ? <VideoOff className="size-4" /> : <Video className="size-4" />}
-          {cameraOn ? "Desligar" : "Ligar"}
-        </button>
+      <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>
+        <Logo />
+        <div>
+          <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha o que transmitir"}</h1>
+          <p className="mt-2 text-soft">
+            Transmitindo como <span className="font-semibold text-ink">{name}</span>
+            {roomName && (
+              <>
+                {" "}
+                em <span className="font-semibold text-ink">{roomName}</span>
+              </>
+            )}
+            . Quem está na atividade do Discord vê tudo como seu.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 rounded-md border border-line bg-surface p-3">
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="block font-medium">Câmera</span>
+            <span className="block text-xs text-soft">{cameraOn ? "No ar, no seu quadro da sala" : "Aparece no seu quadro da sala"}</span>
+          </p>
+          <button
+            type="button"
+            disabled={cameraBusy}
+            onClick={() => void setCamera(!cameraOn)}
+            className="type-link-sm flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-surface-hi px-3 text-ink transition hover:bg-blurple/25 disabled:opacity-60"
+          >
+            {cameraBusy ? <Spinner className="size-4" /> : cameraOn ? <VideoOff className="size-4" /> : <Video className="size-4" />}
+            {cameraOn ? "Desligar" : "Ligar"}
+          </button>
+        </div>
+        <form onSubmit={(e) => void playVideo(e)} className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3">
+          <span className="type-label px-0.5 pt-1 text-soft">Vídeo do YouTube</span>
+          <div className="flex gap-2">
+            <input
+              className={inputClass}
+              value={videoLink}
+              onChange={(e) => setVideoLink(e.target.value)}
+              placeholder="Cole o link (vídeo ou live)"
+              aria-label="Link do YouTube"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              square
+              disabled={!videoLink.trim() || starting}
+              aria-label={playerLive ? "Trocar vídeo" : "Transmitir vídeo"}
+            >
+              {starting && video ? <Spinner className="size-5" /> : <ArrowRight className="size-5" />}
+            </Button>
+          </div>
+          <p className="px-0.5 text-xs text-soft">
+            Toca nesta aba e vai pra sala como sua tela. Play, pausa e volume ficam no player (o volume muda pra todo
+            mundo).
+          </p>
+        </form>
+        <ScreenPanel
+          inline
+          screens={screens}
+          prefs={prefs}
+          onPrefsChange={(next) => {
+            setPrefs(next);
+            saveScreenPrefs(next);
+          }}
+          starting={starting}
+          onStart={() => void start()}
+          onError={setMessage}
+        />
+        {message && (
+          <p role="status" className="text-sm text-soft">
+            {message}
+          </p>
+        )}
+        {live && <p className="text-sm text-soft">Pode minimizar esta aba, mas não feche: fechar para a transmissão.</p>}
       </div>
-      <ScreenPanel
-        inline
-        screens={screens}
-        prefs={prefs}
-        onPrefsChange={(next) => {
-          setPrefs(next);
-          saveScreenPrefs(next);
-        }}
-        starting={starting}
-        onStart={() => void start()}
-        onError={setMessage}
-      />
-      {message && (
-        <p role="status" className="text-sm text-soft">
-          {message}
-        </p>
-      )}
-      {live && <p className="text-sm text-soft">Pode minimizar esta aba, mas não feche: fechar para a transmissão.</p>}
-    </Card>
+    </div>
   );
 }

@@ -139,8 +139,10 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
   transmissor, que já liga a câmera (a escolhida da última vez nesse navegador). Ela aparece no seu quadro
   da sala; o botão da atividade desliga.
 - **YouTube**: o Discord barra o player do YouTube dentro de atividades (só o Watch Together dele pode).
-  No **Assistir junto** da atividade, **Transmitir YouTube pelo navegador** abre o transmissor: abra o
-  vídeo noutra aba e escolha essa aba com o som; ela entra na sala como sua tela. Se alguém de fora
+  No **Assistir junto** da atividade, **Transmitir YouTube pelo navegador** abre o transmissor: cole o
+  link em **Vídeo do YouTube**, escolha **esta aba** no seletor com o áudio ligado, e o vídeo toca ali e
+  entra na sala como sua tela, com som. Play, pausa e volume ficam no player do transmissor. No Chrome/Edge
+  só o player vai (Region Capture); no Firefox vai a janela inteira, sem som. Se alguém de fora
   começar um YouTube no assistir junto, quem está no Discord vê o tile mas não acompanha. Vídeo do
   computador funciona normal.
 - **Tela cheia**: o iframe do Discord não libera a tela cheia do navegador, então lá o botão "Tela cheia"
@@ -252,6 +254,10 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
 - **YouTube**: a CSP que o Discord põe nas atividades não tem `www.youtube.com` em `script-src` nem em
   `frame-src` (só a do Watch Together tem), e um URL mapping não resolve: o player busca
   `googlevideo.com` por fora do proxy. Por isso a atividade nem monta o player de uma sessão de YouTube.
+  O transmissor toca o embed na própria página e captura a si mesmo (`startScreenShare` com `region`:
+  `preferCurrentTab`, sem `restrictOwnAudio`, que tiraria o som do vídeo) recortado no player com
+  `CropTarget`. O player fica sempre montado porque o alvo do recorte tem que existir quando o seletor
+  abre; parar essa tela (de qualquer lugar) fecha o vídeo.
 
 ### Limites e problemas comuns
 

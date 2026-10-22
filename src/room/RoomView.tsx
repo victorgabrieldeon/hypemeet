@@ -265,8 +265,8 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   async function addScreen() {
     setBusy("screen");
     try {
-      const withAudio = await startScreenShare(local, screenPrefs);
-      if (screenPrefs.audio && !withAudio)
+      const { audio } = await startScreenShare(local, screenPrefs);
+      if (screenPrefs.audio && !audio)
         setToast({
           tone: "info",
           text: SCREEN_AUDIO_COPY.missing,

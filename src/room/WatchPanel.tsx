@@ -105,8 +105,8 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
         {onCastTab ? (
           <>
             <p className="px-0.5 text-sm text-soft">
-              O Discord não deixa tocar YouTube aqui dentro. Abra o vídeo numa aba do navegador e transmita essa aba
-              com o som: ela aparece na sala como sua tela.
+              O Discord não deixa tocar YouTube aqui dentro. O transmissor abre no navegador: cole o link lá e o
+              vídeo entra na sala como sua tela, com som.
             </p>
             <Button
               variant="primary"
