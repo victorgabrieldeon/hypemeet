@@ -44,8 +44,8 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   o mic desligado/mutado (inclusive push-to-talk solto) o som só toca pra você, porque o servidor não
   repassa áudio de mic mutado.
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
-  cada um, na sala daquele canal. A tela sai de um transmissor no navegador e aparece como sua, e a tela
-  cheia ocupa a atividade inteira (veja [Atividade do Discord](#atividade-do-discord)).
+  cada um, na sala daquele canal. A tela e a câmera saem de um transmissor no navegador e aparecem como
+  suas, e a tela cheia ocupa a atividade inteira (veja [Atividade do Discord](#atividade-do-discord)).
 - **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
   sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
   porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
@@ -134,12 +134,20 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
 - **Transmitir tela**: o Discord não deixa a atividade capturar a tela, então o botão de tela abre um
   **transmissor no navegador**. Você escolhe a tela lá e ela aparece na sala como sua, com o mesmo nome.
   O painel de tela da atividade lista o que está no ar e tem **Parar** / **Parar todas**. Deixe a aba
-  do navegador aberta (pode minimizar); sair da atividade para as telas depois de 20 s.
+  do navegador aberta (pode minimizar); sair da atividade para a transmissão depois de 20 s.
+- **Câmera**: o Discord também não libera a câmera pra atividades, então o botão de câmera abre o mesmo
+  transmissor, que já liga a câmera (a escolhida da última vez nesse navegador). Ela aparece no seu quadro
+  da sala; o botão da atividade desliga.
+- **YouTube**: o Discord barra o player do YouTube dentro de atividades (só o Watch Together dele pode).
+  No **Assistir junto** da atividade, **Transmitir YouTube pelo navegador** abre o transmissor: abra o
+  vídeo noutra aba e escolha essa aba com o som; ela entra na sala como sua tela. Se alguém de fora
+  começar um YouTube no assistir junto, quem está no Discord vê o tile mas não acompanha. Vídeo do
+  computador funciona normal.
 - **Tela cheia**: o iframe do Discord não libera a tela cheia do navegador, então lá o botão "Tela cheia"
   do tile faz a tela ocupar a atividade inteira (Esc sai). Junto com a tela cheia do próprio Discord
   (canto inferior direito da chamada, ou ↗ pra abrir em janela), cobre a tela toda.
-- A voz continua sendo a do canal do Discord: microfone e câmera dependem do que o Discord libera pra
-  atividades.
+- **Sem microfone**: a voz é a do canal do Discord, então a atividade não tem botão de microfone nem
+  soundboard (que sai pelo microfone), e os quadros não mostram o ícone de mic desligado.
 
 ### Configurar o app no Discord
 
@@ -228,16 +236,22 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
   próprios atributos, e uma URL qualquer vazaria o IP de quem olha.
 - **Transmissor** (`src/room/cast.ts`, `src/pages/CastPage.tsx`): a atividade pede um link em `/api/cast`
   provando quem é com o próprio token da sala. O servidor devolve `/transmitir#t=<token>`: um token
-  LiveKit que **só publica tela**, vale 15 min pra abrir e leva o atributo `castFor` com a identidade de
-  quem pediu. O token vai no fragmento (`#`), que o navegador não manda a servidor nenhum. Todos os
-  clientes mostram as telas do transmissor sob o nome do dono e deixam o transmissor fora dos tiles, da
+  LiveKit que **só publica tela e câmera**, vale 15 min pra abrir e leva o atributo `castFor` com a
+  identidade de quem pediu (`&cam=1` no fragmento liga a câmera ao abrir). O token vai no fragmento (`#`),
+  que o navegador não manda a servidor nenhum. Todos os clientes mostram as telas do transmissor sob o
+  nome do dono, a câmera dele no quadro do dono, e deixam o transmissor fora dos tiles, da
   contagem de pessoas, dos sons de entrada/saída, de quem manda o histórico do chat e da herança do
-  assistir junto. O "Parar" da atividade vai pelo tópico `cast` do data channel e o transmissor só
-  obedece ao dono. Se o dono some da sala por mais de 20 s, o transmissor encerra.
+  assistir junto. O "Parar" da atividade (e o desligar da câmera) vai pelo tópico `cast` do data channel
+  e o transmissor só obedece ao dono. Se o dono some da sala por mais de 20 s, o transmissor encerra.
 - **Tela cheia** (`src/room/fullscreen.ts`): usa a tela cheia do navegador quando a página pode e, quando
   não pode (o iframe do Discord), põe o elemento `fixed` por cima da página inteira.
 - **Captura de tela bloqueada** (`screenCaptureBlocked`): dentro do Discord, sem `display-capture`
-  liberado no iframe, o painel de tela vira o do transmissor em vez do seletor normal.
+  liberado no iframe, o painel de tela vira o do transmissor em vez do seletor normal. Do mesmo jeito,
+  sem `camera` (`cameraBlocked`), ou se o Discord negar a câmera na hora, o botão de câmera usa o
+  transmissor.
+- **YouTube**: a CSP que o Discord põe nas atividades não tem `www.youtube.com` em `script-src` nem em
+  `frame-src` (só a do Watch Together tem), e um URL mapping não resolve: o player busca
+  `googlevideo.com` por fora do proxy. Por isso a atividade nem monta o player de uma sessão de YouTube.
 
 ### Limites e problemas comuns
 

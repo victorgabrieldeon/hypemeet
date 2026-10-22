@@ -27,8 +27,8 @@ const PUBLIC_URL = process.env.PUBLIC_URL?.replace(/\/+$/, "") || null;
 
 const livekit = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 const verifier = new TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
-// Participant attribute of a transmitter: a browser tab that only sends screens on behalf of someone
-// already in the room (the Discord Activity can't capture the screen). Mirrors src/room/cast.ts.
+// Participant attribute of a transmitter: a browser tab that only sends screens and a camera on behalf of someone
+// already in the room (the Discord Activity can't capture the screen or the camera). Mirrors src/room/cast.ts.
 const CAST_FOR = "castFor";
 
 const rooms = openRoomStore(DB_PATH);
@@ -176,7 +176,8 @@ Bun.serve({
       },
     },
     // A transmitter link for someone in a room: proven by their own room token, it lets a browser tab
-    // send screens that show up as theirs. The grant rides in the URL fragment, which never reaches a server.
+    // send screens and a camera that show up as theirs. The grant rides in the URL fragment, which never
+    // reaches a server.
     "/api/cast": {
       async POST(req) {
         const body = await readJson(req);
@@ -195,7 +196,7 @@ Bun.serve({
           room: room.code,
           roomJoin: true,
           canPublish: true,
-          canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
+          canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO, TrackSource.CAMERA],
           // Never subscribes to anything; this is what delivers the owner's "stop" messages.
           canSubscribe: true,
           // Screen previews and the owner's controls ride the data channel.

@@ -1,17 +1,18 @@
 import { DisconnectReason, Room, RoomEvent } from "livekit-client";
-import { useEffect, useState, type ReactNode } from "react";
+import { Video, VideoOff } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo, Spinner, glowCardClass } from "../components/ui";
 import { api } from "../lib/api";
 import { obeyOwner } from "../room/cast";
-import { loadScreenPrefs, saveScreenPrefs } from "../room/devices";
+import { deviceRoomOptions, loadScreenPrefs, saveScreenPrefs } from "../room/devices";
 import { buildTiles, SCREEN_AUDIO_COPY, startScreenShare, useRoomVersion, useScreenAudioCleanup, type TileModel } from "../room/model";
 import { ScreenPreviews } from "../room/previews";
 import { ScreenPanel } from "../room/ScreenPanel";
 
 // The browser transmitter opened from the Discord Activity (see room/cast.ts): it joins the room only
-// to send screens, which everyone sees as its owner's.
+// to send screens and a camera, which everyone sees as its owner's.
 
-/** How long the owner may be gone (a reconnect, a reloaded Activity) before the screens stop. */
+/** How long the owner may be gone (a reconnect, a reloaded Activity) before the transmission stops. */
 const OWNER_GRACE_MS = 20_000;
 
 interface CastLink {
@@ -21,9 +22,11 @@ interface CastLink {
   owner: string;
   name: string;
   code: string;
+  /** Opened from the Activity's camera button: turn it on right away. */
+  camera: boolean;
 }
 
-/** The link carries the grant in its fragment: `#t=<room token>&u=<livekit url>`. */
+/** The link carries the grant in its fragment: `#t=<room token>&u=<livekit url>`, plus `&cam=1` for the camera. */
 function readLink(): CastLink | null {
   const params = new URLSearchParams(location.hash.slice(1));
   const token = params.get("t");
@@ -39,7 +42,7 @@ function readLink(): CastLink | null {
     const owner = claims.attributes?.castFor;
     const code = claims.video?.room;
     if (!owner || !code) return null;
-    return { token, url: params.get("u"), owner, name: claims.name ?? "", code };
+    return { token, url: params.get("u"), owner, name: claims.name ?? "", code, camera: params.has("cam") };
   } catch {
     return null;
   }
@@ -78,7 +81,8 @@ export function CastPage() {
 
   useEffect(() => {
     if (!link) return;
-    const instance = new Room({ dynacast: true });
+    // The camera picked last time on this browser.
+    const instance = new Room({ dynacast: true, ...deviceRoomOptions() });
     const previews = new ScreenPreviews(instance);
     const stopObeying = obeyOwner(instance, link.owner);
     let cancelled = false;
@@ -88,7 +92,7 @@ export function CastPage() {
       clearTimeout(ownerGone);
       if (instance.remoteParticipants.has(link.owner)) return;
       ownerGone = setTimeout(() => {
-        setEnded({ title: "Transmissão encerrada", text: "Você saiu da sala no Discord, então suas telas pararam." });
+        setEnded({ title: "Transmissão encerrada", text: "Você saiu da sala no Discord, então a transmissão parou." });
         void instance.disconnect();
       }, OWNER_GRACE_MS);
     };
@@ -97,7 +101,7 @@ export function CastPage() {
       .on(RoomEvent.ParticipantDisconnected, checkOwner)
       .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (cancelled || reason === DisconnectReason.CLIENT_INITIATED) return;
-        setEnded({ title: "A conexão caiu", text: "Abra a atividade no Discord e escolha a tela de novo." });
+        setEnded({ title: "A conexão caiu", text: "Abra a atividade no Discord e transmita de novo." });
       });
 
     instance
@@ -112,7 +116,7 @@ export function CastPage() {
           !cancelled &&
           setEnded({
             title: "Esse link não vale mais",
-            text: "Ele expira em 15 minutos. Peça um novo no Discord: Transmissões → Escolher tela no navegador.",
+            text: "Ele expira em 15 minutos. Peça um novo pelo botão de tela ou de câmera da atividade no Discord.",
           }),
       );
     return () => {
@@ -135,10 +139,20 @@ export function CastPage() {
       </div>
     );
   }
-  return <Transmitter room={room} name={link.name} roomName={roomName} />;
+  return <Transmitter room={room} name={link.name} roomName={roomName} startCamera={link.camera} />;
 }
 
-function Transmitter({ room, name, roomName }: { room: Room; name: string; roomName: string | null }) {
+function Transmitter({
+  room,
+  name,
+  roomName,
+  startCamera,
+}: {
+  room: Room;
+  name: string;
+  roomName: string | null;
+  startCamera: boolean;
+}) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   const local = room.localParticipant;
@@ -148,9 +162,35 @@ function Transmitter({ room, name, roomName }: { room: Room; name: string; roomN
   const screens = buildTiles(room).filter(
     (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
   );
-  const live = screens.length > 0;
+  const cameraOn = local.isCameraEnabled;
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const live = screens.length > 0 || cameraOn;
 
-  // Closing the tab ends the screens: ask first.
+  async function setCamera(on: boolean) {
+    setCameraBusy(true);
+    setMessage(null);
+    try {
+      await local.setCameraEnabled(on);
+    } catch (e) {
+      setMessage(
+        (e as DOMException)?.name === "NotAllowedError"
+          ? "Permissão negada para a câmera. Libere no cadeado da barra de endereço."
+          : `Não deu pra ligar a câmera: ${(e as Error).message}`,
+      );
+    } finally {
+      setCameraBusy(false);
+    }
+  }
+
+  // Opened from the camera button: that's what you came for (once, despite StrictMode's double effect).
+  const cameraStarted = useRef(false);
+  useEffect(() => {
+    if (!startCamera || cameraStarted.current) return;
+    cameraStarted.current = true;
+    void setCamera(true);
+  });
+
+  // Closing the tab ends the transmission: ask first.
   useEffect(() => {
     if (!live) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -178,7 +218,7 @@ function Transmitter({ room, name, roomName }: { room: Room; name: string; roomN
     <Card>
       <Logo />
       <div>
-        <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha a tela"}</h1>
+        <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha o que transmitir"}</h1>
         <p className="mt-2 text-soft">
           Transmitindo como <span className="font-semibold text-ink">{name}</span>
           {roomName && (
@@ -187,8 +227,24 @@ function Transmitter({ room, name, roomName }: { room: Room; name: string; roomN
               em <span className="font-semibold text-ink">{roomName}</span>
             </>
           )}
-          . Quem está na atividade do Discord vê a tela como sua.
+          . Quem está na atividade do Discord vê tudo como seu. Pra um vídeo do YouTube, abra ele noutra aba e
+          escolha essa aba, com o som.
         </p>
+      </div>
+      <div className="flex items-center gap-3 rounded-md border border-line bg-surface p-3">
+        <p className="min-w-0 flex-1 text-sm">
+          <span className="block font-medium">Câmera</span>
+          <span className="block text-xs text-soft">{cameraOn ? "No ar, no seu quadro da sala" : "Aparece no seu quadro da sala"}</span>
+        </p>
+        <button
+          type="button"
+          disabled={cameraBusy}
+          onClick={() => void setCamera(!cameraOn)}
+          className="type-link-sm flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-surface-hi px-3 text-ink transition hover:bg-blurple/25 disabled:opacity-60"
+        >
+          {cameraBusy ? <Spinner className="size-4" /> : cameraOn ? <VideoOff className="size-4" /> : <Video className="size-4" />}
+          {cameraOn ? "Desligar" : "Ligar"}
+        </button>
       </div>
       <ScreenPanel
         inline
@@ -207,7 +263,7 @@ function Transmitter({ room, name, roomName }: { room: Room; name: string; roomN
           {message}
         </p>
       )}
-      {live && <p className="text-sm text-soft">Pode minimizar esta aba, mas não feche: fechar para as telas.</p>}
+      {live && <p className="text-sm text-soft">Pode minimizar esta aba, mas não feche: fechar para a transmissão.</p>}
     </Card>
   );
 }

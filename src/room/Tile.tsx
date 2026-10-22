@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Avatar, Spinner } from "../components/ui";
+import { inDiscord } from "../lib/discord";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
@@ -248,7 +249,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const hoverOnly = compact ? "hidden" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100";
 
   if (tile.kind === "camera") {
-    const camera = participant.getTrackPublication(Track.Source.Camera);
+    const { camera } = tile;
     const mic = participant.getTrackPublication(Track.Source.Microphone);
     const cameraOn = camera?.track && !camera.isMuted;
     const micOn = mic && !mic.isMuted;
@@ -270,7 +271,8 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
         )}
         <div className={`${overlayBase} bottom-2 left-2 max-w-[calc(100%-1rem)]`}>
           <Pill>
-            {!micOn && <MicOff className="size-3.5 shrink-0 text-danger" />}
+            {/* In the Activity the voice is Discord's: a mic-off badge on almost everyone would just be noise. */}
+            {!micOn && !inDiscord && <MicOff className="size-3.5 shrink-0 text-danger" />}
             <span className="truncate">{isLocal ? `${name} (você)` : name}</span>
             <ConnectionBars quality={participant.connectionQuality} />
           </Pill>

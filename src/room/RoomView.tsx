@@ -21,7 +21,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import { Button, LogoMark, Spinner } from "../components/ui";
 import type { RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
-import { inDiscord, screenCaptureBlocked } from "../lib/discord";
+import { cameraBlocked, inDiscord, screenCaptureBlocked } from "../lib/discord";
 import { usePttState } from "../lib/ptt";
 import type { RoomChat } from "./chat";
 import { ChatPanel } from "./ChatPanel";
@@ -54,10 +54,7 @@ import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
   const name = (err as DOMException)?.name;
-  if (name === "NotAllowedError")
-    return inDiscord
-      ? `O Discord não libera ${what} para atividades. A voz fica no canal do Discord.`
-      : `Permissão negada para ${what}. Libere no cadeado da barra de endereço.`;
+  if (name === "NotAllowedError") return `Permissão negada para ${what}. Libere no cadeado da barra de endereço.`;
   if (name === "NotFoundError") return `Nenhum(a) ${what} encontrado(a).`;
   if (name === "NotReadableError") return `${what} está em uso por outro app.`;
   return `Não deu pra ativar ${what}: ${(err as Error)?.message ?? err}`;
@@ -120,8 +117,8 @@ interface RoomViewProps {
   inviteUrl?: string;
   /** Replaces copying the link (the Discord Activity opens Discord's own invite dialog). */
   onInvite?: () => void;
-  /** Where screens can't be captured (the Discord Activity): opens a browser transmitter for us. */
-  onCast?: () => Promise<void>;
+  /** Where screens and the camera can't be captured (the Discord Activity): opens a browser transmitter for us. */
+  onCast?: (withCamera: boolean) => Promise<void>;
   onRejoin: () => void;
 }
 
@@ -153,19 +150,23 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const [watchFile, setWatchFile] = useState<{ file: File; key: string } | null>(null);
   const watchKey = watch.party ? sourceKey(watch.party.state.source) : null;
   const watchId = watch.party?.state.id;
+  // Discord's CSP keeps YouTube out of the Activity: there a YouTube session can't be followed.
+  const watchBlocked = inDiscord && watch.party?.state.source.kind === "youtube";
   // A session starting (here or by someone else) takes the stage; minimizing it is up to each viewer.
   useEffect(() => {
-    if (watchId) setPinnedId(WATCH_TILE_ID);
-  }, [watchId]);
+    if (watchId && !watchBlocked) setPinnedId(WATCH_TILE_ID);
+  }, [watchId, watchBlocked]);
   // The session this viewer chose not to follow: no player at all (nothing loads, nothing plays) until they rejoin.
   const [watchSkipped, setWatchSkipped] = useState<string | null>(null);
-  const following = !!watchId && watchSkipped !== watchId;
+  const following = !!watchId && watchSkipped !== watchId && !watchBlocked;
   const leaveWatch = () => {
     setWatchSkipped(watchId ?? null);
     setPinnedId((id) => (id === WATCH_TILE_ID ? null : id));
     setToast({ text: "Você parou de acompanhar. A sessão segue pros outros; pra voltar, é só abrir o tile.", tone: "info" });
   };
   const joinWatch = () => {
+    if (watchBlocked)
+      return setToast({ text: "O YouTube não toca dentro do Discord. Pra assistir junto, abra a sala fora do Discord.", tone: "info" });
     setWatchSkipped(null);
     setPinnedId(WATCH_TILE_ID);
   };
@@ -222,9 +223,13 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       t.kind === "screen" && castOwnerOf(t.participant) === local.identity,
   );
   const sendingCount = myScreens.length + castScreens.length;
+  // The transmitter sending our camera, if any (Discord Activity).
+  const castCamera = [...room.remoteParticipants.values()].find(
+    (p) => castOwnerOf(p) === local.identity && p.getTrackPublication(Track.Source.Camera),
+  );
   const reactionTargetTile = reactionTarget(tiles, pinnedId);
   const micOn = local.isMicrophoneEnabled;
-  const cameraOn = local.isCameraEnabled;
+  const cameraOn = local.isCameraEnabled || !!castCamera;
   const state = room.state;
 
   async function toggleMic() {
@@ -240,10 +245,17 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   }
 
   async function toggleCamera() {
+    if (castCamera)
+      return stopCast(local, castCamera, castCamera.getTrackPublication(Track.Source.Camera)!.trackSid).catch(() =>
+        setToast({ text: "Não deu pra desligar a câmera", tone: "error" }),
+      );
+    if (cameraBlocked && onCast) return startCast("camera");
     setBusy("camera");
     try {
       await local.setCameraEnabled(!cameraOn);
     } catch (e) {
+      // Discord can deny it past what the iframe's policy says: same way out.
+      if (inDiscord && onCast && (e as DOMException)?.name === "NotAllowedError") return await startCast("camera");
       setToast({ text: deviceError(e, "a câmera"), tone: "error" });
     } finally {
       setBusy(null);
@@ -269,11 +281,11 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     }
   }
 
-  async function startCast() {
+  async function startCast(kind: "screen" | "camera") {
     if (!onCast) return;
-    setBusy("screen");
+    setBusy(kind);
     try {
-      await onCast();
+      await onCast(kind === "camera");
     } catch (e) {
       setToast({ text: `Não deu pra abrir o navegador: ${(e as Error).message}`, tone: "error" });
     } finally {
@@ -389,51 +401,57 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       </ReactionsProvider>
 
       <footer className="relative mx-auto flex items-center gap-2 rounded-full border border-line bg-panel p-2 shadow-float sm:gap-3 sm:p-2.5">
-        <div className="relative">
-          <ControlButton on={micOn} busy={busy === "mic"} onClick={toggleMic} label={micOn ? "Desligar microfone" : ptt?.enabled && ptt.binding ? `Ligar microfone (ou segure ${ptt.binding})` : "Ligar microfone"}>
-            {micOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
-          </ControlButton>
-          <MenuChevron label="Microfone e saída de áudio">
-            {(close) => (
-              <>
-                <DeviceMenu
-                  room={room}
-                  kinds={["audioinput", "audiooutput"]}
-                  close={close}
-                  onError={(text) => setToast({ text, tone: "error" })}
-                />
-                {canSuppressNoise && (
-                  <MenuSection title="Processamento">
-                    <MenuToggle
-                      label="Supressão de ruído"
-                      hint="Corta teclado, ventilador e barulho de fundo"
-                      checked={noiseFilter}
-                      onChange={(on) => {
-                        setNoiseFilter(on);
-                        saveNoiseFilter(on);
-                      }}
-                    />
-                  </MenuSection>
-                )}
-                {ptt && <PushToTalkSection ptt={ptt} />}
-              </>
-            )}
-          </MenuChevron>
-        </div>
+        {/* In the Activity the voice is the Discord channel's. */}
+        {!inDiscord && (
+          <div className="relative">
+            <ControlButton on={micOn} busy={busy === "mic"} onClick={toggleMic} label={micOn ? "Desligar microfone" : ptt?.enabled && ptt.binding ? `Ligar microfone (ou segure ${ptt.binding})` : "Ligar microfone"}>
+              {micOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+            </ControlButton>
+            <MenuChevron label="Microfone e saída de áudio">
+              {(close) => (
+                <>
+                  <DeviceMenu
+                    room={room}
+                    kinds={["audioinput", "audiooutput"]}
+                    close={close}
+                    onError={(text) => setToast({ text, tone: "error" })}
+                  />
+                  {canSuppressNoise && (
+                    <MenuSection title="Processamento">
+                      <MenuToggle
+                        label="Supressão de ruído"
+                        hint="Corta teclado, ventilador e barulho de fundo"
+                        checked={noiseFilter}
+                        onChange={(on) => {
+                          setNoiseFilter(on);
+                          saveNoiseFilter(on);
+                        }}
+                      />
+                    </MenuSection>
+                  )}
+                  {ptt && <PushToTalkSection ptt={ptt} />}
+                </>
+              )}
+            </MenuChevron>
+          </div>
+        )}
         <div className="relative">
           <ControlButton
             on={cameraOn}
             busy={busy === "camera"}
             onClick={toggleCamera}
-            label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+            label={cameraOn ? "Desligar câmera" : cameraBlocked ? "Ligar câmera pelo navegador" : "Ligar câmera"}
           >
             {cameraOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
           </ControlButton>
-          <MenuChevron label="Escolher câmera">
-            {(close) => (
-              <DeviceMenu room={room} kinds={["videoinput"]} close={close} onError={(text) => setToast({ text, tone: "error" })} />
-            )}
-          </MenuChevron>
+          {/* With the transmitter, the camera is picked in the browser. */}
+          {!cameraBlocked && (
+            <MenuChevron label="Escolher câmera">
+              {(close) => (
+                <DeviceMenu room={room} kinds={["videoinput"]} close={close} onError={(text) => setToast({ text, tone: "error" })} />
+              )}
+            </MenuChevron>
+          )}
         </div>
         {/* `contents`, not `relative`: the panel anchors to the footer so it stays centred on narrow screens. */}
         <div ref={screensRef} className="contents">
@@ -456,7 +474,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
               <CastPanel
                 screens={castScreens}
                 starting={busy === "screen"}
-                onStart={() => void startCast()}
+                onStart={() => void startCast("screen")}
                 onStop={stopCastScreen}
               />
             ) : (
@@ -509,30 +527,34 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
               onFileChosen={(file) =>
                 setWatchFile({ file, key: sourceKey({ kind: "file", name: file.name, size: file.size }) })
               }
+              onCastTab={inDiscord && onCast ? () => void startCast("screen") : undefined}
               onDone={() => setWatchOpen(false)}
               onError={(text) => setToast({ text, tone: "error" })}
             />
           )}
         </div>
-        <div ref={soundsRef} className="contents">
-          <ControlButton
-            tone="plain"
-            on={soundsOpen}
-            expanded={soundsOpen}
-            onClick={() => setSoundsOpen(!soundsOpen)}
-            label="Soundboard"
-          >
-            <Megaphone className="size-5" />
-          </ControlButton>
-          {soundsOpen && (
-            <SoundboardPanel
-              mic={local.getTrackPublication(Track.Source.Microphone)?.audioTrack}
-              micOn={micOn}
-              onEnableMic={() => void toggleMic()}
-              onError={(text) => setToast({ text, tone: "error" })}
-            />
-          )}
-        </div>
+        {/* The soundboard plays into the mic, which the Activity doesn't have. */}
+        {!inDiscord && (
+          <div ref={soundsRef} className="contents">
+            <ControlButton
+              tone="plain"
+              on={soundsOpen}
+              expanded={soundsOpen}
+              onClick={() => setSoundsOpen(!soundsOpen)}
+              label="Soundboard"
+            >
+              <Megaphone className="size-5" />
+            </ControlButton>
+            {soundsOpen && (
+              <SoundboardPanel
+                mic={local.getTrackPublication(Track.Source.Microphone)?.audioTrack}
+                micOn={micOn}
+                onEnableMic={() => void toggleMic()}
+                onError={(text) => setToast({ text, tone: "error" })}
+              />
+            )}
+          </div>
+        )}
         <ControlButton
           tone="plain"
           on={chatOpen}

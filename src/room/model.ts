@@ -12,7 +12,7 @@ import {
 } from "livekit-client";
 import { useEffect, useReducer } from "react";
 import { detectOS, IS_DESKTOP_APP } from "../lib/downloads";
-import { isTransmitter } from "./cast";
+import { castOwnerOf, isTransmitter } from "./cast";
 
 /**
  * Every screen share is published as a pair:
@@ -27,7 +27,13 @@ const AUDIO_SUFFIX = ":audio";
 const VIEWING_ATTRIBUTE = "viewing";
 
 export type TileModel =
- | { kind: "camera"; id: string; participant: Participant }
+ | {
+  kind: "camera";
+  id: string;
+  participant: Participant;
+  /** Their camera, or the one their browser transmitter sends (Discord Activity). */
+  camera?: TrackPublication;
+ }
  | {
   kind: "screen";
   id: string;
@@ -42,14 +48,22 @@ export type TileModel =
 
 /**
  * Screens first (they're what people came for), then cameras; local participant first in each group.
- * Transmitters bring screens only: no camera tile of their own.
+ * Transmitters get no camera tile of their own: their camera shows in their owner's.
  */
 export function buildTiles(room: Room): TileModel[] {
  const screens: TileModel[] = [];
  const cameras: TileModel[] = [];
  const everyone = [room.localParticipant, ...room.remoteParticipants.values()];
  for (const participant of everyone) {
-  if (!isTransmitter(participant)) cameras.push({ kind: "camera", id: `${participant.identity}:camera`, participant });
+  if (!isTransmitter(participant)) {
+   const camera =
+    participant.getTrackPublication(Track.Source.Camera) ??
+    everyone
+     .filter((p) => castOwnerOf(p) === participant.identity)
+     .map((p) => p.getTrackPublication(Track.Source.Camera))
+     .find(Boolean);
+   cameras.push({ kind: "camera", id: `${participant.identity}:camera`, participant, camera });
+  }
   const pubs = [...participant.trackPublications.values()];
   // Names embed a base36 timestamp, so sorting by name = order they were started (same for everyone).
   const videos = pubs

@@ -200,7 +200,7 @@ export function LiveRoom({
   connectErrorExtra?: ReactNode;
   inviteUrl?: string;
   onInvite?: () => void;
-  onCast?: () => Promise<void>;
+  onCast?: (withCamera: boolean) => Promise<void>;
 }) {
   const [session, setSession] = useState<{ room: Room; chat: RoomChat; previews: ScreenPreviews } | null>(null);
   const [error, setError] = useState<string | null>(null);

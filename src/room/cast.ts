@@ -1,10 +1,10 @@
 import { RoomEvent, Track, type LocalParticipant, type Participant, type RemoteParticipant, type Room } from "livekit-client";
 
 /**
- * Transmitters: the Discord Activity can't capture the screen, so it opens a link in the browser
- * (/transmitir, see CastPage) that joins the room as a second connection carrying only screens. The
+ * Transmitters: the Discord Activity can't capture the screen or the camera, so it opens a link in the
+ * browser (/transmitir, see CastPage) that joins the room as a second connection carrying only those. The
  * server stamps it with the identity of whoever asked (attribute `castFor`, mirrored in server/index.ts):
- * everyone shows its screens under that person's name and leaves the transmitter itself out of the
+ * everyone shows its screens and camera under that person's name and leaves the transmitter itself out of the
  * people (tiles, count, sounds, elections). The owner controls it over the `cast` topic.
  */
 const CAST_FOR = "castFor";
@@ -22,7 +22,7 @@ export const isTransmitter = (participant: Participant) => castOwnerOf(participa
 export const remotePeople = (room: Room): RemoteParticipant[] =>
   [...room.remoteParticipants.values()].filter((p) => !isTransmitter(p));
 
-/** Owner → transmitter: stop one screen (by video track sid), or all of them. */
+/** Owner → transmitter: stop one screen or the camera (by video track sid), or all the screens. */
 export function stopCast(local: LocalParticipant, transmitter: Participant, screen: string | "all") {
   return local.publishData(encoder.encode(JSON.stringify({ stop: screen })), {
     reliable: true,
@@ -44,7 +44,7 @@ export function obeyOwner(room: Room, owner: string): () => void {
     const local = room.localParticipant;
     // Paired audio goes with its video (useScreenAudioCleanup).
     for (const pub of local.trackPublications.values())
-      if (pub.source === Track.Source.ScreenShare && pub.track && (stop === "all" || stop === pub.trackSid))
+      if (pub.track && (stop === pub.trackSid || (stop === "all" && pub.source === Track.Source.ScreenShare)))
         void local.unpublishTrack(pub.track);
   };
   room.on(RoomEvent.DataReceived, onData);

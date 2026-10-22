@@ -110,9 +110,9 @@ export function DiscordActivity() {
       onRejoin={join}
       inviteUrl={grant.webUrl}
       onInvite={() => void sdk.commands.openInviteDialog().catch(() => undefined)}
-      onCast={async () => {
+      onCast={async (withCamera) => {
         const { url } = await api.castLink(grant.token);
-        await sdk.commands.openExternalLink({ url });
+        await sdk.commands.openExternalLink({ url: withCamera ? `${url}&cam=1` : url });
       }}
       connectErrorExtra={
         <div className="flex flex-col gap-3">

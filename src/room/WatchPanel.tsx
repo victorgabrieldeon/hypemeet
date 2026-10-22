@@ -1,4 +1,4 @@
-import { ArrowRight, EyeOff, FolderOpen, Popcorn, Square } from "lucide-react";
+import { ArrowRight, ExternalLink, EyeOff, FolderOpen, Popcorn, Square } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { Button, inputClass, Spinner } from "../components/ui";
 import type { WatchAction, WatchControls } from "./watch";
@@ -13,12 +13,14 @@ interface WatchPanelProps {
   onLeave: () => void;
   /** Called before the file is announced, so our own player already has it when the state arrives. */
   onFileChosen: (file: File) => void;
+  /** Where YouTube can't play (the Discord Activity): opens the browser transmitter to send a YouTube tab instead. */
+  onCastTab?: () => void;
   onDone: () => void;
   onError: (text: string) => void;
 }
 
 /** Popover above the dock: start a session, swap its video, follow it or not, or end it for everyone. */
-export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, onDone, onError }: WatchPanelProps) {
+export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, onCastTab, onDone, onError }: WatchPanelProps) {
   const { party } = watch;
   const [link, setLink] = useState("");
   const [invalid, setInvalid] = useState(false);
@@ -100,27 +102,48 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
 
       <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-3">
         <p className="type-label px-0.5 pt-1 text-soft">{party ? "Trocar vídeo" : "Escolher vídeo"}</p>
-        <form onSubmit={submit} className="flex gap-2">
-          <input
-            autoFocus
-            className={`${inputClass} ${invalid ? "border-danger/70" : ""}`}
-            value={link}
-            onChange={(e) => {
-              setLink(e.target.value);
-              setInvalid(false);
-            }}
-            placeholder="Link do YouTube (vídeo ou live)"
-            aria-label="Link do YouTube"
-            aria-invalid={invalid}
-          />
-          <Button type="submit" variant="primary" square disabled={!link.trim() || pending !== null} aria-label="Assistir">
-            {pending === "link" ? <Spinner className="size-5" /> : <ArrowRight className="size-5" />}
-          </Button>
-        </form>
-        {invalid && (
-          <p role="alert" className="-mt-1 px-1 text-xs text-danger">
-            Isso não parece um link de vídeo do YouTube.
-          </p>
+        {onCastTab ? (
+          <>
+            <p className="px-0.5 text-sm text-soft">
+              O Discord não deixa tocar YouTube aqui dentro. Abra o vídeo numa aba do navegador e transmita essa aba
+              com o som: ela aparece na sala como sua tela.
+            </p>
+            <Button
+              variant="primary"
+              className="type-link-sm h-11"
+              onClick={() => {
+                onCastTab();
+                onDone();
+              }}
+            >
+              <ExternalLink className="size-4" /> Transmitir YouTube pelo navegador
+            </Button>
+          </>
+        ) : (
+          <>
+            <form onSubmit={submit} className="flex gap-2">
+              <input
+                autoFocus
+                className={`${inputClass} ${invalid ? "border-danger/70" : ""}`}
+                value={link}
+                onChange={(e) => {
+                  setLink(e.target.value);
+                  setInvalid(false);
+                }}
+                placeholder="Link do YouTube (vídeo ou live)"
+                aria-label="Link do YouTube"
+                aria-invalid={invalid}
+              />
+              <Button type="submit" variant="primary" square disabled={!link.trim() || pending !== null} aria-label="Assistir">
+                {pending === "link" ? <Spinner className="size-5" /> : <ArrowRight className="size-5" />}
+              </Button>
+            </form>
+            {invalid && (
+              <p role="alert" className="-mt-1 px-1 text-xs text-danger">
+                Isso não parece um link de vídeo do YouTube.
+              </p>
+            )}
+          </>
         )}
         <div className="flex items-center gap-3 text-xs text-soft">
           <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />
