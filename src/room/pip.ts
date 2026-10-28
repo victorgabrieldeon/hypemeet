@@ -24,6 +24,16 @@ export function floatableTrack(tile: TileModel): Track | undefined {
   return (tile.video as RemoteTrackPublication).isDesired ? tile.video.track : undefined;
 }
 
+/**
+ * The one tile the Discord Activity shows while Discord has it in picture-in-picture: the one in the
+ * floating window, else the pinned one, else (tiles come screens first) the first screen you watch or
+ * someone's camera. Only tiles that could float qualify: your own video is never worth the space.
+ */
+export function pipFocus(tiles: TileModel[], ids: { floating: string | null; pinned: string | null }): TileModel | null {
+  const byId = (id: string | null) => (id ? tiles.find((t) => t.id === id) : undefined);
+  return [byId(ids.floating), byId(ids.pinned), ...tiles].find((t) => t && floatableTrack(t)) ?? null;
+}
+
 interface Floating {
   tileId: string;
   track: Track;

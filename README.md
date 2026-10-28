@@ -201,6 +201,11 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
 - **Tela cheia**: o iframe do Discord não libera a tela cheia do navegador, então lá o botão "Tela cheia"
   do tile faz a tela ocupar a atividade inteira (Esc sai). Junto com a tela cheia do próprio Discord
   (canto inferior direito da chamada, ou ↗ pra abrir em janela), cobre a tela toda.
+- **Janelinha do Discord e janela flutuante**: quando o Discord encolhe a atividade na janelinha dele (você
+  foi pra outro canal ou servidor), ela mostra só um vídeo, ocupando tudo: o da janela flutuante, o fixado, a
+  primeira tela que você assiste ou a câmera de alguém. A janelinha aceita clique (`use_interactive_pip`, só no
+  desktop e na web), e o botão "Janela flutuante" dela e dos tiles solta o vídeo numa janela do sistema, que
+  fica por cima até com o Discord minimizado.
 - **Sem microfone**: a voz é a do canal do Discord, então a atividade não tem botão de microfone nem
   soundboard (que sai pelo microfone), e os quadros não mostram o ícone de mic desligado.
 
