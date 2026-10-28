@@ -16,6 +16,7 @@ import {
   MonitorUp,
   MoveUpRight,
   Pencil,
+  PictureInPicture2,
   Pin,
   PinOff,
   Play,
@@ -32,6 +33,7 @@ import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
 import { discordAvatar, volumeKey, watchScreen, type TileModel } from "./model";
+import { closePip, floatableTrack, openPip, pipSupported, usePipTile } from "./pip";
 import { useScreenPreview } from "./previews";
 import { ConnectionBars, formatBitrate, useVideoStats } from "./quality";
 import { ReactionLayer } from "./reactions";
@@ -245,6 +247,18 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
 
   const fullscreen = useFullscreen(ref);
 
+  const floating = usePipTile() === tile.id;
+  const floatTrack = pipSupported ? floatableTrack(tile) : undefined;
+  const pipButton = floatTrack && (
+    <IconButton
+      onClick={() => (floating ? closePip() : void openPip(tile.id, floatTrack))}
+      label={floating ? "Fechar janela flutuante" : "Janela flutuante"}
+      active={floating}
+    >
+      <PictureInPicture2 className="size-4" />
+    </IconButton>
+  );
+
   const overlayBase = "absolute flex items-center gap-2 transition";
   const hoverOnly = compact ? "hidden" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100";
 
@@ -282,6 +296,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </IconButton>
+          {pipButton}
         </div>
         <ReactionLayer tileId={tile.id} compact={compact} />
       </div>
@@ -389,6 +404,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             <Pencil className="size-4" />
           </IconButton>
         )}
+        {pipButton}
         {watching && (
           <IconButton onClick={fullscreen.toggle} label={fullscreen.active ? "Sair da tela cheia" : "Tela cheia"}>
             {fullscreen.active ? <Minimize className="size-4" /> : <Maximize className="size-4" />}

@@ -50,6 +50,7 @@ import { Stage } from "./Stage";
 import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
 import { WatchPanel } from "./WatchPanel";
 import { WatchPlayer } from "./WatchPlayer";
+import { usePipWindow } from "./pip";
 import { PreviewsProvider, type ScreenPreviews } from "./previews";
 import { PluginPanel, pluginTileId, PluginView, usePlugins, usersOf } from "./plugins";
 import { playCue, useRoomSounds } from "./sounds";
@@ -232,6 +233,9 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   }, [local, initialDevices]);
 
   const tiles = buildTiles(room);
+  usePipWindow(tiles, (err) =>
+    setToast({ text: `Não deu pra abrir a janela flutuante: ${(err as Error)?.message ?? err}`, tone: "error" }),
+  );
   const myScreens = tiles.filter(
     (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
   );
