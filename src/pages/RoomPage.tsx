@@ -191,6 +191,7 @@ export function LiveRoom({
   onInvite,
   onCast,
   youTubeStream,
+  discordPip,
 }: {
   info: RoomInfo;
   grant: JoinGrant;
@@ -203,6 +204,8 @@ export function LiveRoom({
   onInvite?: () => void;
   onCast?: (withCamera: boolean) => Promise<void>;
   youTubeStream?: (videoId: string) => string;
+  /** Discord has the Activity in its picture-in-picture (see RoomView). */
+  discordPip?: boolean;
 }) {
   const [session, setSession] = useState<{ room: Room; chat: RoomChat; previews: ScreenPreviews } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -266,7 +269,7 @@ export function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} youTubeStream={youTubeStream} />
+      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} youTubeStream={youTubeStream} discordPip={discordPip} />
     </VolumeProvider>
   );
 }

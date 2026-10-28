@@ -80,7 +80,7 @@ function VolumeControl({ participant, pub, label }: { participant: Participant; 
   );
 }
 
-function Pill({ title, children }: { title?: string; children: ReactNode }) {
+export function Pill({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <div
       title={title}
@@ -220,6 +220,22 @@ function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkToo
   );
 }
 
+/** "Janela flutuante": someone else's screen or camera in the browser's picture-in-picture window (see pip.ts). */
+export function PipButton({ tile }: { tile: TileModel }) {
+  const floating = usePipTile() === tile.id;
+  const track = pipSupported ? floatableTrack(tile) : undefined;
+  if (!track) return null;
+  return (
+    <IconButton
+      onClick={() => (floating ? closePip() : void openPip(tile.id, track))}
+      label={floating ? "Fechar janela flutuante" : "Janela flutuante"}
+      active={floating}
+    >
+      <PictureInPicture2 className="size-4" />
+    </IconButton>
+  );
+}
+
 interface TileProps {
   tile: TileModel;
   pinned: boolean;
@@ -246,18 +262,6 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   }, [inkTool]);
 
   const fullscreen = useFullscreen(ref);
-
-  const floating = usePipTile() === tile.id;
-  const floatTrack = pipSupported ? floatableTrack(tile) : undefined;
-  const pipButton = floatTrack && (
-    <IconButton
-      onClick={() => (floating ? closePip() : void openPip(tile.id, floatTrack))}
-      label={floating ? "Fechar janela flutuante" : "Janela flutuante"}
-      active={floating}
-    >
-      <PictureInPicture2 className="size-4" />
-    </IconButton>
-  );
 
   const overlayBase = "absolute flex items-center gap-2 transition";
   const hoverOnly = compact ? "hidden" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100";
@@ -296,7 +300,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
           <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
           </IconButton>
-          {pipButton}
+          <PipButton tile={tile} />
         </div>
         <ReactionLayer tileId={tile.id} compact={compact} />
       </div>
@@ -404,7 +408,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
             <Pencil className="size-4" />
           </IconButton>
         )}
-        {pipButton}
+        <PipButton tile={tile} />
         {watching && (
           <IconButton onClick={fullscreen.toggle} label={fullscreen.active ? "Sair da tela cheia" : "Tela cheia"}>
             {fullscreen.active ? <Minimize className="size-4" /> : <Maximize className="size-4" />}

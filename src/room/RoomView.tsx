@@ -50,7 +50,8 @@ import { Stage } from "./Stage";
 import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
 import { WatchPanel } from "./WatchPanel";
 import { WatchPlayer } from "./WatchPlayer";
-import { usePipWindow } from "./pip";
+import { pipFocus, usePipTile, usePipWindow } from "./pip";
+import { PipStage } from "./PipStage";
 import { PreviewsProvider, type ScreenPreviews } from "./previews";
 import { PluginPanel, pluginTileId, PluginView, usePlugins, usersOf } from "./plugins";
 import { playCue, useRoomSounds } from "./sounds";
@@ -124,10 +125,12 @@ interface RoomViewProps {
   onCast?: (withCamera: boolean) => Promise<void>;
   /** Where YouTube's player can't load (the Discord Activity): the server's relay of a video. */
   youTubeStream?: (videoId: string) => string;
+  /** Discord has the Activity in its picture-in-picture: just one video fills the small window (PipStage). */
+  discordPip?: boolean;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream }: RoomViewProps) {
+export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -194,7 +197,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const chatState = useSyncExternalStore(chat.subscribe, chat.getSnapshot);
   const [chatOpen, setChatOpen] = useState(false);
 
-  useEffect(() => chat.setVisible(chatOpen), [chat, chatOpen]);
+  useEffect(() => chat.setVisible(chatOpen && !discordPip), [chat, chatOpen, discordPip]);
 
   // Ping for messages nobody is looking at: panel closed or window in the background.
   useEffect(() => chat.onIncoming(() => (!chat.isVisible || document.hidden) && playCue("message")), [chat]);
@@ -236,6 +239,12 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   usePipWindow(tiles, (err) =>
     setToast({ text: `Não deu pra abrir a janela flutuante: ${(err as Error)?.message ?? err}`, tone: "error" }),
   );
+  const floatingId = usePipTile();
+  // In Discord's picture-in-picture a pinned watch party or plugin keeps the space; otherwise one tile does.
+  const pinnedView =
+    (pinnedId === WATCH_TILE_ID && !!watch.party && following) ||
+    plugins.sessions.some((s) => s.open && pinnedId === pluginTileId(s.info.id));
+  const pipTile = discordPip && !pinnedView ? pipFocus(tiles, { floating: floatingId, pinned: pinnedId }) : null;
   const myScreens = tiles.filter(
     (t): t is Extract<TileModel, { kind: "screen" }> => t.kind === "screen" && t.participant === local,
   );
@@ -339,10 +348,10 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   );
 
   return (
-    <div className="flex h-full flex-col gap-3 bg-canvas p-3 sm:gap-4 sm:p-4">
+    <div className={`flex h-full flex-col bg-canvas ${discordPip ? "" : "gap-3 p-3 sm:gap-4 sm:p-4"}`}>
       <RoomAudio room={room} />
 
-      <header className="flex items-center justify-between gap-3">
+      <header className={`flex items-center justify-between gap-3 ${discordPip ? "hidden" : ""}`}>
         <div className="flex min-w-0 items-center gap-3">
           <LogoMark />
           <div className="min-w-0">
@@ -416,35 +425,41 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                   className={pinnedId === pluginTileId(session.info.id) ? "min-h-0 flex-1" : "hidden"}
                 />
               ))}
-            <InkProvider room={room}>
-              <PreviewsProvider previews={previews}>
-                <Stage
-                  tiles={tiles}
-                  watch={watch.party}
-                  watchJoined={following}
-                  plugins={activePlugins}
-                  pinnedId={pinnedId}
-                  onPin={(id) => {
-                    const plugin = activePlugins.find((p) => pluginTileId(p.info.id) === id);
-                    if (plugin && !plugin.open) return openPlugin(plugin.info.id);
-                    if (id === WATCH_TILE_ID && !following) return joinWatch();
-                    setPinnedId(id);
-                  }}
-                />
-              </PreviewsProvider>
-            </InkProvider>
+            {discordPip ? (
+              !pinnedView && <PipStage tile={pipTile} />
+            ) : (
+              <InkProvider room={room}>
+                <PreviewsProvider previews={previews}>
+                  <Stage
+                    tiles={tiles}
+                    watch={watch.party}
+                    watchJoined={following}
+                    plugins={activePlugins}
+                    pinnedId={pinnedId}
+                    onPin={(id) => {
+                      const plugin = activePlugins.find((p) => pluginTileId(p.info.id) === id);
+                      if (plugin && !plugin.open) return openPlugin(plugin.info.id);
+                      if (id === WATCH_TILE_ID && !following) return joinWatch();
+                      setPinnedId(id);
+                    }}
+                  />
+                </PreviewsProvider>
+              </InkProvider>
+            )}
           </div>
           <ChatPanel
             chat={chat}
             state={chatState}
-            open={chatOpen}
+            open={chatOpen && !discordPip}
             onClose={() => setChatOpen(false)}
             onError={(text) => setToast({ text, tone: "error" })}
           />
         </div>
       </ReactionsProvider>
 
-      <footer className="relative mx-auto flex items-center gap-2 rounded-full border border-line bg-panel p-2 shadow-float sm:gap-3 sm:p-2.5">
+      <footer
+        className={`relative mx-auto flex items-center gap-2 rounded-full border border-line bg-panel p-2 shadow-float sm:gap-3 sm:p-2.5 ${discordPip ? "hidden" : ""}`}
+      >
         {/* In the Activity the voice is the Discord channel's. */}
         {!inDiscord && (
           <div className="relative">
@@ -640,7 +655,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
         </button>
       </footer>
 
-      {hasRemoteScreenAudio && tiles.length > 0 && (
+      {hasRemoteScreenAudio && tiles.length > 0 && !discordPip && (
         <p className="-mt-1 text-center text-xs text-soft/80">
           Passe o mouse numa tela ou pessoa para ajustar o volume — só muda pra você.
         </p>
@@ -649,7 +664,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       {toast && (
         <div
           role="status"
-          className={`fixed bottom-28 left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 animate-fade-in rounded-lg px-4 py-3 text-sm shadow-float ${toast.tone === "error" ? "bg-danger text-ink" : "bg-surface text-ink"
+          className={`fixed ${discordPip ? "bottom-2" : "bottom-28"} left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 animate-fade-in rounded-lg px-4 py-3 text-sm shadow-float ${toast.tone === "error" ? "bg-danger text-ink" : "bg-surface text-ink"
             }`}
           onClick={() => setToast(null)}
         >

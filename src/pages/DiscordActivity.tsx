@@ -1,4 +1,4 @@
-import { DiscordSDK, RPCCloseCodes } from "@discord/embedded-app-sdk";
+import { Common, DiscordSDK, Events, RPCCloseCodes } from "@discord/embedded-app-sdk";
 import { ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Logo, Spinner, glowCardClass } from "../components/ui";
@@ -15,6 +15,9 @@ let signedIn: Promise<string> | null = null;
 function signIn(): Promise<string> {
   signedIn ??= (async () => {
     await sdk.ready();
+    // Clicks reach the Activity in Discord's picture-in-picture, for its "Janela flutuante" button. Web and
+    // desktop only: the mobile clients refuse it, and the window just stays as Discord makes it.
+    void sdk.commands.setConfig({ use_interactive_pip: true }).catch(() => undefined);
     // Asks for consent the first time only; after that it's silent.
     const { code } = await sdk.commands.authorize({
       client_id: sdk.clientId,
@@ -48,6 +51,18 @@ async function joinChannelRoom(): Promise<DiscordGrant> {
 
 type Phase = { step: "loading" } | { step: "error"; message: string } | { step: "live"; grant: DiscordGrant };
 
+/** Whether Discord has shrunk the Activity into its picture-in-picture (you went elsewhere in the client). */
+function useDiscordPip(signedIn: boolean): boolean {
+  const [pip, setPip] = useState(false);
+  useEffect(() => {
+    if (!signedIn) return;
+    const onLayout = ({ layout_mode }: { layout_mode: number }) => setPip(layout_mode === Common.LayoutModeTypeObject.PIP);
+    void sdk.subscribe(Events.ACTIVITY_LAYOUT_MODE_UPDATE, onLayout).catch(() => undefined);
+    return () => void sdk.unsubscribe(Events.ACTIVITY_LAYOUT_MODE_UPDATE, onLayout).catch(() => undefined);
+  }, [signedIn]);
+  return pip;
+}
+
 /** HypeMeet as a Discord Activity: straight into the voice channel's room, as your Discord self. */
 export function DiscordActivity() {
   const [phase, setPhase] = useState<Phase>({ step: "loading" });
@@ -70,6 +85,7 @@ export function DiscordActivity() {
 
   useEffect(join, [join]);
 
+  const discordPip = useDiscordPip(phase.step === "live");
   const openOutside = (url: string) => void sdk.commands.openExternalLink({ url }).catch(() => undefined);
 
   if (phase.step === "loading") {
@@ -115,6 +131,7 @@ export function DiscordActivity() {
         await sdk.commands.openExternalLink({ url: withCamera ? `${url}&cam=1` : url });
       }}
       youTubeStream={(videoId) => api.youTubeStream(videoId, grant.token)}
+      discordPip={discordPip}
       connectErrorExtra={
         <div className="flex flex-col gap-3">
           <p className="text-sm text-soft">
