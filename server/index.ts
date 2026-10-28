@@ -1,6 +1,7 @@
 import { AccessToken, ParticipantInfo_State, RoomServiceClient, TokenVerifier, TrackSource } from "livekit-server-sdk";
 import { join } from "node:path";
 import { createDiscord } from "./discord";
+import { createPlugins } from "./plugins";
 import { createLinkPreviews, publicOrigin } from "./preview";
 import { NAME_MAX, openRoomStore, type Room } from "./rooms";
 
@@ -34,6 +35,7 @@ const CAST_FOR = "castFor";
 const rooms = openRoomStore(DB_PATH);
 const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: rooms.get });
 const discord = createDiscord();
+const plugins = createPlugins((process.env.PLUGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -205,6 +207,14 @@ Bun.serve({
         });
         const fragment = new URLSearchParams({ t: await token.toJwt(), ...(LIVEKIT_URL ? { u: LIVEKIT_URL } : {}) });
         return json({ url: `${PUBLIC_URL ?? publicOrigin(req)}/transmitir#${fragment}` });
+      },
+    },
+    // Plugins the room can open (sdk/hypemeet-plugin.ts).
+    "/api/plugins": {
+      async GET() {
+        const list = await plugins.list();
+        // None answered yet (still booting?): an error, so rooms ask again; no plugins at all is just [].
+        return list.length || !plugins.configured ? json(list) : error("Plugins indisponíveis", 503);
       },
     },
     "/api/*": () => error("Not found", 404),

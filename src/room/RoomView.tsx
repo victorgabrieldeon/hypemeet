@@ -1,5 +1,6 @@
 import { ConnectionState, Track, type Room } from "livekit-client";
 import {
+  Blocks,
   Check,
   Copy,
   Link2,
@@ -50,6 +51,7 @@ import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
 import { WatchPanel } from "./WatchPanel";
 import { WatchPlayer } from "./WatchPlayer";
 import { PreviewsProvider, type ScreenPreviews } from "./previews";
+import { PluginPanel, pluginTileId, PluginView, usePlugins, usersOf } from "./plugins";
 import { playCue, useRoomSounds } from "./sounds";
 
 function deviceError(err: unknown, what: string): string {
@@ -169,6 +171,24 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       return setToast({ text: "O YouTube não toca dentro do Discord. Pra assistir junto, abra a sala fora do Discord.", tone: "info" });
     setWatchSkipped(null);
     setPinnedId(WATCH_TILE_ID);
+  };
+  const plugins = usePlugins(room);
+  const activePlugins = plugins.sessions.filter((s) => usersOf(s).length > 0);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const pluginsRef = useRef<HTMLDivElement>(null);
+  useDismiss(pluginsRef, pluginsOpen, () => setPluginsOpen(false));
+  const openPlugin = (id: string) => {
+    plugins.open(id);
+    setPinnedId(pluginTileId(id));
+    setPluginsOpen(false);
+  };
+  const closePlugin = (id: string) => {
+    const session = plugins.sessions.find((s) => s.info.id === id);
+    // The last one out takes the plugin's state along (Drawspace's board lives only in open browsers).
+    if (session && usersOf(session).length <= 1 && !confirm(`Você é o último no ${session.info.name}: fechando, o que não foi salvo se perde. Fechar?`))
+      return;
+    plugins.close(id);
+    setPinnedId((pinned) => (pinned === pluginTileId(id) ? null : pinned));
   };
   const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
@@ -378,14 +398,34 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                 className={pinnedId === WATCH_TILE_ID ? "min-h-0 flex-1" : "hidden"}
               />
             )}
+            {plugins.sessions
+              .filter((s) => s.open)
+              .map((session) => (
+                <PluginView
+                  key={session.info.id}
+                  room={room}
+                  info={info}
+                  session={session}
+                  onMinimize={() => setPinnedId(null)}
+                  onClose={() => closePlugin(session.info.id)}
+                  onToast={(text, tone) => setToast({ text, tone })}
+                  className={pinnedId === pluginTileId(session.info.id) ? "min-h-0 flex-1" : "hidden"}
+                />
+              ))}
             <InkProvider room={room}>
               <PreviewsProvider previews={previews}>
                 <Stage
                   tiles={tiles}
                   watch={watch.party}
                   watchJoined={following}
+                  plugins={activePlugins}
                   pinnedId={pinnedId}
-                  onPin={(id) => (id === WATCH_TILE_ID && !following ? joinWatch() : setPinnedId(id))}
+                  onPin={(id) => {
+                    const plugin = activePlugins.find((p) => pluginTileId(p.info.id) === id);
+                    if (plugin && !plugin.open) return openPlugin(plugin.info.id);
+                    if (id === WATCH_TILE_ID && !following) return joinWatch();
+                    setPinnedId(id);
+                  }}
                 />
               </PreviewsProvider>
             </InkProvider>
@@ -553,6 +593,20 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                 onError={(text) => setToast({ text, tone: "error" })}
               />
             )}
+          </div>
+        )}
+        {plugins.sessions.length > 0 && (
+          <div ref={pluginsRef} className="contents">
+            <ControlButton
+              tone="plain"
+              on={pluginsOpen || plugins.sessions.some((s) => s.open)}
+              expanded={pluginsOpen}
+              onClick={() => setPluginsOpen(!pluginsOpen)}
+              label="Plugins"
+            >
+              <Blocks className="size-5" />
+            </ControlButton>
+            {pluginsOpen && <PluginPanel plugins={plugins} onOpen={openPlugin} onClose={closePlugin} />}
           </div>
         )}
         <ControlButton

@@ -1,5 +1,6 @@
 # Production stack (Dokploy). Env: LIVEKIT_DOMAIN, LIVEKIT_NODE_IP, LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
-# and for the Discord Activity: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, PUBLIC_URL (optional).
+# and for the Discord Activity: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, PUBLIC_URL (optional);
+# PLUGINS (optional): base URLs of plugins the rooms can open, comma-separated.
 # Domains (HTTPS via Traefik): app → port 3001, livekit → port 7880 (signaling over wss).
 # Media bypasses Traefik: 7881/tcp (ICE over TCP) and 7882/udp (UDP mux) must be open on the host.
 services:
@@ -13,6 +14,7 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      PLUGINS: ${PLUGINS:-}
     volumes:
       - hypemeet-data:/app/data
 

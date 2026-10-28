@@ -21,6 +21,15 @@ export interface PresentPerson {
   name: string;
 }
 
+/** A plugin the room can open (server/plugins.ts). */
+export interface PluginInfo {
+  id: string;
+  name: string;
+  description: string;
+  icon: string | null;
+  url: string;
+}
+
 /** Room code → people connected right now. Empty rooms are absent. */
 export type Presence = Record<string, PresentPerson[]>;
 
@@ -57,6 +66,7 @@ export const api = {
     request<JoinGrant>("/api/token", { method: "POST", body: JSON.stringify({ code, nickname }) }),
   /** A browser-transmitter link for whoever holds this room token (see room/cast.ts). */
   castLink: (token: string) => request<{ url: string }>("/api/cast", { method: "POST", body: JSON.stringify({ token }) }),
+  plugins: () => request<PluginInfo[]>("/api/plugins"),
   discordToken: (code: string) =>
     request<{ accessToken: string }>("/api/discord/token", { method: "POST", body: JSON.stringify({ code }) }),
   discordJoin: (body: { accessToken: string; channelId: string; channelName: string | null }) =>

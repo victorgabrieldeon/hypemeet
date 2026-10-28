@@ -46,6 +46,10 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
   cada um, na sala daquele canal. A tela e a câmera saem de um transmissor no navegador e aparecem como
   suas, e a tela cheia ocupa a atividade inteira (veja [Atividade do Discord](#atividade-do-discord)).
+- **Plugins** (botão de blocos na barra): apps de outros domínios que a sala abre junto, num iframe. Quem
+  abre vira um tile pra todo mundo; cada um entra se quiser. O plugin só enxerga quem está na sala e
+  conversa com as cópias dele nos outros navegadores por um tópico próprio do data channel (veja
+  [Plugins](#plugins)). Primeiro plugin: o [Drawspace](https://github.com/victorgabrieldeon/drawspace), quadro branco ao vivo.
 - **Prévia do convite**: colar `/r/ABCDEF` no WhatsApp/Discord/Telegram mostra um card com o nome da
   sala e quem está lá agora (`/r/:code/og.png`, gerado no servidor com satori + resvg). Só em produção,
   porque o servidor injeta as meta tags no `index.html`; a imagem dá pra ver no dev em
@@ -100,6 +104,7 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `PORT` | `3001` | |
 | `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite das salas |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Liga a [atividade do Discord](#atividade-do-discord). Sem elas, `/api/discord/*` responde 503 |
+| `PLUGINS` | — | Endereços dos [plugins](#plugins) que as salas podem abrir, separados por vírgula (ex. `https://draw.exemplo.com`) |
 | `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) |
 
 O `docker-compose.yml` usa `--dev` — **não** use em produção. Para produção rode o LiveKit com
@@ -120,6 +125,31 @@ LiveKit próprio:
 Variáveis do compose no Dokploy: `LIVEKIT_DOMAIN`, `LIVEKIT_NODE_IP` (IP público do servidor),
 `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres). As portas 7881/tcp e 7882/udp precisam
 estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio não chegam.
+
+## Plugins
+
+Um plugin é uma página web no próprio domínio. O servidor lista os de `PLUGINS` lendo o manifest de cada
+um em `<endereço>/hypemeet-plugin.json`:
+
+```json
+{ "id": "drawspace", "name": "Drawspace", "description": "…", "icon": "/icon.svg", "entry": "/" }
+```
+
+`entry` e `icon` precisam estar no mesmo domínio do plugin, e um plugin no mesmo domínio do HypeMeet é
+recusado (o sandbox do iframe não o seguraria). Na sala, o plugin roda num iframe e fala com a sala só por
+`postMessage`, pelo SDK em [`sdk/hypemeet-plugin.ts`](sdk/hypemeet-plugin.ts) (arquivo único, sem
+dependências: copie pro plugin):
+
+- **Quem está na sala** e quem está com o plugin aberto (e desde quando).
+- **Mensagens entre as cópias do plugin** nos navegadores da sala, no tópico `plugin:<id>` do data
+  channel: confiáveis (até 8 MB, por text stream) ou com perda (até 1,2 KB, pra cursor e afins). O plugin
+  não vê nem fala nos outros tópicos da sala.
+- **Avisos** (`toast`) na sala.
+
+Quem está com cada plugin aberto vai no atributo `plugins` do participante, então o tile aparece pra todo
+mundo enquanto alguém usa e não há nada pra passar adiante quando alguém sai. O estado do plugin é
+problema dele (o Drawspace, por exemplo, pede o quadro pra quem está há mais tempo). Plugins não aparecem
+na atividade do Discord, que só carrega domínios mapeados.
 
 ## Atividade do Discord
 
