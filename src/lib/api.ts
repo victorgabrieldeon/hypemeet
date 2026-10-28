@@ -67,6 +67,8 @@ export const api = {
   /** A browser-transmitter link for whoever holds this room token (see room/cast.ts). */
   castLink: (token: string) => request<{ url: string }>("/api/cast", { method: "POST", body: JSON.stringify({ token }) }),
   plugins: () => request<PluginInfo[]>("/api/plugins"),
+  /** A YouTube video relayed by the server (server/youtube.ts), for a <video> in the Discord Activity. */
+  youTubeStream: (videoId: string, token: string) => `/api/youtube/${videoId}?t=${encodeURIComponent(token)}`,
   discordToken: (code: string) =>
     request<{ accessToken: string }>("/api/discord/token", { method: "POST", body: JSON.stringify({ code }) }),
   discordJoin: (body: { accessToken: string; channelId: string; channelName: string | null }) =>

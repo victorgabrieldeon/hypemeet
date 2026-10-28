@@ -32,6 +32,28 @@ const ID = /^[a-z0-9-]{1,32}$/;
 const LIST_RETRY_MS = 30_000;
 
 export const pluginTileId = (id: string) => `plugin:${id}`;
+
+/**
+ * Discord's CSP only lets the Activity load its own proxy, so there a plugin goes through the URL mapping
+ * `/plugins/<id>` → its host. shortcut: only plugins at their host's root; one under a path fails the check
+ * in `reachable` and stays out of the Activity.
+ */
+const proxied = (url: string, id: string) => {
+  const { pathname, search } = new URL(url);
+  return `${location.origin}/plugins/${id}${pathname}${search}`;
+};
+
+/** Mapped: its manifest answers through the proxy. Unmapped, the path falls to the room's own site. */
+async function reachable(info: PluginInfo): Promise<PluginInfo | null> {
+  try {
+    const res = await fetch(`${location.origin}/plugins/${info.id}/hypemeet-plugin.json`);
+    if ((((await res.json()) as { id?: unknown }).id) !== info.id) return null;
+  } catch {
+    return null;
+  }
+  return { ...info, url: proxied(info.url, info.id), icon: info.icon && proxied(info.icon, info.id) };
+}
+
 const topicOf = (id: string) => `plugin:${id}`;
 
 const encoder = new TextEncoder();
@@ -68,14 +90,16 @@ export interface Plugins {
 export function usePlugins(room: Room): Plugins {
   const [available, setAvailable] = useState<PluginInfo[]>([]);
   useEffect(() => {
-    // shortcut: Discord's CSP only lets the Activity load URL-mapped origins; plugins stay out of it until they get mappings.
-    if (inDiscord) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
     const load = () =>
       api.plugins().then(
-        // Same origin as the room, the sandbox (allow-scripts + allow-same-origin) wouldn't hold it.
-        (list) => !cancelled && setAvailable(list.filter((p) => new URL(p.url).origin !== location.origin)),
+        async (list) => {
+          // Same origin as the room, the sandbox (allow-scripts + allow-same-origin) wouldn't hold it.
+          list = list.filter((p) => new URL(p.url).origin !== location.origin);
+          if (inDiscord) list = (await Promise.all(list.map(reachable))).filter((p) => p !== null);
+          if (!cancelled) setAvailable(list);
+        },
         () => {
           if (!cancelled) timer = setTimeout(load, LIST_RETRY_MS);
         },
@@ -139,7 +163,12 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const plugin = session.info;
-  const origin = new URL(plugin.url).origin;
+  // Through Discord's proxy it would share the room's origin: it runs as an opaque one instead ("null"),
+  // without allow-same-origin. Posting to "*" is fine there: the Activity's CSP only lets the frame
+  // navigate within its own proxy.
+  const opaque = new URL(plugin.url).origin === location.origin;
+  const origin = opaque ? "null" : new URL(plugin.url).origin;
+  const target = opaque ? "*" : origin;
   const topic = topicOf(plugin.id);
   const ready = useRef(false);
   const latest = useRef({ session, onToast });
@@ -147,8 +176,8 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
 
   const post = useCallback(
     (msg: HostMessage) =>
-      frame.current?.contentWindow?.postMessage({ ...msg, hypemeet: PROTOCOL } satisfies Envelope<HostMessage>, origin),
-    [origin],
+      frame.current?.contentWindow?.postMessage({ ...msg, hypemeet: PROTOCOL } satisfies Envelope<HostMessage>, target),
+    [target],
   );
 
   const people = JSON.stringify(session.people);
@@ -252,7 +281,7 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
         src={plugin.url}
         title={plugin.name}
         // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+        sandbox={`allow-scripts ${opaque ? "" : "allow-same-origin "}allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads`}
         allow="clipboard-read; clipboard-write"
         className="min-h-0 w-full flex-1 border-0 bg-white"
       />

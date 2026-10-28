@@ -1,6 +1,7 @@
-import { EyeOff, FileVideo, Maximize, Minimize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
+import { ExternalLink, EyeOff, FileVideo, Maximize, Minimize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { buttonClass, Spinner } from "../components/ui";
+import { inDiscord } from "../lib/discord";
 import { loadDevice } from "./devices";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { positionAt, type WatchAction, type WatchControls, type WatchParty, type WatchSource, type WatchState } from "./watch";
@@ -188,12 +189,13 @@ function YouTubeMedia({ videoId, ...callbacks }: YouTubeMediaProps) {
   return <div ref={box} className="absolute inset-0 [&>iframe]:size-full" />;
 }
 
-function FileMedia({
-  file,
+/** A <video> of the viewer's own file, or of a URL (YouTube relayed by the server). */
+function VideoMedia({
+  source,
   onMedia,
   onError,
 }: {
-  file: File;
+  source: File | string;
   onMedia: (media: MediaHandle | null) => void;
   onError: (text: string) => void;
 }) {
@@ -202,16 +204,16 @@ function FileMedia({
 
   useEffect(() => {
     const video = ref.current!;
-    const url = URL.createObjectURL(file);
+    const url = typeof source === "string" ? source : URL.createObjectURL(source);
     video.src = url;
     onMedia(videoHandle(video));
     return () => {
       onMedia(null);
       video.removeAttribute("src");
       video.load();
-      URL.revokeObjectURL(url);
+      if (typeof source !== "string") URL.revokeObjectURL(url);
     };
-  }, [file, onMedia]);
+  }, [source, onMedia]);
 
   // Same speaker as the call (picked in the mic menu).
   useEffect(() => {
@@ -227,7 +229,8 @@ function FileMedia({
       className="absolute inset-0 size-full object-contain"
       onError={(e) => {
         const code = e.currentTarget.error?.code;
-        if (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || code === MediaError.MEDIA_ERR_DECODE)
+        if (typeof source === "string") onError("O servidor não conseguiu trazer esse vídeo do YouTube. Lives não tocam aqui.");
+        else if (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || code === MediaError.MEDIA_ERR_DECODE)
           onError("Esse formato não toca no navegador. MP4 (H.264/AAC) e WebM funcionam em todo lugar.");
         else if (code) onError("Não deu pra ler esse arquivo.");
       }}
@@ -437,6 +440,10 @@ interface WatchPlayerProps {
   /** This viewer's copy of the file, for file sources. */
   file: File | null;
   onPickFile: (file: File) => void;
+  /** Where YouTube's player can't load (the Discord Activity): the server's relay, played with our controls. */
+  youTubeStream?: (videoId: string) => string;
+  /** When the relay fails: the browser transmitter, which sends a YouTube tab instead. */
+  onCastTab?: () => void;
   onMinimize: () => void;
   /** Stop following the session, just for this viewer. */
   onLeave: () => void;
@@ -453,6 +460,8 @@ export function WatchPlayer({
   watch,
   file,
   onPickFile,
+  youTubeStream,
+  onCastTab,
   onMinimize,
   onLeave,
   onError,
@@ -460,7 +469,9 @@ export function WatchPlayer({
 }: WatchPlayerProps) {
   const { state } = party;
   const { source } = state;
-  const isYouTube = source.kind === "youtube";
+  const relayed = source.kind === "youtube" && youTubeStream ? youTubeStream(source.videoId) : null;
+  // YouTube's own player and controls; a relayed video or a file gets ours.
+  const isYouTube = source.kind === "youtube" && !relayed;
   const ref = useRef<HTMLDivElement>(null);
   const [media, setMedia] = useState<MediaHandle | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -627,13 +638,20 @@ export function WatchPlayer({
     overlay = (
       <Overlay>
         <p className="type-link">{failure}</p>
-        <FilePicker
-          label="Escolher outro arquivo"
-          onPick={(picked) => {
-            setFailure(null);
-            onPickFile(picked);
-          }}
-        />
+        {relayed && onCastTab && (
+          <button onClick={onCastTab} className={`${buttonClass({ variant: "primary" })} type-link-sm mt-1 h-11`}>
+            <ExternalLink className="size-4" /> Transmitir pelo navegador
+          </button>
+        )}
+        {source.kind === "file" && (
+          <FilePicker
+            label="Escolher outro arquivo"
+            onPick={(picked) => {
+              setFailure(null);
+              onPickFile(picked);
+            }}
+          />
+        )}
       </Overlay>
     );
   } else if (sync.blocked) {
@@ -674,7 +692,7 @@ export function WatchPlayer({
       }}
       className={`group relative animate-pop overflow-hidden rounded-lg bg-black focus-visible:outline-offset-0 ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}
     >
-      {file && <FileMedia file={file} onMedia={setMedia} onError={setFailure} />}
+      {(relayed ?? file) && <VideoMedia source={relayed ?? file!} onMedia={setMedia} onError={setFailure} />}
 
       {/* Clicks on the video go through the shared controls. */}
       <div
@@ -789,7 +807,8 @@ export function WatchTile({
   const live = source.kind === "youtube" && source.live;
   return (
     <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black">
-      {source.kind === "youtube" ? (
+      {/* Discord's CSP blocks YouTube's thumbnails too. */}
+      {source.kind === "youtube" && !inDiscord ? (
         <img src={youTubeThumbnail(source.videoId)} alt="" className="size-full object-cover opacity-45" />
       ) : (
         <div className="size-full bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]" />

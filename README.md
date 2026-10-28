@@ -106,6 +106,8 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Liga a [atividade do Discord](#atividade-do-discord). Sem elas, `/api/discord/*` responde 503 |
 | `PLUGINS` | — | Endereços dos [plugins](#plugins) que as salas podem abrir, separados por vírgula (ex. `https://draw.exemplo.com`) |
 | `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) |
+| `YTDLP_COOKIES` | — | `cookies.txt` de uma conta do YouTube pro [YouTube no Discord](#atividade-do-discord) (ex. `/app/data/youtube-cookies.txt`). O yt-dlp reescreve o arquivo: tem que dar pra gravar |
+| `YTDLP_PATH` | `yt-dlp` | Onde está o yt-dlp (a imagem Docker já traz, junto com o deno) |
 
 O `docker-compose.yml` usa `--dev` — **não** use em produção. Para produção rode o LiveKit com
 config própria (chaves fortes, TLS, portas UDP liberadas) ou use LiveKit Cloud.
@@ -148,8 +150,19 @@ dependências: copie pro plugin):
 
 Quem está com cada plugin aberto vai no atributo `plugins` do participante, então o tile aparece pra todo
 mundo enquanto alguém usa e não há nada pra passar adiante quando alguém sai. O estado do plugin é
-problema dele (o Drawspace, por exemplo, pede o quadro pra quem está há mais tempo). Plugins não aparecem
-na atividade do Discord, que só carrega domínios mapeados.
+problema dele (o Drawspace, por exemplo, pede o quadro pra quem está há mais tempo).
+
+**Na atividade do Discord** o plugin só aparece com um URL mapping `/plugins/<id>` → domínio dele (veja
+[Configurar o app no Discord](#configurar-o-app-no-discord)): a CSP do Discord só deixa carregar o próprio
+proxy. Lá ele divide o endereço com a sala, então roda sem `allow-same-origin` (origem opaca, `null`):
+sem `localStorage` nem cookies, e tudo o que ele carrega vira pedido CORS. Pra funcionar ali, o plugin
+precisa:
+
+- estar na raiz do domínio dele (a sala confere `/plugins/<id>/hypemeet-plugin.json`; sem resposta, fica
+  fora da atividade);
+- usar caminhos relativos (`base: "./"` no Vite): sob o proxy ele mora em `/plugins/<id>/`;
+- responder `Access-Control-Allow-Origin: *` e, se usar `frame-ancestors`, aceitar
+  `https://*.discordsays.com https://discord.com https://*.discord.com`.
 
 ## Atividade do Discord
 
@@ -168,13 +181,17 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
 - **Câmera**: o Discord também não libera a câmera pra atividades, então o botão de câmera abre o mesmo
   transmissor, que já liga a câmera (a escolhida da última vez nesse navegador). Ela aparece no seu quadro
   da sala; o botão da atividade desliga.
-- **YouTube**: o Discord barra o player do YouTube dentro de atividades (só o Watch Together dele pode).
-  No **Assistir junto** da atividade, **Transmitir YouTube pelo navegador** abre o transmissor: cole o
-  link em **Vídeo do YouTube**, escolha **esta aba** no seletor com o áudio ligado, e o vídeo toca ali e
-  entra na sala como sua tela, com som. Play, pausa e volume ficam no player do transmissor. No Chrome/Edge
-  só o player vai (Region Capture); no Firefox vai a janela inteira, sem som. Se alguém de fora
-  começar um YouTube no assistir junto, quem está no Discord vê o tile mas não acompanha. Vídeo do
-  computador funciona normal.
+- **YouTube**: o Discord barra o player do YouTube dentro de atividades (só o Watch Together dele pode),
+  então ali o **servidor repassa o vídeo**: o assistir junto funciona igual (colar o link, play e pausa
+  pra todo mundo, entrar numa sessão começada fora), mas num player nosso, em geral em 360p e **sem
+  lives**. O YouTube costuma barrar servidores ("confirme que não é um robô", 429): sem
+  `YTDLP_COOKIES` (cookies de uma conta, de preferência uma descartável) pode falhar bastante. Quando falha,
+  ou pra live, **Transmitir pelo navegador** (no player e no painel) abre o transmissor: cole o link em
+  **Vídeo do YouTube**, escolha **esta aba** no seletor com o áudio ligado, e o vídeo entra na sala como sua
+  tela, com som. No Chrome/Edge só o player vai (Region Capture); no Firefox vai a janela inteira, sem som.
+  Vídeo do computador funciona normal.
+- **Plugins** (o Drawspace, por exemplo): aparecem quando têm o URL mapping `/plugins/<id>` (veja
+  [Plugins](#plugins)).
 - **Tela cheia**: o iframe do Discord não libera a tela cheia do navegador, então lá o botão "Tela cheia"
   do tile faz a tela ocupar a atividade inteira (Esc sai). Junto com a tela cheia do próprio Discord
   (canto inferior direito da chamada, ou ↗ pra abrir em janela), cobre a tela toda.
@@ -194,9 +211,11 @@ Tudo em https://discord.com/developers/applications → seu app:
    | Prefixo | Destino |
    | --- | --- |
    | `/livekit` | `livekit.exemplo.com` |
+   | `/plugins/drawspace` | `draw.exemplo.com` |
    | `/` | `meet.exemplo.com` |
 
-   O destino vai **sem** `https://`. O `/` é o site; o `/livekit` é a sinalização do LiveKit.
+   O destino vai **sem** `https://`. O `/` é o site; o `/livekit` é a sinalização do LiveKit; cada
+   [plugin](#plugins) ganha um `/plugins/<id>` (o `id` do manifest) apontando pro domínio dele.
 4. **Installation**:
    - **Installation Contexts**: marque **User Install** (usar em qualquer lugar) e/ou **Guild Install**
      (adicionar a servidores).
@@ -248,6 +267,9 @@ Configurações → **Aplicativos autorizados** → HypeMeet → **Desautorizar*
 5. No portal, troque o mapping `/` pelo endereço do túnel, sem `https://`. O `/livekit` não é usado no
    dev: o Vite já repassa `/rtc` pro LiveKit local.
 6. Abra a atividade no Discord. Mudanças no front chegam com o recarregar da atividade.
+7. YouTube: precisa do [yt-dlp](https://github.com/yt-dlp/yt-dlp) no `PATH` (e do deno, ou ele usa o Bun).
+   Plugins: o Vite do plugin não serve sob `/plugins/<id>/`, então rode o build dele (`bun run build &&
+   bun run start` no Drawspace) e aponte o mapping `/plugins/<id>` pra outro túnel até ele.
 
 O endereço do túnel muda toda vez que ele reinicia. Ao terminar, volte o mapping `/` pra produção:
 enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
@@ -281,9 +303,14 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
   liberado no iframe, o painel de tela vira o do transmissor em vez do seletor normal. Do mesmo jeito,
   sem `camera` (`cameraBlocked`), ou se o Discord negar a câmera na hora, o botão de câmera usa o
   transmissor.
-- **YouTube**: a CSP que o Discord põe nas atividades não tem `www.youtube.com` em `script-src` nem em
-  `frame-src` (só a do Watch Together tem), e um URL mapping não resolve: o player busca
-  `googlevideo.com` por fora do proxy. Por isso a atividade nem monta o player de uma sessão de YouTube.
+- **YouTube**: a CSP que o Discord põe nas atividades só deixa `frame-src` no próprio proxy (e num player
+  interno do Discord), e um URL mapping pro `youtube.com` não resolve: o proxy põe a mesma CSP na página
+  do YouTube. No Discord, o `WatchPlayer` toca um `<video>` de `/api/youtube/<id>?t=<token da sala>`
+  (`server/youtube.ts`), que só aceita token de quem entrou pela atividade (atributo `via: "discord"`,
+  assinado no token; sem isso, qualquer um usaria o servidor como proxy do YouTube): o yt-dlp acha um MP4 com vídeo e som juntos (itag 18), o servidor repassa os bytes
+  com Range e guarda o endereço até ele vencer. Um vídeo recusado fica recusado por 2 min, pra não chamar o
+  YouTube a cada pedido de Range. O yt-dlp usa o deno da imagem pros desafios de JS do YouTube; a imagem
+  pega o yt-dlp mais novo a cada build, então quando o YouTube quebrar algo, refaça o deploy.
   O transmissor toca o embed na própria página e captura a si mesmo (`startScreenShare` com `region`:
   `preferCurrentTab`, sem `restrictOwnAudio`, que tiraria o som do vídeo) recortado no player com
   `CropTarget`. O player fica sempre montado porque o alvo do recorte tem que existir quando o seletor
@@ -300,9 +327,9 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
 | Abre uma página em branco / do Cloudflare | O mapping `/` aponta pra um túnel que não está mais no ar |
 | "Esse link não vale mais" no transmissor | O link vale 15 min pra abrir: peça outro no botão de tela da atividade |
 | Transmissão sem o som do PC | No navegador, Linux e macOS só mandam som de uma aba; o som do sistema precisa do app desktop |
-
-**Ainda não funciona dentro da atividade**: o assistir junto do **YouTube**. O player é do
-`youtube.com`, bloqueado pela política de segurança das atividades; o vídeo do computador funciona.
+| "O servidor não conseguiu trazer esse vídeo do YouTube" | Live, vídeo bloqueado fora do YouTube, ou o YouTube barrou o servidor (o log mostra o erro do yt-dlp; "Sign in to confirm you're not a bot" pede `YTDLP_COOKIES`). Use **Transmitir pelo navegador** |
+| O plugin não aparece no botão de plugins da atividade | Falta o mapping `/plugins/<id>` (acima do `/`), ou o plugin não está na raiz do domínio dele |
+| A sala não conecta e o console fala de `RTCPeerConnection` | O proxy do Discord injeta `RTCPeerConnection = null` nas páginas das atividades (visto em 28/10/2026). Sem WebRTC não há LiveKit (nem o data channel que o Drawspace usa). Use **Abrir fora do Discord** |
 
 ## App desktop (Windows / macOS / Linux)
 

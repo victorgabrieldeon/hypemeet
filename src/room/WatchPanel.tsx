@@ -13,7 +13,7 @@ interface WatchPanelProps {
   onLeave: () => void;
   /** Called before the file is announced, so our own player already has it when the state arrives. */
   onFileChosen: (file: File) => void;
-  /** Where YouTube can't play (the Discord Activity): opens the browser transmitter to send a YouTube tab instead. */
+  /** In the Discord Activity, for what the server can't relay: opens the browser transmitter to send a YouTube tab instead. */
   onCastTab?: () => void;
   onDone: () => void;
   onError: (text: string) => void;
@@ -102,48 +102,40 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
 
       <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-3">
         <p className="type-label px-0.5 pt-1 text-soft">{party ? "Trocar vídeo" : "Escolher vídeo"}</p>
-        {onCastTab ? (
-          <>
-            <p className="px-0.5 text-sm text-soft">
-              O Discord não deixa tocar YouTube aqui dentro. O transmissor abre no navegador: cole o link lá e o
-              vídeo entra na sala como sua tela, com som.
-            </p>
-            <Button
-              variant="primary"
-              className="type-link-sm h-11"
-              onClick={() => {
-                onCastTab();
-                onDone();
-              }}
-            >
-              <ExternalLink className="size-4" /> Transmitir YouTube pelo navegador
-            </Button>
-          </>
-        ) : (
-          <>
-            <form onSubmit={submit} className="flex gap-2">
-              <input
-                autoFocus
-                className={`${inputClass} ${invalid ? "border-danger/70" : ""}`}
-                value={link}
-                onChange={(e) => {
-                  setLink(e.target.value);
-                  setInvalid(false);
-                }}
-                placeholder="Link do YouTube (vídeo ou live)"
-                aria-label="Link do YouTube"
-                aria-invalid={invalid}
-              />
-              <Button type="submit" variant="primary" square disabled={!link.trim() || pending !== null} aria-label="Assistir">
-                {pending === "link" ? <Spinner className="size-5" /> : <ArrowRight className="size-5" />}
-              </Button>
-            </form>
-            {invalid && (
-              <p role="alert" className="-mt-1 px-1 text-xs text-danger">
-                Isso não parece um link de vídeo do YouTube.
-              </p>
-            )}
-          </>
+        <form onSubmit={submit} className="flex gap-2">
+          <input
+            autoFocus
+            className={`${inputClass} ${invalid ? "border-danger/70" : ""}`}
+            value={link}
+            onChange={(e) => {
+              setLink(e.target.value);
+              setInvalid(false);
+            }}
+            placeholder="Link do YouTube (vídeo ou live)"
+            aria-label="Link do YouTube"
+            aria-invalid={invalid}
+          />
+          <Button type="submit" variant="primary" square disabled={!link.trim() || pending !== null} aria-label="Assistir">
+            {pending === "link" ? <Spinner className="size-5" /> : <ArrowRight className="size-5" />}
+          </Button>
+        </form>
+        {invalid && (
+          <p role="alert" className="-mt-1 px-1 text-xs text-danger">
+            Isso não parece um link de vídeo do YouTube.
+          </p>
+        )}
+        {onCastTab && (
+          // The server's relay into the Activity fails on lives, and whenever YouTube refuses the server.
+          <button
+            type="button"
+            onClick={() => {
+              onCastTab();
+              onDone();
+            }}
+            className="-mt-1 flex items-center gap-1.5 px-1 text-left text-xs text-soft transition hover:text-ink"
+          >
+            <ExternalLink className="size-3.5 shrink-0" /> Não tocou ou é live? Transmita pelo navegador
+          </button>
         )}
         <div className="flex items-center gap-3 text-xs text-soft">
           <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />

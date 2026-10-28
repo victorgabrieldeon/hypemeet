@@ -14,5 +14,11 @@ COPY server ./server
 # The link-preview card draws the logo from here.
 COPY public ./public
 COPY --from=build /app/dist ./dist
+# YouTube in the Discord Activity (server/youtube.ts). Latest on every build: YouTube changes often and old
+# yt-dlps stop working. shortcut: x86_64 only; on ARM use yt-dlp_linux_aarch64.
+ADD https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux /usr/local/bin/yt-dlp
+RUN chmod 755 /usr/local/bin/yt-dlp
+# Its JS runtime for YouTube's challenges (it doesn't support Bun 1.4).
+COPY --from=denoland/deno:bin /deno /usr/local/bin/deno
 EXPOSE 3001
 CMD ["bun", "server/index.ts"]

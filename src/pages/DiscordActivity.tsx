@@ -114,6 +114,7 @@ export function DiscordActivity() {
         const { url } = await api.castLink(grant.token);
         await sdk.commands.openExternalLink({ url: withCamera ? `${url}&cam=1` : url });
       }}
+      youTubeStream={(videoId) => api.youTubeStream(videoId, grant.token)}
       connectErrorExtra={
         <div className="flex flex-col gap-3">
           <p className="text-sm text-soft">

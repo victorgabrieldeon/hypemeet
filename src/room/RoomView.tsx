@@ -121,10 +121,12 @@ interface RoomViewProps {
   onInvite?: () => void;
   /** Where screens and the camera can't be captured (the Discord Activity): opens a browser transmitter for us. */
   onCast?: (withCamera: boolean) => Promise<void>;
+  /** Where YouTube's player can't load (the Discord Activity): the server's relay of a video. */
+  youTubeStream?: (videoId: string) => string;
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast }: RoomViewProps) {
+export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -152,23 +154,19 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const [watchFile, setWatchFile] = useState<{ file: File; key: string } | null>(null);
   const watchKey = watch.party ? sourceKey(watch.party.state.source) : null;
   const watchId = watch.party?.state.id;
-  // Discord's CSP keeps YouTube out of the Activity: there a YouTube session can't be followed.
-  const watchBlocked = inDiscord && watch.party?.state.source.kind === "youtube";
   // A session starting (here or by someone else) takes the stage; minimizing it is up to each viewer.
   useEffect(() => {
-    if (watchId && !watchBlocked) setPinnedId(WATCH_TILE_ID);
-  }, [watchId, watchBlocked]);
+    if (watchId) setPinnedId(WATCH_TILE_ID);
+  }, [watchId]);
   // The session this viewer chose not to follow: no player at all (nothing loads, nothing plays) until they rejoin.
   const [watchSkipped, setWatchSkipped] = useState<string | null>(null);
-  const following = !!watchId && watchSkipped !== watchId && !watchBlocked;
+  const following = !!watchId && watchSkipped !== watchId;
   const leaveWatch = () => {
     setWatchSkipped(watchId ?? null);
     setPinnedId((id) => (id === WATCH_TILE_ID ? null : id));
     setToast({ text: "Você parou de acompanhar. A sessão segue pros outros; pra voltar, é só abrir o tile.", tone: "info" });
   };
   const joinWatch = () => {
-    if (watchBlocked)
-      return setToast({ text: "O YouTube não toca dentro do Discord. Pra assistir junto, abra a sala fora do Discord.", tone: "info" });
     setWatchSkipped(null);
     setPinnedId(WATCH_TILE_ID);
   };
@@ -392,6 +390,8 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                 watch={watch}
                 file={watchFile?.key === watchKey ? watchFile.file : null}
                 onPickFile={(file) => setWatchFile({ file, key: watchKey })}
+                youTubeStream={youTubeStream}
+                onCastTab={inDiscord && onCast ? () => void startCast("screen") : undefined}
                 onMinimize={() => setPinnedId(null)}
                 onLeave={leaveWatch}
                 onError={(text) => setToast({ text, tone: "error" })}

@@ -4,6 +4,7 @@ import { createDiscord } from "./discord";
 import { createPlugins } from "./plugins";
 import { createLinkPreviews, publicOrigin } from "./preview";
 import { NAME_MAX, openRoomStore, type Room } from "./rooms";
+import { createYouTubeRelay } from "./youtube";
 
 const PRODUCTION = process.env.NODE_ENV === "production";
 const PORT = Number(process.env.PORT ?? 3001);
@@ -28,6 +29,9 @@ const PUBLIC_URL = process.env.PUBLIC_URL?.replace(/\/+$/, "") || null;
 
 const livekit = new RoomServiceClient(LIVEKIT_HOST, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 const verifier = new TokenVerifier(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+// Grant attribute of whoever came in through the Discord Activity. Signed into the token, so it can't be faked;
+// it's what lets them use the YouTube relay.
+const VIA = "via";
 // Participant attribute of a transmitter: a browser tab that only sends screens and a camera on behalf of someone
 // already in the room (the Discord Activity can't capture the screen or the camera). Mirrors src/room/cast.ts.
 const CAST_FOR = "castFor";
@@ -36,6 +40,7 @@ const rooms = openRoomStore(DB_PATH);
 const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: rooms.get });
 const discord = createDiscord();
 const plugins = createPlugins((process.env.PLUGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+const youtube = createYouTubeRelay();
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -173,7 +178,7 @@ Bun.serve({
         }
         const room = rooms.forDiscordChannel(channelId, cleanText(body?.channelName, NAME_MAX) || "Discord");
         const nickname = cleanText(user.name, 32) || "Discord";
-        const grant = await joinGrant(room, nickname, user.avatarUrl ? { avatar: user.avatarUrl } : undefined);
+        const grant = await joinGrant(room, nickname, { [VIA]: "discord", ...(user.avatarUrl ? { avatar: user.avatarUrl } : {}) });
         return json({ ...grant, webUrl: `${PUBLIC_URL ?? publicOrigin(req)}/r/${room.code}` });
       },
     },
@@ -215,6 +220,18 @@ Bun.serve({
         const list = await plugins.list();
         // None answered yet (still booting?): an error, so rooms ask again; no plugins at all is just [].
         return list.length || !plugins.configured ? json(list) : error("Plugins indisponíveis", 503);
+      },
+    },
+    // YouTube relayed for the Discord Activity (server/youtube.ts). Only for someone who came in through it
+    // (anyone gets a room token): `t` is their token, in the query because a <video> can't send headers.
+    "/api/youtube/:id": {
+      async GET(req) {
+        const t = new URL(req.url).searchParams.get("t");
+        const claims = t ? await verifier.verify(t).catch(() => null) : null;
+        if (!claims?.sub || !claims.video?.room || !rooms.get(claims.video.room) || claims.attributes?.[VIA] !== "discord")
+          return error("Entrada na sala inválida", 401);
+        if (!/^[\w-]{11}$/.test(req.params.id)) return error("Vídeo inválido", 400);
+        return youtube.stream(req.params.id, req);
       },
     },
     "/api/*": () => error("Not found", 404),
