@@ -15,6 +15,10 @@ services:
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       PLUGINS: ${PLUGINS:-}
+    # Public resolvers: a plugin's freshly created domain resolves right away, not after the host resolver's negative cache expires.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - hypemeet-data:/app/data
 
