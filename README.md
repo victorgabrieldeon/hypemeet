@@ -13,6 +13,12 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
   prioriza resolução). Trocar numa tela já no ar ajusta captura, encoder e bitrate sem reabrir o seletor.
 - **Escolher microfone, câmera e saída de áudio** nos chevrons dos botões; a escolha fica salva.
 - Fixar (duplo clique) e tela cheia por tile.
+- **Janela flutuante** (picture-in-picture): no tile da tela que você está assistindo, ou da câmera de
+  alguém, solta a imagem numa janelinha do navegador por cima dos outros apps, pra acompanhar a live
+  enquanto joga. Só a imagem vai pra lá: o som segue vindo da sala, com o volume que você escolheu. Fixar ou
+  reorganizar os tiles não fecha a janela; ela fecha sozinha quando a tela para, a câmera desliga ou você
+  para de assistir. Uma por vez (abrir em outro tile troca a imagem). Não aparece no Firefox, que não deixa
+  o site abrir a janela.
 - **Desenhar na tela de quem transmite**: lápis no tile da tela → caneta ou seta por cima da imagem,
   e um clique sem arrastar solta um "ping". Todo mundo que assiste aquela tela vê na hora (data channel
   do LiveKit, tópico `ink`), cada pessoa com sua cor. Os traços somem sozinhos uns segundos depois,
