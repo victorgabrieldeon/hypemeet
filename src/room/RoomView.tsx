@@ -112,6 +112,8 @@ function ControlButton({
 
 interface RoomViewProps {
   room: Room;
+  /** Our room token (LiveKit's), for what's opened on our behalf: a built-in plugin's pass. */
+  token: string;
   chat: RoomChat;
   previews: ScreenPreviews;
   info: RoomInfo;
@@ -130,7 +132,7 @@ interface RoomViewProps {
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
+export function RoomView({ room, token, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -418,6 +420,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                   key={session.info.id}
                   room={room}
                   info={info}
+                  token={token}
                   session={session}
                   onMinimize={() => setPinnedId(null)}
                   onClose={() => closePlugin(session.info.id)}

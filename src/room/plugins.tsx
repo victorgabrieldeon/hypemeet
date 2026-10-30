@@ -11,12 +11,13 @@ import {
   type PluginMessage,
   type PluginPerson,
 } from "../../sdk/hypemeet-plugin";
-import { Avatar } from "../components/ui";
+import { Avatar, Spinner } from "../components/ui";
 import { api, type PluginInfo, type RoomInfo } from "../lib/api";
 import { inDiscord } from "../lib/discord";
 import { isTransmitter, remotePeople } from "./cast";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
 import { discordAvatar } from "./model";
+import { PLUGIN_FRAME_ALLOW, pluginSandbox, usablePlugins } from "./pluginFrame";
 
 /**
  * Plugins (sdk/hypemeet-plugin.ts): pages on their own origin, embedded in an iframe and bridged to
@@ -95,9 +96,7 @@ export function usePlugins(room: Room): Plugins {
     const load = () =>
       api.plugins().then(
         async (list) => {
-          // Same origin as the room, the sandbox (allow-scripts + allow-same-origin) wouldn't hold it.
-          list = list.filter((p) => new URL(p.url).origin !== location.origin);
-          if (inDiscord) list = (await Promise.all(list.map(reachable))).filter((p) => p !== null);
+          list = await usablePlugins(list, location.origin, inDiscord, reachable);
           if (!cancelled) setAvailable(list);
         },
         () => {
@@ -151,6 +150,8 @@ export const usersOf = (session: PluginSession) => session.people.filter((p) => 
 interface PluginViewProps {
   room: Room;
   info: RoomInfo;
+  /** Our room token: what a built-in plugin's pass is asked with. */
+  token: string;
   session: PluginSession;
   onMinimize: () => void;
   onClose: () => void;
@@ -159,13 +160,14 @@ interface PluginViewProps {
 }
 
 /** A plugin's page and its bridge to the room. Lives outside the stage so pinning never reloads it. */
-export function PluginView({ room, info, session, onMinimize, onClose, onToast, className = "" }: PluginViewProps) {
+export function PluginView({ room, info, token, session, onMinimize, onClose, onToast, className = "" }: PluginViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const plugin = session.info;
-  // Through Discord's proxy it would share the room's origin: it runs as an opaque one instead ("null"),
-  // without allow-same-origin. Posting to "*" is fine there: the Activity's CSP only lets the frame
-  // navigate within its own proxy.
+  const src = useFrameSrc(plugin, token);
+  // Built in, or through Discord's proxy, it would share the room's origin: it runs as an opaque one instead
+  // ("null"), without allow-same-origin. Posting to "*" is fine there: a built-in one is ours, and the Activity's
+  // CSP only lets the frame navigate within its own proxy.
   const opaque = new URL(plugin.url).origin === location.origin;
   const origin = opaque ? "null" : new URL(plugin.url).origin;
   const target = opaque ? "*" : origin;
@@ -276,17 +278,47 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
           <FullscreenIcon className="size-4" />
         </button>
       </div>
-      <iframe
-        ref={frame}
-        src={plugin.url}
-        title={plugin.name}
-        // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
-        sandbox={`allow-scripts ${opaque ? "" : "allow-same-origin "}allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads`}
-        allow="clipboard-read; clipboard-write"
-        className="min-h-0 w-full flex-1 border-0 bg-white"
-      />
+      {src.url ? (
+        <iframe
+          ref={frame}
+          src={src.url}
+          title={plugin.name}
+          // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
+          sandbox={pluginSandbox(opaque)}
+          allow={PLUGIN_FRAME_ALLOW}
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+        />
+      ) : (
+        <div className="grid min-h-0 flex-1 place-items-center bg-canvas p-4 text-center text-sm text-soft">
+          {src.error ? (
+            <p className="text-danger">{src.error}</p>
+          ) : (
+            <span className="flex items-center gap-3">
+              <Spinner className="size-5" /> Abrindo…
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** The page to load: an external plugin's own; a built-in one's address with a pass, asked for first. */
+function useFrameSrc(plugin: PluginInfo, token: string): { url: string | null; error: string | null } {
+  const [opened, setOpened] = useState<{ url: string | null; error: string | null }>({ url: null, error: null });
+  useEffect(() => {
+    if (!plugin.builtin) return;
+    let cancelled = false;
+    setOpened({ url: null, error: null });
+    api.pluginOpen(plugin.id, token).then(
+      ({ url }) => !cancelled && setOpened({ url: new URL(url, location.origin).href, error: null }),
+      (err: Error) => !cancelled && setOpened({ url: null, error: err.message }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [plugin.builtin, plugin.id, token]);
+  return plugin.builtin ? opened : { url: plugin.url, error: null };
 }
 
 export function PluginIcon({ info, className = "size-5" }: { info: PluginInfo; className?: string }) {

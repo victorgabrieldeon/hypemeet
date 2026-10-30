@@ -114,6 +114,7 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) |
 | `YTDLP_COOKIES` | — | `cookies.txt` de uma conta do YouTube pro [YouTube no Discord](#atividade-do-discord) (ex. `/app/data/youtube-cookies.txt`). O yt-dlp reescreve o arquivo: tem que dar pra gravar |
 | `YTDLP_PATH` | `yt-dlp` | Onde está o yt-dlp (a imagem Docker já traz, junto com o deno) |
+| `BT3_PLUGIN` | ligado | `0` tira o plugin embutido [Budokai Tenkaichi 3](#budokai-tenkaichi-3-embutido) da lista (e todas as rotas dele respondem 404) |
 
 O `docker-compose.yml` usa `--dev` — **não** use em produção. Para produção rode o LiveKit com
 config própria (chaves fortes, TLS, portas UDP liberadas) ou use LiveKit Cloud.
@@ -129,6 +130,7 @@ LiveKit próprio:
 | --- | --- | --- |
 | `app` | `meet.exemplo.com` → 3001 | — |
 | `livekit` | `livekit.exemplo.com` → 7880 (sinalização `wss://`) | 7881/tcp e 7882/udp (mídia) |
+| `bt3-builder` | — (só o volume) | — |
 
 Variáveis do compose no Dokploy: `LIVEKIT_DOMAIN`, `LIVEKIT_NODE_IP` (IP público do servidor),
 `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres). As portas 7881/tcp e 7882/udp precisam
@@ -169,6 +171,40 @@ precisa:
 - usar caminhos relativos (`base: "./"` no Vite): sob o proxy ele mora em `/plugins/<id>/`;
 - responder `Access-Control-Allow-Origin: *` e, se usar `frame-ancestors`, aceitar
   `https://*.discordsays.com https://discord.com https://*.discord.com`.
+
+### Budokai Tenkaichi 3 (embutido)
+
+Dragon Ball Z: Budokai Tenkaichi 3 no navegador, com os amigos da sala: o port web do
+[Tenkaichi3Decomp](https://github.com/stufno102/Tenkaichi3Decomp) (fork do stufno102, commit `81507cde`),
+compilado no próprio servidor a partir da ISO do dono. Aparece no painel de Plugins como os outros, sem
+subdomínio, sem `PLUGINS` e sem URL mapping novo no Discord (o mapping `/` já cobre `/plugins/bt3/`).
+Desenho completo: [`docs/superpowers/specs/2026-10-29-plugin-bt3-design.md`](docs/superpowers/specs/2026-10-29-plugin-bt3-design.md).
+
+> **Só para servidor privado.** O jogo é compilado a partir do jogo de verdade: use só com amigos que têm,
+> cada um, a própria cópia do jogo. O HypeMeet não tem contas: o acesso ao plugin exige estar numa sala, o
+> que protege de quem não entra nas salas, não de quem entra. Não deixe o servidor aberto ao público com o
+> plugin ligado.
+
+- **Primeira vez:** quem abrir o plugin envia a ISO (só a americana, SLUS-21678; uma vez para o servidor
+  todo). O envio vai em pedaços de 32 MB e retoma se cair. O serviço `bt3-builder` confere a ISO, extrai os
+  dados e compila o jogo (alguns minutos, 2 CPUs no máximo); quem abrir o plugin no meio-tempo vê o passo
+  atual. Depois disso, abrir o plugin carrega o jogo direto, com tudo desbloqueado.
+- **Jogar:** online em "Dragon Net Battle" (criar sala dá um código de 4 letras; o outro entra com ele, ou
+  Quick Match), ou local (contra a CPU, dois no mesmo PC). Clique no jogo para dar foco: as teclas vão para
+  ele (F1 abre as configurações do jogo) e os atalhos da sala não disparam.
+- **Arquivos:** tudo fica no volume, em `/app/data/bt3/` (`disc.iso`, `work/` com o que a compilação gera,
+  `build/` com o jogo, `build.log`). Nada disso vai para o git nem para imagem nenhuma; só a lista fixa de
+  arquivos do jogo e os pedaços da ISO são servidos, e só para quem tem o passe de uma sala.
+- **Isolamento:** a página e o jogo rodam sempre em origem opaca (sandbox no iframe e no cabeçalho CSP), sem
+  acesso ao `localStorage` ou à sessão do HypeMeet. Por isso saves e configurações do jogo não ficam
+  guardados entre sessões.
+- **Por dentro:** `server/bt3/` (passe de acesso, rotas, envio, salas do online em memória),
+  `plugins/bt3/page/` (a página do plugin) e `plugins/bt3/builder/` (a imagem e o laço do compilador; o
+  `patch.ts` troca os caminhos absolutos do jogo por relativos e falha alto se o fork mudar).
+- **Refazer do zero:** pare o `bt3-builder` e apague `/app/data/bt3/` no volume.
+- **Local:** no `bun run dev` o plugin já aparece e guarda tudo em `data/bt3/`. Para compilar, suba o builder
+  apontando para a mesma pasta: `docker build -t hypemeet-bt3-builder plugins/bt3/builder` e
+  `docker run --rm -v "$PWD/data:/app/data" hypemeet-bt3-builder`.
 
 ## Atividade do Discord
 

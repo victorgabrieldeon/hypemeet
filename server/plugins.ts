@@ -10,6 +10,8 @@ export interface PluginInfo {
   icon: string | null;
   /** Page the room embeds. */
   url: string;
+  /** Served by HypeMeet itself (server/bt3/): its url is on the site's own origin, and opening it takes a pass. */
+  builtin?: true;
 }
 
 const MANIFEST = "hypemeet-plugin.json";

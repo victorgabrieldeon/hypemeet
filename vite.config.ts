@@ -15,6 +15,8 @@ export default defineConfig({
     allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": "http://localhost:3001",
+      // Built-in plugins (server/bt3/), with their WebSockets.
+      "/plugins": { target: "http://localhost:3001", ws: true },
       // LiveKit signaling rides the page's own origin (ws:// or wss://), so it works from any device
       // without mixed-content errors or exposing port 7880. Media still flows over UDP 7882.
       "/rtc": { target: "http://localhost:7880", ws: true },

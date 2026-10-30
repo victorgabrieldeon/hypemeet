@@ -1,5 +1,7 @@
 import { AccessToken, ParticipantInfo_State, RoomServiceClient, TokenVerifier, TrackSource } from "livekit-server-sdk";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createPasses, passForToken } from "./bt3/pass";
+import { BT3_ID, createBt3 } from "./bt3/routes";
 import { createDiscord } from "./discord";
 import { createPlugins } from "./plugins";
 import { createLinkPreviews, publicOrigin } from "./preview";
@@ -41,6 +43,14 @@ const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: room
 const discord = createDiscord();
 const plugins = createPlugins((process.env.PLUGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 const youtube = createYouTubeRelay();
+// Budokai Tenkaichi 3, built in (server/bt3/). On unless BT3_PLUGIN=0.
+const bt3Passes = createPasses(LIVEKIT_API_SECRET);
+const bt3 = createBt3({
+  enabled: process.env.BT3_PLUGIN !== "0",
+  dir: join(dirname(DB_PATH), "bt3"),
+  pageDir: join(import.meta.dir, "..", "plugins", "bt3", "page"),
+  passes: bt3Passes,
+});
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -219,7 +229,18 @@ Bun.serve({
       async GET() {
         const list = await plugins.list();
         // None answered yet (still booting?): an error, so rooms ask again; no plugins at all is just [].
-        return list.length || !plugins.configured ? json(list) : error("Plugins indisponíveis", 503);
+        if (!list.length && plugins.configured) return error("Plugins indisponíveis", 503);
+        return json(bt3.enabled ? [...list, bt3.info] : list);
+      },
+    },
+    // Opening the built-in one: its address with a pass (server/bt3/pass.ts), for whoever holds a room token.
+    "/api/plugins/:id/open": {
+      async POST(req) {
+        if (req.params.id !== BT3_ID || !bt3.enabled) return error("Plugin não encontrado", 404);
+        const body = await readJson(req);
+        const pass = await passForToken(body?.token, { verify: (t) => verifier.verify(t), roomExists: (c) => !!rooms.get(c), passes: bt3Passes });
+        if (!pass) return error("Entrada na sala inválida", 401);
+        return json({ url: `/plugins/${BT3_ID}/p/${pass}/` });
       },
     },
     // YouTube relayed for the Discord Activity (server/youtube.ts). Only for someone who came in through it
@@ -235,6 +256,7 @@ Bun.serve({
       },
     },
     "/api/*": () => error("Not found", 404),
+    "/plugins/bt3/*": (req, server) => bt3.handle(req, server),
     // Link previews (Open Graph). The images also work in dev, straight from this port.
     "/og.png": () => previews.homeImage(),
     "/r/:code/og.png": (req) => previews.roomImage(req.params.code),
@@ -244,6 +266,7 @@ Bun.serve({
     if (!PRODUCTION) return error("Not found", 404);
     return serveStatic(req);
   },
+  websocket: bt3.websocket,
 });
 
 console.log(`hypemeet api on http://localhost:${PORT} (livekit: ${LIVEKIT_URL ?? "same origin via /rtc proxy"})`);

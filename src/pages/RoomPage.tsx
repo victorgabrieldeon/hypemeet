@@ -269,7 +269,7 @@ export function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} youTubeStream={youTubeStream} discordPip={discordPip} />
+      <RoomView room={session.room} token={grant.token} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} youTubeStream={youTubeStream} discordPip={discordPip} />
     </VolumeProvider>
   );
 }
