@@ -2,6 +2,7 @@
 # and for the Discord Activity: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, PUBLIC_URL (optional);
 # PLUGINS (optional): base URLs of plugins the rooms can open, comma-separated.
 # YTDLP_COOKIES (optional): a YouTube cookies.txt for the Activity's YouTube relay, e.g. /app/data/youtube-cookies.txt.
+# BT3_PLUGIN (optional): 0 takes the built-in Budokai Tenkaichi 3 plugin out (and bt3-builder can be left stopped).
 # Domains (HTTPS via Traefik): app → port 3001, livekit → port 7880 (signaling over wss).
 # Media bypasses Traefik: 7881/tcp (ICE over TCP) and 7882/udp (UDP mux) must be open on the host.
 services:
@@ -17,10 +18,20 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-}
       PLUGINS: ${PLUGINS:-}
       YTDLP_COOKIES: ${YTDLP_COOKIES:-}
+      BT3_PLUGIN: ${BT3_PLUGIN:-1}
     # Public resolvers: a plugin's freshly created domain resolves right away, not after the host resolver's negative cache expires.
     dns:
       - 1.1.1.1
       - 8.8.8.8
+    volumes:
+      - hypemeet-data:/app/data
+
+  # Compiles the Budokai Tenkaichi 3 plugin's game from the disc image sent through the plugin (plugins/bt3/builder).
+  # Idle, it only looks at the volume every 5 s; a build is once per disc image, held to 2 CPUs so calls don't suffer.
+  bt3-builder:
+    build: plugins/bt3/builder
+    restart: unless-stopped
+    cpus: "2"
     volumes:
       - hypemeet-data:/app/data
 

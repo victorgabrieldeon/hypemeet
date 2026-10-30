@@ -28,6 +28,8 @@ export interface PluginInfo {
   description: string;
   icon: string | null;
   url: string;
+  /** Served by HypeMeet itself (server/bt3/): url and icon are relative to the site, and opening it takes a pass. */
+  builtin?: true;
 }
 
 /** Room code → people connected right now. Empty rooms are absent. */
@@ -67,6 +69,9 @@ export const api = {
   /** A browser-transmitter link for whoever holds this room token (see room/cast.ts). */
   castLink: (token: string) => request<{ url: string }>("/api/cast", { method: "POST", body: JSON.stringify({ token }) }),
   plugins: () => request<PluginInfo[]>("/api/plugins"),
+  /** A built-in plugin's address with an access pass, for whoever holds this room token. */
+  pluginOpen: (id: string, token: string) =>
+    request<{ url: string }>(`/api/plugins/${encodeURIComponent(id)}/open`, { method: "POST", body: JSON.stringify({ token }) }),
   /** A YouTube video relayed by the server (server/youtube.ts), for a <video> in the Discord Activity. */
   youTubeStream: (videoId: string, token: string) => `/api/youtube/${videoId}?t=${encodeURIComponent(token)}`,
   discordToken: (code: string) =>

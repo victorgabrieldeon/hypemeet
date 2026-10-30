@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budokai Tenkaichi 3</title>
+<!--
+  The Budokai Tenkaichi 3 plugin's page (server/bt3/routes.ts serves it at /plugins/bt3/p/<pass>/). Reads `status`
+  every 2 s: the disc image's upload, the builder's progress, and once the game is built, it goes to game/.
+  Runs as an opaque origin: every address here is relative, and nothing is kept in this browser.
+-->
+<style>
+  :root { --canvas: #07070c; --panel: #0c0c14; --surface: #11111b; --surface-hi: #191926; --line: rgb(255 255 255 / 0.07);
+    --blurple: #5865f2; --blurple-hi: #8b93ff; --ink: #fff; --soft: #a0a2b8; --danger: #f0384c; --warn: #f5a524; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--canvas); color: var(--ink);
+    font: 15px/1.5 "Inter Variable", ui-sans-serif, system-ui, sans-serif; }
+  body { display: grid; place-items: center; padding: 16px;
+    background: radial-gradient(circle at 50% 40%, rgb(88 101 242 / 0.22), transparent 65%), var(--canvas); }
+  main { width: min(26rem, 100%); display: flex; flex-direction: column; gap: 16px; padding: 24px; border-radius: 16px;
+    background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 24px 60px rgb(0 0 0 / 0.5); }
+  h1 { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  h1 img { width: 28px; height: 28px; }
+  p { margin: 0; color: var(--soft); }
+  p strong { color: var(--ink); font-weight: 600; }
+  .error { color: var(--danger); }
+  .note { font-size: 13px; }
+  button, label.button { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px;
+    border: 0; border-radius: 8px; background: var(--blurple); color: var(--ink); font: inherit; font-weight: 600;
+    cursor: pointer; transition: filter .15s; }
+  button:hover, label.button:hover { filter: brightness(1.1); }
+  button.secondary { background: var(--surface-hi); }
+  input[type=file] { display: none; }
+  .bar { height: 8px; border-radius: 99px; background: var(--surface-hi); overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--blurple); transition: width .3s; }
+  .row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--soft); }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--surface-hi); border-top-color: var(--blurple-hi);
+    animation: spin .8s linear infinite; flex: none; }
+  .busy { display: flex; align-items: center; gap: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  pre { margin: 0; max-height: 9rem; overflow: auto; padding: 10px; border-radius: 8px; background: var(--surface);
+    color: var(--soft); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="../../icon.svg" alt="">Budokai Tenkaichi 3</h1>
+  <div id="view" class="busy"><div class="spin"></div><p>Carregando…</p></div>
+  <input id="iso" type="file" accept=".iso">
+</main>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const view = $('view');
+const PIECE = 32 * 1024 * 1024; // under the 100 MB that proxies like Cloudflare take in one request
+const MIN = 1024 ** 3, MAX = 9 * 1024 ** 3;
+const AMERICAN = 'Só a versão americana do jogo (SLUS-21678). Basta uma vez: vale pra todo mundo deste servidor.';
+
+let sending = null; // { received, size } while this page uploads
+let uploadError = '';
+let expired = false;
+let last = null;
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const gb = (n) => (n / 1024 ** 3).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + ' GB';
+const pct = (a, b) => (b ? Math.floor((a / b) * 100) : 0);
+const clock = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const wait = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const bar = (a, b) => `<div class="bar"><div style="width:${pct(a, b)}%"></div></div>
+  <div class="row"><span>${gb(a)} de ${gb(b)}</span><span>${pct(a, b)}%</span></div>`;
+
+function pick(label) {
+  return `<label class="button" for="iso">${esc(label)}</label>`;
+}
+
+function render() {
+  if (expired) {
+    view.className = '';
+    view.innerHTML = '<p class="error">O acesso venceu. Feche o plugin e abra de novo.</p>';
+    return;
+  }
+  const s = last;
+  let html = '';
+  if (sending) {
+    html = `<p><strong>Enviando a ISO…</strong> Deixe esta janela aberta até terminar.</p>${bar(sending.received, sending.size)}`;
+  } else if (!s) {
+    html = '<div class="busy"><div class="spin"></div><p>Carregando…</p></div>';
+  } else if (s.state === 'empty') {
+    html = `<p>Antes da primeira partida, o servidor precisa da ISO do jogo. Ele confere e compila o jogo sozinho.</p>
+      ${pick('Enviar a ISO do jogo')}<p class="note">${AMERICAN}</p>`;
+  } else if (s.state === 'uploading') {
+    html = s.mine || s.stale
+      ? `<p>O envio parou em ${pct(s.received, s.size)}%. Escolha o mesmo arquivo para continuar de onde parou.</p>
+         ${bar(s.received, s.size)}${pick('Continuar o envio')}`
+      : `<p><strong>${esc(s.by)}</strong> está enviando a ISO.</p>${bar(s.received, s.size)}`;
+  } else if (s.state === 'queued') {
+    html = '<div class="busy"><div class="spin"></div><p>ISO recebida. Esperando o compilador começar…</p></div>';
+  } else if (s.state === 'building') {
+    html = `<div class="busy"><div class="spin"></div><p><strong>${esc(s.label)}</strong> (${s.step}/${s.total})</p></div>
+      <div class="bar"><div style="width:${pct(s.step - 1, s.total)}%"></div></div>
+      <div class="row"><span>Leva alguns minutos, uma vez só.</span><span>${clock(s.elapsed)}</span></div>`;
+  } else if (s.state === 'failed') {
+    html = `<p class="error">${s.refused ? '' : 'A compilação falhou.'}</p><pre>${esc(s.message || 'Erro desconhecido')}</pre>
+      ${s.refused ? pick('Enviar outra ISO') : '<button id="retry">Tentar de novo</button>'}`;
+  } else if (s.state === 'offline') {
+    html = '<p class="error">O compilador não está rodando no servidor.</p><p class="note">Quem cuida do servidor precisa subir o serviço bt3-builder.</p>';
+  } else if (s.state === 'ready') {
+    html = '<div class="busy"><div class="spin"></div><p>Abrindo o jogo…</p></div>';
+  }
+  if (uploadError) html += `<p class="error">${esc(uploadError)}</p>`;
+  view.className = '';
+  view.innerHTML = html;
+  const retry = $('retry');
+  if (retry) retry.onclick = async () => {
+    retry.disabled = true;
+    await fetch('retry', { method: 'POST' }).catch(() => {});
+    await poll();
+  };
+}
+
+async function poll() {
+  try {
+    const r = await fetch('status', { cache: 'no-store' });
+    if (r.status === 403) { expired = true; render(); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    last = await r.json();
+    if (last.state === 'ready' && !sending) { render(); location.replace('game/'); return; }
+  } catch (e) {
+    // (no connection for a moment: the next look tries again)
+  }
+  render();
+}
+
+async function upload(file) {
+  uploadError = '';
+  if (file.size < MIN || file.size > MAX) {
+    uploadError = 'Esse arquivo não parece a ISO do jogo (tamanho fora do esperado).';
+    render();
+    return;
+  }
+  sending = { received: 0, size: file.size };
+  render();
+  try {
+    for (;;) {
+      // Where the server is: before starting and after every error.
+      let at;
+      try {
+        const r = await fetch('upload', { cache: 'no-store' });
+        if (r.status === 403) { expired = true; return; }
+        at = await r.json();
+      } catch (e) {
+        await wait(3000);
+        continue;
+      }
+      if (at.done) return;
+      let offset = at.size === file.size ? at.received : 0;
+      sending.received = offset;
+      render();
+      let failed = false;
+      while (offset < file.size) {
+        let r, body;
+        try {
+          r = await fetch(`upload?offset=${offset}&size=${file.size}`, { method: 'PUT', body: file.slice(offset, offset + PIECE) });
+          body = await r.json().catch(() => ({}));
+        } catch (e) {
+          failed = true; // the connection dropped: ask where it stopped and go on from there
+          await wait(3000);
+          break;
+        }
+        if (r.status === 403) { expired = true; return; }
+        if (r.ok) {
+          offset = body.received;
+          sending.received = offset;
+          render();
+          if (body.done) return;
+          continue;
+        }
+        if (body.code === 'order') { failed = true; break; }
+        // someone else is sending, the server already has it, or it doesn't take this file
+        if (body.code !== 'done') uploadError = body.error || `Erro ${r.status}`;
+        return;
+      }
+      if (!failed) return;
+    }
+  } finally {
+    sending = null;
+    await poll();
+  }
+}
+
+$('iso').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (file && !sending) upload(file);
+});
+
+poll();
+setInterval(() => { if (!expired) poll(); }, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!-- Excerpts of port/web/shell.html, Tenkaichi3Decomp @ 81507cde58685a6f5aab917c298d9a9f82fe09b0 (MIT), for patch.test.ts. -->
+<div id="stage"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
+    const send = () => {
+      const from = Math.max(sentLog, Module.logBase), lines = Module.log.slice(from - Module.logBase);
+      sentLog = Module.logBase + Module.log.length;
+      fetch('/telemetry', { method: 'POST', body: JSON.stringify({ ...snapshot(), log: lines }), keepalive: true }).catch(() => {});
+    };
+  const pieceDisc = async (base) => {
+    const r = await fetch(base + '/index.json');
+    if (!r.ok) throw new Error('no ' + base + '/index.json');
+  const served = Q.get('disc') || '/disc.iso';
+  $('pickLabel').hidden = true;
+  $('start').classList.add('auto');
+  say('Loading…');
+  (Q.get('disc') ? httpDisc(served) : pieceDisc('/disc').catch(() => httpDisc(served))).then((disc) => {
+</script>
+</body>
+</html>
