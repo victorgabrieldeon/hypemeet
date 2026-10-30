@@ -154,6 +154,13 @@ dependências: copie pro plugin):
   não vê nem fala nos outros tópicos da sala.
 - **Avisos** (`toast`) na sala.
 
+Um plugin com servidor próprio que precisa saber quem chama (porque só serve pra quem está numa sala) põe
+`"pass": true` no manifest. A sala então abre a página dele com `?pass=<passe>` no endereço. O passe vale
+12 h e é preso ao id do plugin. O servidor do plugin pergunta quem é o dono do passe com
+`POST <HypeMeet>/api/plugins/pass { "pass": "…" }`, que devolve `{ plugin, id, name, exp }` ou 401. Ele
+precisa conferir se `plugin` é o próprio id. Só o HypeMeet consegue ler o passe, então não há segredo pra
+dividir. Exemplo: o plugin do Budokai Tenkaichi 3 (repositório `bt3`).
+
 Quem está com cada plugin aberto vai no atributo `plugins` do participante, então o tile aparece pra todo
 mundo enquanto alguém usa e não há nada pra passar adiante quando alguém sai. O estado do plugin é
 problema dele (o Drawspace, por exemplo, pede o quadro pra quem está há mais tempo).

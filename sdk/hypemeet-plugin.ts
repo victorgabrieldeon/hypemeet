@@ -12,6 +12,11 @@
  *   - the room's name, who is in it and who has the plugin open (`since`: when they opened it, their clock)
  *   - messages from the same plugin in other people's browsers (`send` / "message"), on a topic of
  *     its own: it never sees or speaks on the room's other channels
+ *
+ * A plugin whose own server has to know who's calling (it serves something only to people in a room) adds
+ * `"pass": true` to its manifest. Its page then opens with `?pass=<pass>` on the address, good for 12 h, and
+ * its server asks the room server who holds it: POST <room server>/api/plugins/pass { "pass": "…" } →
+ * { plugin, id, name, exp }, or 401. It must check that `plugin` is its own id.
  */
 
 export const PROTOCOL = 1;
