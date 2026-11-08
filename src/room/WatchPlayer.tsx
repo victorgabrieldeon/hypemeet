@@ -1,6 +1,6 @@
 import { ExternalLink, EyeOff, FileVideo, Maximize, Minimize, Minimize2, Pause, Play, Popcorn, RotateCcw, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { buttonClass, Spinner } from "../components/ui";
+import { buttonClass, scrimClass, Spinner } from "../components/ui";
 import { inDiscord } from "../lib/discord";
 import { loadDevice } from "./devices";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
@@ -393,7 +393,7 @@ function ControlIcon({ onClick, label, children }: { onClick: () => void; label:
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="grid size-9 shrink-0 place-items-center rounded-full text-ink transition hover:bg-white/15"
+      className="scrim grid size-9 shrink-0 place-items-center rounded-full text-ink transition hover:-translate-y-px hover:bg-surface-hi active:translate-y-px"
     >
       {children}
     </button>
@@ -402,7 +402,7 @@ function ControlIcon({ onClick, label, children }: { onClick: () => void; label:
 
 function Overlay({ children }: { children: ReactNode }) {
   return (
-    <div className="absolute inset-0 z-10 grid place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)] bg-black/80 p-6 text-center">
+    <div className="absolute inset-0 z-10 grid place-items-center bg-canvas/90 p-6 text-center backdrop-blur-sm">
       <div className="flex max-w-sm flex-col items-center gap-3">{children}</div>
     </div>
   );
@@ -410,7 +410,8 @@ function Overlay({ children }: { children: ReactNode }) {
 
 function LiveBadge() {
   return (
-    <span className="shrink-0 rounded-xs bg-danger px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wider text-ink">
+    <span className="inline-flex h-5.5 shrink-0 items-center gap-1 rounded-full border-[1.5px] border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger px-2 text-[11px] leading-none font-extrabold tracking-wide text-on-accent">
+      <span aria-hidden className="size-1.5 rounded-full bg-current motion-safe:animate-pulse" />
       AO VIVO
     </span>
   );
@@ -551,15 +552,15 @@ export function WatchPlayer({
 
   if (isYouTube) {
     return (
-      <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg bg-black ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}>
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel pr-1.5 pl-3">
-          <Popcorn className="size-4 shrink-0 text-blurple-hi" />
+      <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg border-2 border-line bg-black shadow-float ${className} ${fullscreen.active ? FILL_CLASS : ""}`}>
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b-2 border-line bg-panel pr-2 pl-3.5">
+          <Popcorn className="size-4 shrink-0 text-accent-hi" />
           {live && <LiveBadge />}
           <span className="type-link-sm min-w-0 truncate">{watchTitle(source)}</span>
-          <span className="min-w-0 flex-1 truncate text-xs text-soft">{status && `· ${status}`}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-soft">{status && `· ${status}`}</span>
           <button
             onClick={onLeave}
-            className="type-link-sm flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2 text-soft transition hover:bg-surface-hi hover:text-ink"
+            className="type-link-sm flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
             title="Fecha o vídeo só pra você; a sessão segue pros outros"
           >
             <EyeOff className="size-4" />
@@ -569,7 +570,7 @@ export function WatchPlayer({
             onClick={onMinimize}
             aria-label="Minimizar"
             title="Minimizar"
-            className="grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
           >
             <Minimize2 className="size-4" />
           </button>
@@ -577,7 +578,7 @@ export function WatchPlayer({
             onClick={toggleFullscreen}
             aria-label={fullscreenLabel}
             title={fullscreenLabel}
-            className="grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
           >
             <FullscreenIcon className="size-4" />
           </button>
@@ -602,7 +603,7 @@ export function WatchPlayer({
           ) : (
             sync.blocked && (
               // YouTube's own play button is right there and counts as the gesture the browser wants.
-              <div className="type-link-sm pointer-events-none absolute top-3 left-1/2 z-10 flex -translate-x-1/2 animate-fade-in items-center gap-2 rounded-full bg-blurple px-4 py-2 text-ink shadow-float">
+              <div className={`${scrimClass} type-link-sm pointer-events-none absolute top-3 left-1/2 z-10 h-10 -translate-x-1/2 animate-fade-in gap-2 px-4`}>
                 <Play className="size-4 fill-current" /> Dê play no vídeo pra entrar na sessão
               </div>
             )
@@ -621,15 +622,18 @@ export function WatchPlayer({
   if (source.kind === "file" && !file) {
     overlay = (
       <Overlay>
-        <FileVideo className="size-10 text-blurple-hi" />
+        <FileVideo className="size-10 text-accent-hi" />
         <p className="type-link">Abra sua cópia do vídeo</p>
         <p className="text-sm break-all">
-          <span className="font-semibold">{source.name}</span>
+          <span className="font-bold">{source.name}</span>
           <span className="text-soft"> · {formatBytes(source.size)}</span>
         </p>
-        <p className="text-xs text-soft">Cada um toca o próprio arquivo: nada é enviado, então chega em qualidade original.</p>
+        <p className="text-xs font-medium text-soft">Cada um toca o próprio arquivo: nada é enviado, então chega em qualidade original.</p>
         <FilePicker label="Escolher arquivo" primary onPick={onPickFile} />
-        <button onClick={onLeave} className="type-link-sm rounded-sm px-2 py-1 text-soft transition hover:text-ink">
+        <button
+          onClick={onLeave}
+          className="type-link-sm h-9 rounded-full px-3.5 text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
+        >
           Não quero assistir
         </button>
       </Overlay>
@@ -657,13 +661,10 @@ export function WatchPlayer({
   } else if (sync.blocked) {
     overlay = (
       <Overlay>
-        <button
-          onClick={sync.resume}
-          className="type-link flex h-12 items-center gap-2 rounded-full bg-blurple px-6 text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95"
-        >
+        <button onClick={sync.resume} className={buttonClass({ variant: "primary" })}>
           <Play className="size-5" /> Entrar na sessão
         </button>
-        <p className="text-xs text-soft">O navegador segurou o play automático.</p>
+        <p className="text-xs font-medium text-soft">O navegador segurou o play automático.</p>
       </Overlay>
     );
   } else if (!media) {
@@ -690,7 +691,7 @@ export function WatchPlayer({
         else return;
         e.preventDefault();
       }}
-      className={`group relative animate-pop overflow-hidden rounded-lg bg-black focus-visible:outline-offset-0 ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}
+      className={`group relative animate-pop overflow-hidden rounded-lg border-2 border-line bg-black shadow-float focus-visible:outline-offset-0 ${className} ${fullscreen.active ? FILL_CLASS : ""}`}
     >
       {(relayed ?? file) && <VideoMedia source={relayed ?? file!} onMedia={setMedia} onError={setFailure} />}
 
@@ -708,12 +709,12 @@ export function WatchPlayer({
       />
 
       <div className="pointer-events-none absolute top-2 left-2 z-20 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1.5">
-        <div className="type-link-sm flex max-w-full items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] text-ink backdrop-blur-md">
+        <div className={`${scrimClass} h-8 max-w-full px-3 text-[13px] font-bold`}>
           <Popcorn className="size-3.5 shrink-0" />
-          <span className="truncate">{watchTitle(source)}</span>
+          <span className="min-w-0 truncate">{watchTitle(source)}</span>
         </div>
         {file && source.kind === "file" && file.size !== source.size && (
-          <div className="rounded-sm bg-black/65 px-2.5 py-1 text-xs text-soft backdrop-blur-md">
+          <div className="scrim rounded-lg px-3 py-1.5 text-xs font-bold text-ink">
             Seu arquivo é diferente do original: pode sair de sincronia.
           </div>
         )}
@@ -721,11 +722,13 @@ export function WatchPlayer({
 
       {overlay}
 
+      {/* Scrim pieces, no shade over the picture: each one stays readable on any frame. */}
       <div
-        className={`absolute inset-x-0 bottom-0 z-20 flex flex-col gap-1 bg-linear-to-t from-black/90 via-black/50 to-transparent px-3 pt-12 pb-2.5 transition duration-200 ${playing && !overlay ? "opacity-0 group-hover:opacity-100 focus-within:opacity-100" : ""
+        className={`absolute inset-x-0 bottom-0 z-20 flex flex-col gap-2 p-2.5 transition duration-200 ${playing && !overlay ? "opacity-0 group-hover:opacity-100 focus-within:opacity-100" : ""
           }`}
       >
-        <input
+        <div className="scrim flex h-8 items-center rounded-full px-3">
+          <input
           type="range"
           min={0}
           max={duration || 1}
@@ -739,8 +742,9 @@ export function WatchPlayer({
           className="range-accent w-full disabled:opacity-50"
           style={{ "--fill": `${seekFill}%` } as CSSProperties}
           aria-label="Posição do vídeo"
-        />
-        <div className="flex items-center gap-1">
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
           <ControlIcon onClick={toggle} label={playing ? "Pausar pra todo mundo" : ended ? "Ver de novo" : "Dar play pra todo mundo"}>
             {playing ? (
               <Pause className="size-5 fill-current" />
@@ -750,10 +754,16 @@ export function WatchPlayer({
               <Play className="size-5 fill-current" />
             )}
           </ControlIcon>
-          <span className="px-1 text-xs font-semibold text-ink/90 tabular-nums">
-            {formatTime(shown)} <span className="text-ink/50">/ {formatTime(duration)}</span>
+          <span className={`${scrimClass} h-9 px-3 font-mono text-xs tabular-nums`}>
+            {formatTime(shown)} <span className="text-soft">/ {formatTime(duration)}</span>
           </span>
-          <span className="min-w-0 flex-1 truncate px-1 text-xs text-ink/65">{status}</span>
+          <span className="flex min-w-0 flex-1">
+            {status && (
+              <span className={`${scrimClass} h-9 max-w-full px-3 text-xs font-bold`}>
+                <span className="min-w-0 truncate">{status}</span>
+              </span>
+            )}
+          </span>
           <div className="flex items-center gap-1.5">
             <ControlIcon
               onClick={() => setVolume((v) => ({ muted: !v.muted, volume: v.volume || 1 }))}
@@ -761,17 +771,19 @@ export function WatchPlayer({
             >
               <VolumeIcon className={`size-4 ${silent ? "text-danger" : ""}`} />
             </ControlIcon>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={percent}
-              onChange={(e) => setVolume({ volume: Number(e.target.value) / 100, muted: false })}
-              className="range-accent hidden w-20 sm:block"
-              style={{ "--fill": `${percent}%` } as CSSProperties}
-              aria-label="Volume do vídeo (só pra você)"
-            />
+            <span className="scrim hidden h-9 items-center rounded-full px-3 sm:flex">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={percent}
+                onChange={(e) => setVolume({ volume: Number(e.target.value) / 100, muted: false })}
+                className="range-accent w-20"
+                style={{ "--fill": `${percent}%` } as CSSProperties}
+                aria-label="Volume do vídeo (só pra você)"
+              />
+            </span>
           </div>
           <ControlIcon onClick={onLeave} label="Parar de acompanhar (só pra você)">
             <EyeOff className="size-4" />
@@ -806,12 +818,12 @@ export function WatchTile({
   const { source, playing } = party.state;
   const live = source.kind === "youtube" && source.live;
   return (
-    <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black">
+    <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-md border-2 border-line bg-canvas shadow-sticker">
       {/* Discord's CSP blocks YouTube's thumbnails too. */}
       {source.kind === "youtube" && !inDiscord ? (
         <img src={youTubeThumbnail(source.videoId)} alt="" className="size-full object-cover opacity-45" />
       ) : (
-        <div className="size-full bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]" />
+        <div className="size-full bg-surface" />
       )}
       <div className="absolute inset-0 grid place-items-center">
         <button
@@ -820,22 +832,22 @@ export function WatchTile({
             onOpen();
           }}
           onDoubleClick={(e) => e.stopPropagation()}
-          className={`type-link-sm flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+          className={`type-link-sm flex items-center gap-2 rounded-full border-2 border-accent-hi bg-accent text-on-accent shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px hover:bg-accent-hi active:translate-y-px active:shadow-none ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
         >
           <Popcorn className={compact ? "size-3.5" : "size-4"} />
           {joined ? (compact ? "Abrir" : "Voltar pro vídeo") : compact ? "Entrar" : "Assistir junto"}
         </button>
       </div>
-      <div className="absolute top-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] font-semibold text-ink backdrop-blur-md">
+      <div className={`${scrimClass} absolute top-2 left-2 h-7 max-w-[calc(100%-1rem)] px-2.5 text-[13px] font-bold`}>
         <Popcorn className="size-3.5 shrink-0" />
-        <span className="truncate">{compact ? "Assistindo junto" : watchTitle(source)}</span>
+        <span className="min-w-0 truncate">{compact ? "Assistindo junto" : watchTitle(source)}</span>
       </div>
       {!compact && (
-        <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-sm bg-black/65 px-2.5 py-1 text-xs text-ink/85 backdrop-blur-md">
+        <div className={`${scrimClass} absolute bottom-2 left-2 h-7 max-w-[calc(100%-1rem)] px-2.5 text-xs font-bold`}>
           {live && <LiveBadge />}
           {playing ? <Play className="size-3 fill-current" /> : <Pause className="size-3 fill-current" />}
           {playing ? "Tocando" : "Pausado"}
-          {!joined && <span className="text-ink/60">· você não está acompanhando</span>}
+          {!joined && <span className="min-w-0 truncate text-soft">· você não está acompanhando</span>}
         </div>
       )}
     </div>

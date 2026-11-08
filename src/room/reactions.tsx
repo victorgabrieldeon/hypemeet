@@ -169,11 +169,12 @@ export function ReactionLayer({ tileId, compact }: { tileId: string; compact?: b
             className="reaction-sway flex flex-col items-center gap-1"
             style={{ "--sway": `${r.sway}px`, animationDelay: `${r.phase}ms` } as CSSProperties}
           >
-            <span className="text-[clamp(22px,11cqmin,52px)] leading-none drop-shadow-[0_2px_8px_rgb(0_0_0/0.5)]">
+            {/* White die-cut outline, like a sticker. */}
+            <span className="text-[clamp(22px,11cqmin,52px)] leading-none [filter:drop-shadow(1.5px_0_0_#fff)_drop-shadow(-1.5px_0_0_#fff)_drop-shadow(0_1.5px_0_#fff)_drop-shadow(0_-1.5px_0_#fff)_drop-shadow(0_4px_5px_rgb(0_0_0/0.35))]">
               {r.emoji}
             </span>
             {!compact && (
-              <span className="max-w-28 truncate rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-ink backdrop-blur-md">
+              <span className="scrim max-w-28 truncate rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap text-ink">
                 {r.name}
               </span>
             )}
@@ -196,16 +197,16 @@ function targetLabel(tile: TileModel): string {
 export function ReactionBar({ target, onReact }: { target: TileModel; onReact: (emoji: string) => void }) {
   return (
     <>
-      <p className="truncate px-1 pb-2 text-center text-xs text-soft">
-        Aparece <span className="font-semibold text-ink">{targetLabel(target)}</span>
+      <p className="truncate px-1 pb-2.5 text-center text-xs font-medium text-soft">
+        Aparece <span className="font-bold text-ink">{targetLabel(target)}</span>
       </p>
-      <div className="flex gap-0.5">
+      <div className="flex gap-1 sm:gap-1.5">
         {REACTIONS.map((emoji) => (
           <button
             key={emoji}
             onClick={() => onReact(emoji)}
             aria-label={`Reagir com ${emoji}`}
-            className="grid size-9 place-items-center rounded-md text-2xl transition duration-150 ease-out-expo hover:scale-110 hover:bg-surface-hi active:scale-90 sm:size-11"
+            className="grid size-9 place-items-center rounded-full border-2 border-line bg-surface text-xl shadow-sticker transition duration-150 ease-out-expo hover:-translate-y-px hover:bg-surface-hi active:translate-y-px active:shadow-none sm:size-11 sm:text-2xl"
           >
             {emoji}
           </button>

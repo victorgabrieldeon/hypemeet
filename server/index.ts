@@ -1,6 +1,7 @@
 import { AccessToken, ParticipantInfo_State, RoomServiceClient, TokenVerifier, TrackSource } from "livekit-server-sdk";
 import { join } from "node:path";
 import { createDiscord } from "./discord";
+import { createPasses, passForToken } from "./pass";
 import { createPlugins } from "./plugins";
 import { createLinkPreviews, publicOrigin } from "./preview";
 import { NAME_MAX, openRoomStore, type Room } from "./rooms";
@@ -41,6 +42,7 @@ const previews = createLinkPreviews({ distDir: DIST_DIR, livekit, findRoom: room
 const discord = createDiscord();
 const plugins = createPlugins((process.env.PLUGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 const youtube = createYouTubeRelay();
+const passes = createPasses(LIVEKIT_API_SECRET);
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const error = (message: string, status: number) => json({ error: message }, status);
@@ -220,6 +222,24 @@ Bun.serve({
         const list = await plugins.list();
         // None answered yet (still booting?): an error, so rooms ask again; no plugins at all is just [].
         return list.length || !plugins.configured ? json(list) : error("Plugins indisponíveis", 503);
+      },
+    },
+    // A pass for a plugin that asks for one (server/pass.ts), for whoever holds a room token.
+    "/api/plugins/:id/pass": {
+      async POST(req) {
+        const plugin = (await plugins.list()).find((p) => p.id === req.params.id && p.pass);
+        if (!plugin) return error("Plugin não encontrado", 404);
+        const body = await readJson(req);
+        const pass = await passForToken(body?.token, plugin.id, { verify: (t) => verifier.verify(t), roomExists: (c) => !!rooms.get(c), passes });
+        return pass ? json({ pass }) : error("Entrada na sala inválida", 401);
+      },
+    },
+    // A plugin's server asking who holds a pass: { plugin, id, name, exp }. It checks `plugin` is itself.
+    "/api/plugins/pass": {
+      async POST(req) {
+        const body = await readJson(req);
+        const pass = typeof body?.pass === "string" ? await passes.verify(body.pass) : null;
+        return pass ? json(pass) : error("Passe inválido", 401);
       },
     },
     // YouTube relayed for the Discord Activity (server/youtube.ts). Only for someone who came in through it

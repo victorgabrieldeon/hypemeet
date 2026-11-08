@@ -68,6 +68,7 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 | Mídia | [LiveKit](https://livekit.io) (SFU) — `livekit-client` no browser |
 | Front | Vite + React 19 + TypeScript + Tailwind v4 |
 | API | Bun (`server/index.ts`) + SQLite (`bun:sqlite`) — salas e tokens |
+| Design | "Adesivo Noite": tokens em `src/index.css`, kit em `src/components/ui.tsx`; regras em [DESIGN.md](DESIGN.md) |
 
 A API só guarda `código → nome` e emite tokens LiveKit; vídeo/áudio vão direto browser ⇄ LiveKit.
 
@@ -153,6 +154,13 @@ dependências: copie pro plugin):
   channel: confiáveis (até 8 MB, por text stream) ou com perda (até 1,2 KB, pra cursor e afins). O plugin
   não vê nem fala nos outros tópicos da sala.
 - **Avisos** (`toast`) na sala.
+
+Um plugin com servidor próprio que precisa saber quem chama (porque só serve pra quem está numa sala) põe
+`"pass": true` no manifest. A sala então abre a página dele com `?pass=<passe>` no endereço. O passe vale
+12 h e é preso ao id do plugin. O servidor do plugin pergunta quem é o dono do passe com
+`POST <HypeMeet>/api/plugins/pass { "pass": "…" }`, que devolve `{ plugin, id, name, exp }` ou 401. Ele
+precisa conferir se `plugin` é o próprio id. Só o HypeMeet consegue ler o passe, então não há segredo pra
+dividir. Exemplo: o plugin do Budokai Tenkaichi 3 (repositório `bt3`).
 
 Quem está com cada plugin aberto vai no atributo `plugins` do participante, então o tile aparece pra todo
 mundo enquanto alguém usa e não há nada pra passar adiante quando alguém sai. O estado do plugin é

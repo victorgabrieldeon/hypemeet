@@ -3,7 +3,7 @@ import {
   Blocks,
   Check,
   Copy,
-  Link2,
+  Ellipsis,
   Megaphone,
   MessageSquare,
   Mic,
@@ -12,6 +12,7 @@ import {
   PhoneOff,
   Popcorn,
   SmilePlus,
+  UserPlus,
   Users,
   Video,
   VideoOff,
@@ -19,9 +20,10 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Button, LogoMark, Spinner } from "../components/ui";
+import { Avatar, Button, cardClass, chipClass, countClass, kbdClass, LogoMark, Spinner } from "../components/ui";
 import type { RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
+import { assignPersonColors } from "../lib/color";
 import { cameraBlocked, inDiscord, screenCaptureBlocked } from "../lib/discord";
 import { usePttState } from "../lib/ptt";
 import type { RoomChat } from "./chat";
@@ -31,6 +33,7 @@ import { loadNoiseFilter, loadScreenPrefs, saveNoiseFilter, saveScreenPrefs } fr
 import { DeviceMenu, MenuChevron, MenuSection, MenuToggle, useDismiss } from "./menus";
 import {
   buildTiles,
+  discordAvatar,
   SCREEN_AUDIO_COPY,
   startScreenShare,
   useRoomVersion,
@@ -47,7 +50,7 @@ import { CastPanel, ScreenPanel } from "./ScreenPanel";
 import { castOwnerOf, remotePeople, stopCast } from "./cast";
 import { SoundboardPanel } from "./SoundboardPanel";
 import { Stage } from "./Stage";
-import { sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
+import { byJoinOrder, sourceKey, useWatchParty, WATCH_TILE_ID } from "./watch";
 import { WatchPanel } from "./WatchPanel";
 import { WatchPlayer } from "./WatchPlayer";
 import { pipFocus, usePipTile, usePipWindow } from "./pip";
@@ -72,6 +75,7 @@ function ControlButton({
   expanded,
   children,
   tone = "toggle",
+  className = "",
 }: {
   on: boolean;
   onClick: () => void;
@@ -80,22 +84,18 @@ function ControlButton({
   /** Set when the button toggles a popover. */
   expanded?: boolean;
   children: ReactNode;
-  tone?: "toggle" | "accent" | "plain";
+  tone?: "toggle" | "plain" | "neutral";
+  className?: string;
 }) {
-  // accent = screen share, the room's main action: lit outline until you're sharing, then solid Blurple.
-  // plain = optional extras: off is just idle (not an alarm), on is solid Blurple.
+  // toggle = the mic: off is muted, which is worth a danger tint.
+  // plain = sharing and the extras: off is just idle, on (sending, panel open) is solid grape.
+  // neutral = the camera: off is a normal state, not an alarm, so it only dims the icon.
   const style =
-    tone === "accent"
-      ? on
-        ? "bg-blurple text-ink hover:brightness-110"
-        : "bg-surface-hi text-ink ring-1 ring-blurple/50 hover:bg-blurple/25"
-      : tone === "plain"
-        ? on
-          ? "bg-blurple text-ink hover:brightness-110"
-          : "bg-surface text-ink hover:bg-surface-hi"
-        : on
-          ? "bg-surface text-ink hover:bg-surface-hi"
-          : "bg-danger/20 text-danger hover:bg-danger/30";
+    tone === "plain" && on
+      ? "border-accent-hi bg-accent text-on-accent hover:bg-accent-hi"
+      : tone === "toggle" && !on
+        ? "border-[color-mix(in_srgb,var(--color-danger)_40%,var(--color-surface))] bg-[color-mix(in_srgb,var(--color-danger)_14%,var(--color-surface))] text-danger hover:bg-[color-mix(in_srgb,var(--color-danger)_22%,var(--color-surface))]"
+        : `border-line bg-surface hover:bg-surface-hi ${tone === "neutral" && !on ? "text-soft hover:text-ink" : "text-ink"}`;
   return (
     <button
       onClick={onClick}
@@ -103,7 +103,7 @@ function ControlButton({
       aria-label={label}
       aria-expanded={expanded}
       title={label}
-      className={`relative grid size-12 place-items-center rounded-full transition duration-200 ease-out-expo active:scale-95 disabled:opacity-60 sm:size-14 ${style}`}
+      className={`relative grid size-12 shrink-0 place-items-center rounded-full border-2 shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px active:translate-y-px active:shadow-none disabled:translate-y-0 disabled:opacity-60 md:size-14 ${style} ${className}`}
     >
       {busy ? <Spinner className="size-5" /> : children}
     </button>
@@ -112,6 +112,8 @@ function ControlButton({
 
 interface RoomViewProps {
   room: Room;
+  /** Our room token (LiveKit's), for what's opened on our behalf: a plugin's pass. */
+  token: string;
   chat: RoomChat;
   previews: ScreenPreviews;
   info: RoomInfo;
@@ -130,7 +132,7 @@ interface RoomViewProps {
   onRejoin: () => void;
 }
 
-export function RoomView({ room, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
+export function RoomView({ room, token, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
@@ -179,6 +181,10 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const pluginsRef = useRef<HTMLDivElement>(null);
   useDismiss(pluginsRef, pluginsOpen, () => setPluginsOpen(false));
+  // Phones: the extras fold into "Mais", whose picks open the same popovers as their dock buttons.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useDismiss(moreRef, moreOpen, () => setMoreOpen(false));
   const openPlugin = (id: string) => {
     plugins.open(id);
     setPinnedId(pluginTileId(id));
@@ -342,7 +348,17 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     }
   }
 
-  const participantCount = remotePeople(room).length + 1;
+  const people = [local, ...remotePeople(room)];
+  assignPersonColors(people.toSorted(byJoinOrder).map((p) => p.identity));
+  const moreItems = [
+    { label: "Reações", icon: SmilePlus, open: setReactionsOpen },
+    { label: "Assistir junto", icon: Popcorn, open: setWatchOpen },
+    ...(inDiscord ? [] : [{ label: "Soundboard", icon: Megaphone, open: setSoundsOpen }]),
+    ...(plugins.sessions.length > 0 ? [{ label: "Plugins", icon: Blocks, open: setPluginsOpen }] : []),
+  ];
+  // From md the chat is a column (ChatPanel's md:w-[22rem] xl:w-[26rem] + the row's gap-3); keep the dock under the stage.
+  const besideChat = chatOpen ? "md:mr-[calc(22rem+0.75rem)] xl:mr-[calc(26rem+0.75rem)]" : "";
+  const focusMore = () => moreRef.current?.querySelector("button")?.focus();
   const hasRemoteScreenAudio = [...room.remoteParticipants.values()].some((p) =>
     [...p.audioTrackPublications.values()].some((pub) => pub.source === Track.Source.ScreenShareAudio),
   );
@@ -351,34 +367,60 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
     <div className={`flex h-full flex-col bg-canvas ${discordPip ? "" : "gap-3 p-3 sm:gap-4 sm:p-4"}`}>
       <RoomAudio room={room} />
 
-      <header className={`flex items-center justify-between gap-3 ${discordPip ? "hidden" : ""}`}>
-        <div className="flex min-w-0 items-center gap-3">
-          <LogoMark />
-          <div className="min-w-0">
-            <h1 className="truncate font-display text-base font-bold sm:text-lg">{info.name}</h1>
-            <button
-              onClick={() => copy("code")}
-              className="flex items-center gap-1.5 rounded-xs font-mono text-xs tracking-widest text-soft transition hover:text-ink"
-              title="Copiar código"
-            >
-              {formatCode(info.code)}
-              {copied === "code" ? <Check className="size-3 text-ink" /> : <Copy className="size-3" />}
-            </button>
-          </div>
+      <header className={`flex items-center gap-2.5 sm:gap-3.5 ${discordPip ? "hidden" : ""}`}>
+        <LogoMark className="size-10 -rotate-3 max-sm:hidden" />
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3.5">
+          <h1 className="max-w-full truncate font-display text-2xl leading-tight font-extrabold tracking-[-0.02em]">
+            {info.name}
+          </h1>
+          <button
+            onClick={() => copy("code")}
+            className={`${chipClass} pr-1 transition hover:bg-surface-hi`}
+            title="Copiar código"
+          >
+            <span className="font-mono font-medium tracking-[0.04em]">{formatCode(info.code)}</span>
+            <span className="ml-0.5 grid size-6 place-items-center rounded-full bg-surface-hi">
+              {copied === "code" ? <Check className="size-3.5 text-accent-hi" /> : <Copy className="size-3.5" />}
+            </span>
+          </button>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="type-link-sm flex h-10 items-center gap-1.5 rounded-lg bg-surface px-3 text-soft">
-            <Users className="size-4" /> {participantCount}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <span className="flex h-11 items-center gap-2 rounded-full border-2 border-line bg-surface px-3.5 font-display text-[17px] font-extrabold sm:pl-2">
+            <span aria-hidden className="mr-0.5 hidden -space-x-1 sm:flex">
+              {people.slice(0, 4).map((p) => (
+                <Avatar
+                  key={p.identity}
+                  name={p.name || p.identity}
+                  seed={p.identity}
+                  image={discordAvatar(p)}
+                  size="xs"
+                  className="ring-2 ring-surface"
+                />
+              ))}
+              {people.length > 4 && (
+                <span className="grid size-6 place-items-center rounded-full bg-surface-hi font-sans text-[10px] font-bold ring-2 ring-surface">
+                  +{people.length - 4}
+                </span>
+              )}
+            </span>
+            <Users className="size-[18px] text-soft" /> {people.length}
+            <span className="sr-only">{people.length === 1 ? " pessoa na sala" : " pessoas na sala"}</span>
           </span>
-          <Button variant="primary" className="type-link-sm h-10 px-4" onClick={onInvite ?? (() => copy("link"))}>
-            {copied === "link" ? <Check className="size-4" /> : <Link2 className="size-4" />}
+          <Button
+            variant="primary"
+            className="h-11! px-[11px]! sm:px-4.5!"
+            onClick={onInvite ?? (() => copy("link"))}
+            aria-label={copied === "link" ? "Link copiado" : "Convidar"}
+            title={copied === "link" ? "Link copiado" : "Convidar"}
+          >
+            {copied === "link" ? <Check className="size-[18px]" /> : <UserPlus className="size-[18px]" />}
             <span className="hidden sm:inline">{copied === "link" ? "Link copiado" : "Convidar"}</span>
           </Button>
         </div>
       </header>
 
       {state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting ? (
-        <div className="type-link-sm flex items-center justify-center gap-2 rounded-sm bg-surface py-2.5 text-soft">
+        <div className="type-link-sm flex items-center justify-center gap-2 rounded-full border-2 border-[color-mix(in_srgb,var(--color-warn)_30%,var(--color-line))] bg-surface py-2 text-warn">
           <Spinner className="size-4" /> Reconectando…
         </div>
       ) : null}
@@ -386,7 +428,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       {!room.canPlaybackAudio && (
         <button
           onClick={() => void room.startAudio()}
-          className="type-link-sm flex items-center justify-center gap-2 rounded-sm bg-blurple py-2.5 transition hover:brightness-110"
+          className="type-link-sm flex items-center justify-center gap-2 rounded-full border-2 border-accent-hi bg-accent py-2 text-on-accent shadow-sticker transition hover:-translate-y-px hover:bg-accent-hi active:translate-y-px active:shadow-none"
         >
           <Volume2 className="size-4" /> O navegador bloqueou o som — clique para ativar
         </button>
@@ -418,6 +460,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
                   key={session.info.id}
                   room={room}
                   info={info}
+                  token={token}
                   session={session}
                   onMinimize={() => setPinnedId(null)}
                   onClose={() => closePlugin(session.info.id)}
@@ -458,7 +501,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       </ReactionsProvider>
 
       <footer
-        className={`relative mx-auto flex items-center gap-2 rounded-full border border-line bg-panel p-2 shadow-float sm:gap-3 sm:p-2.5 ${discordPip ? "hidden" : ""}`}
+        className={`relative flex items-center justify-center-safe gap-2 md:gap-2.5 ${besideChat} ${discordPip ? "hidden" : ""}`}
       >
         {/* In the Activity the voice is the Discord channel's. */}
         {!inDiscord && (
@@ -496,6 +539,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
         )}
         <div className="relative">
           <ControlButton
+            tone="neutral"
             on={cameraOn}
             busy={busy === "camera"}
             onClick={toggleCamera}
@@ -512,10 +556,11 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
             </MenuChevron>
           )}
         </div>
+        <span aria-hidden className="mx-1.5 h-7 w-px shrink-0 bg-line max-sm:hidden" />
         {/* `contents`, not `relative`: the panel anchors to the footer so it stays centred on narrow screens. */}
         <div ref={screensRef} className="contents">
           <ControlButton
-            tone="accent"
+            tone="plain"
             on={sendingCount > 0}
             expanded={screensOpen}
             onClick={() => setScreensOpen(!screensOpen)}
@@ -523,7 +568,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
           >
             <MonitorUp className="size-5" />
             {sendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-ink text-[11px] font-bold text-ink-dark ring-2 ring-panel">
+              <span className={`${countClass} absolute -top-1.5 -right-1.5`}>
                 {sendingCount}
               </span>
             )}
@@ -558,11 +603,12 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
             expanded={reactionsOpen}
             onClick={() => setReactionsOpen(!reactionsOpen)}
             label="Reagir"
+            className="max-sm:hidden"
           >
             <SmilePlus className="size-5" />
           </ControlButton>
           {reactionsOpen && reactionTargetTile && (
-            <div className="absolute bottom-full left-1/2 z-40 mb-3 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 animate-pop rounded-lg bg-panel p-2 shadow-float ring-1 ring-line">
+            <div className="absolute bottom-full left-1/2 z-40 mb-3 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 animate-pop rounded-lg border-2 border-line bg-panel p-2 shadow-float">
               <ReactionBar target={reactionTargetTile} onReact={(emoji) => reactions.send(emoji, reactionTargetTile.id)} />
             </div>
           )}
@@ -574,6 +620,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
             expanded={watchOpen}
             onClick={() => setWatchOpen(!watchOpen)}
             label="Assistir junto"
+            className="max-sm:hidden"
           >
             <Popcorn className="size-5" />
           </ControlButton>
@@ -601,6 +648,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
               expanded={soundsOpen}
               onClick={() => setSoundsOpen(!soundsOpen)}
               label="Soundboard"
+              className="max-sm:hidden"
             >
               <Megaphone className="size-5" />
             </ControlButton>
@@ -622,12 +670,14 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
               expanded={pluginsOpen}
               onClick={() => setPluginsOpen(!pluginsOpen)}
               label="Plugins"
+              className="max-sm:hidden"
             >
               <Blocks className="size-5" />
             </ControlButton>
             {pluginsOpen && <PluginPanel plugins={plugins} onOpen={openPlugin} onClose={closePlugin} />}
           </div>
         )}
+        <span aria-hidden className="mx-1.5 h-7 w-px shrink-0 bg-line max-sm:hidden" />
         <ControlButton
           tone="plain"
           on={chatOpen}
@@ -637,26 +687,68 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
         >
           <MessageSquare className="size-5" />
           {!chatOpen && chatState.unread > 0 && (
-            <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-blurple px-1 text-[11px] font-bold text-ink ring-2 ring-panel">
+            <span className={`${countClass} absolute -top-1.5 -right-1.5`}>
               {chatState.unread > 9 ? "9+" : chatState.unread}
             </span>
           )}
         </ControlButton>
+        <div ref={moreRef} className="contents sm:hidden">
+          <ControlButton
+            tone="plain"
+            on={moreOpen || reactionsOpen || watchOpen || !!watch.party || soundsOpen || pluginsOpen || plugins.sessions.some((s) => s.open)}
+            expanded={moreOpen}
+            onClick={() => setMoreOpen(!moreOpen)}
+            label="Mais opções"
+          >
+            <Ellipsis className="size-5" />
+          </ControlButton>
+          {moreOpen && (
+            <div
+              role="menu"
+              aria-label="Mais opções"
+              onKeyDown={(e) => e.key === "Escape" && focusMore()}
+              className="absolute bottom-full left-1/2 z-40 mb-3 grid w-[calc(100vw-2rem)] max-w-sm -translate-x-1/2 animate-pop auto-cols-fr grid-flow-col rounded-lg border-2 border-line bg-panel px-0.5 pt-3.5 pb-3 shadow-float"
+            >
+              {moreItems.map(({ label, icon: Icon, open }) => (
+                <button
+                  key={label}
+                  role="menuitem"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    open(true);
+                    focusMore(); // the item unmounts; WatchPanel's autoFocus still wins after the commit
+                  }}
+                  className="group flex flex-col items-center gap-2 text-xs font-bold text-ink"
+                >
+                  <span className="grid size-11.5 place-items-center rounded-full border-2 border-line bg-surface transition group-hover:-translate-y-px group-hover:bg-surface-hi group-active:translate-y-px">
+                    <Icon className="size-5" />
+                  </span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           onClick={() => {
             playCue("leave");
             onLeave();
           }}
-          className="type-link ml-1 flex h-12 items-center gap-2 rounded-full bg-danger px-4 text-ink transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 sm:ml-2 sm:h-14 sm:px-6"
+          className="flex h-12 w-12 shrink-0 items-center justify-center gap-2 rounded-full border-2 border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger font-display text-[17px] font-extrabold text-on-accent shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px hover:bg-[color-mix(in_srgb,var(--color-danger)_85%,white)] active:translate-y-px active:shadow-none sm:w-auto sm:pr-5.5 sm:pl-4.5 md:h-14"
           aria-label="Sair da sala"
         >
           <PhoneOff className="size-5" />
           <span className="hidden sm:inline">Sair</span>
         </button>
+        {ptt?.enabled && ptt.binding && (
+          <span className="ml-1.5 hidden items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap text-soft lg:inline-flex">
+            Segure <kbd className={kbdClass}>{ptt.binding}</kbd> para falar
+          </span>
+        )}
       </footer>
 
       {hasRemoteScreenAudio && tiles.length > 0 && !discordPip && (
-        <p className="-mt-1 text-center text-xs text-soft/80">
+        <p className={`-mt-1 hidden text-center text-xs text-soft sm:block ${besideChat}`}>
           Passe o mouse numa tela ou pessoa para ajustar o volume — só muda pra você.
         </p>
       )}
@@ -664,7 +756,7 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       {toast && (
         <div
           role="status"
-          className={`fixed ${discordPip ? "bottom-2" : "bottom-28"} left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 animate-fade-in rounded-lg px-4 py-3 text-sm shadow-float ${toast.tone === "error" ? "bg-danger text-ink" : "bg-surface text-ink"
+          className={`fixed ${discordPip ? "bottom-2" : "bottom-28"} left-1/2 z-50 w-[min(92vw,30rem)] -translate-x-1/2 animate-fade-in rounded-lg border-2 px-4 py-3 text-sm font-semibold shadow-float ${toast.tone === "error" ? "border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger text-on-accent" : "border-line bg-surface text-ink"
             }`}
           onClick={() => setToast(null)}
         >
@@ -673,9 +765,9 @@ export function RoomView({ room, chat, previews, info, initialDevices, onLeave, 
       )}
 
       {state === ConnectionState.Disconnected && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="flex w-full max-w-sm animate-pop flex-col items-center gap-5 rounded-xl bg-canvas p-8 text-center shadow-float sm:p-10">
-            <div className="grid size-14 place-items-center rounded-lg bg-danger/20 text-danger">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-scrim p-4 backdrop-blur-sm">
+          <div className={`${cardClass} flex w-full max-w-sm animate-pop flex-col items-center gap-5 p-8 text-center sm:p-10`}>
+            <div className="grid size-14 place-items-center rounded-md border-2 border-[color-mix(in_srgb,var(--color-danger)_40%,var(--color-surface))] bg-[color-mix(in_srgb,var(--color-danger)_14%,var(--color-surface))] text-danger">
               <WifiOff className="size-7" />
             </div>
             <div>

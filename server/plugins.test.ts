@@ -15,4 +15,6 @@ test("manifest: entry and icon must stay on the plugin's origin", () => {
   expect(parseManifest({ id: "x", name: "X", icon: "https://evil.example.com/a.png" }, base)?.icon).toBeNull();
   expect(parseManifest({ id: "Bad Id", name: "X" }, base)).toBeNull();
   expect(parseManifest(null, base)).toBeNull();
+  expect(parseManifest({ id: "x", name: "X", pass: true }, base)?.pass).toBe(true);
+  expect(parseManifest({ id: "x", name: "X", pass: "yes" }, base)).not.toHaveProperty("pass");
 });

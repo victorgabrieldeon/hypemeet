@@ -11,7 +11,7 @@ import {
   type PluginMessage,
   type PluginPerson,
 } from "../../sdk/hypemeet-plugin";
-import { Avatar } from "../components/ui";
+import { Avatar, cardClass, scrimClass, Spinner } from "../components/ui";
 import { api, type PluginInfo, type RoomInfo } from "../lib/api";
 import { inDiscord } from "../lib/discord";
 import { isTransmitter, remotePeople } from "./cast";
@@ -151,6 +151,8 @@ export const usersOf = (session: PluginSession) => session.people.filter((p) => 
 interface PluginViewProps {
   room: Room;
   info: RoomInfo;
+  /** Our room token: what a pass is asked with, for a plugin that wants one. */
+  token: string;
   session: PluginSession;
   onMinimize: () => void;
   onClose: () => void;
@@ -159,10 +161,11 @@ interface PluginViewProps {
 }
 
 /** A plugin's page and its bridge to the room. Lives outside the stage so pinning never reloads it. */
-export function PluginView({ room, info, session, onMinimize, onClose, onToast, className = "" }: PluginViewProps) {
+export function PluginView({ room, info, token, session, onMinimize, onClose, onToast, className = "" }: PluginViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const plugin = session.info;
+  const src = useFrameSrc(plugin, token);
   // Through Discord's proxy it would share the room's origin: it runs as an opaque one instead ("null"),
   // without allow-same-origin. Posting to "*" is fine there: the Activity's CSP only lets the frame
   // navigate within its own proxy.
@@ -251,14 +254,15 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
   const fullscreenLabel = fullscreen.active ? "Sair da tela cheia" : "Tela cheia";
   const FullscreenIcon = fullscreen.active ? Minimize : Maximize;
   const users = usersOf(session);
-  const iconButton = "grid size-8 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink";
+  const iconButton =
+    "grid size-9 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px";
 
   return (
-    <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg bg-black ${className} ${fullscreen.filling ? FILL_CLASS : ""}`}>
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel pr-1.5 pl-3">
+    <div ref={ref} className={`flex animate-pop flex-col overflow-hidden rounded-lg border-2 border-line bg-black shadow-float ${className} ${fullscreen.active ? FILL_CLASS : ""}`}>
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b-2 border-line bg-panel pr-2 pl-3.5">
         <PluginIcon info={plugin} className="size-4" />
         <span className="type-link-sm min-w-0 truncate">{plugin.name}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-soft">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-soft">
           · {users.length === 1 ? "só você" : `${users.length} pessoas`}
         </span>
         <button
@@ -276,24 +280,59 @@ export function PluginView({ room, info, session, onMinimize, onClose, onToast, 
           <FullscreenIcon className="size-4" />
         </button>
       </div>
-      <iframe
-        ref={frame}
-        src={plugin.url}
-        title={plugin.name}
-        // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
-        sandbox={`allow-scripts ${opaque ? "" : "allow-same-origin "}allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads`}
-        allow="clipboard-read; clipboard-write"
-        className="min-h-0 w-full flex-1 border-0 bg-white"
-      />
+      {src.url ? (
+        <iframe
+          ref={frame}
+          src={src.url}
+          title={plugin.name}
+          // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
+          sandbox={`allow-scripts ${opaque ? "" : "allow-same-origin "}allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads`}
+          // Games want controllers, sound without a click first, and full screen.
+          allow="clipboard-read; clipboard-write; gamepad; autoplay; fullscreen"
+          className="min-h-0 w-full flex-1 border-0 bg-white"
+        />
+      ) : (
+        <div className="grid min-h-0 flex-1 place-items-center bg-canvas p-4 text-center text-sm text-soft">
+          {src.error ? (
+            <p className="font-bold text-danger">{src.error}</p>
+          ) : (
+            <span className="flex items-center gap-3">
+              <Spinner className="size-5" /> Abrindo…
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+/** The page to load: the plugin's own address, with a pass on it (asked for first) when it wants one. */
+function useFrameSrc(plugin: PluginInfo, token: string): { url: string | null; error: string | null } {
+  const [opened, setOpened] = useState<{ url: string | null; error: string | null }>({ url: null, error: null });
+  useEffect(() => {
+    if (!plugin.pass) return;
+    let cancelled = false;
+    setOpened({ url: null, error: null });
+    api.pluginPass(plugin.id, token).then(
+      ({ pass }) => {
+        const url = new URL(plugin.url);
+        url.searchParams.set("pass", pass);
+        if (!cancelled) setOpened({ url: url.href, error: null });
+      },
+      (err: Error) => !cancelled && setOpened({ url: null, error: err.message }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [plugin.pass, plugin.id, plugin.url, token]);
+  return plugin.pass ? opened : { url: plugin.url, error: null };
 }
 
 export function PluginIcon({ info, className = "size-5" }: { info: PluginInfo; className?: string }) {
   return info.icon ? (
     <img src={info.icon} alt="" draggable={false} className={`shrink-0 object-contain ${className}`} />
   ) : (
-    <Blocks className={`shrink-0 text-blurple-hi ${className}`} />
+    <Blocks className={`shrink-0 text-accent-hi ${className}`} />
   );
 }
 
@@ -301,7 +340,7 @@ function Faces({ people }: { people: PluginPerson[] }) {
   return (
     <span className="flex -space-x-1.5">
       {people.slice(0, 4).map((p) => (
-        <Avatar key={p.identity} name={p.name} image={p.avatar} size="xs" className="ring-2 ring-black/70" />
+        <Avatar key={p.identity} name={p.name} seed={p.identity} image={p.avatar} size="xs" className="ring-2 ring-surface" />
       ))}
     </span>
   );
@@ -311,8 +350,7 @@ function Faces({ people }: { people: PluginPerson[] }) {
 export function PluginTile({ session, compact, onOpen }: { session: PluginSession; compact?: boolean; onOpen: () => void }) {
   const users = usersOf(session);
   return (
-    <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-lg bg-black">
-      <div className="size-full bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]" />
+    <div onDoubleClick={onOpen} className="group relative size-full animate-pop overflow-hidden rounded-md border-2 border-line bg-surface shadow-sticker">
       <div className="absolute inset-0 grid place-items-center">
         <button
           onClick={(e) => {
@@ -320,17 +358,17 @@ export function PluginTile({ session, compact, onOpen }: { session: PluginSessio
             onOpen();
           }}
           onDoubleClick={(e) => e.stopPropagation()}
-          className={`type-link-sm flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+          className={`type-link-sm flex items-center gap-2 rounded-full border-2 border-accent-hi bg-accent text-on-accent shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px hover:bg-accent-hi active:translate-y-px active:shadow-none ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
         >
-          <PluginIcon info={session.info} className={compact ? "size-3.5" : "size-4"} />
+          <PluginIcon info={session.info} className={`text-on-accent ${compact ? "size-3.5" : "size-4"}`} />
           {session.open ? "Abrir" : "Entrar"}
         </button>
       </div>
-      <div className="absolute top-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] font-semibold text-ink backdrop-blur-md">
-        <span className="truncate">{session.info.name}</span>
+      <div className={`${scrimClass} absolute top-2 left-2 h-7 max-w-[calc(100%-1rem)] px-2.5 text-[13px] font-bold`}>
+        <span className="min-w-0 truncate">{session.info.name}</span>
       </div>
       {!compact && users.length > 0 && (
-        <div className="absolute bottom-2 left-2 flex items-center gap-2 rounded-sm bg-black/65 px-2 py-1 text-xs text-ink/85 backdrop-blur-md">
+        <div className={`${scrimClass} absolute bottom-2 left-2 h-7 max-w-[calc(100%-1rem)] gap-2 pr-2.5 pl-1 text-xs font-bold`}>
           <Faces people={users} />
           {users.length === 1 ? users[0]!.name : `${users.length} pessoas`}
         </div>
@@ -345,22 +383,22 @@ export function PluginPanel({ plugins, onOpen, onClose }: { plugins: Plugins; on
     <div
       role="dialog"
       aria-label="Plugins"
-      className="absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 rounded-lg bg-panel p-3 shadow-float ring-1 ring-line"
+      className={`absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 p-3 ${cardClass}`}
     >
       <div className="px-1 pt-1">
-        <h2 className="type-link">Plugins</h2>
-        <p className="mt-0.5 text-xs text-soft">Abra pra usar junto: aparece pra todo mundo da sala.</p>
+        <h2 className="type-heading-sm">Plugins</h2>
+        <p className="mt-1 text-xs font-medium text-soft">Abra pra usar junto: aparece pra todo mundo da sala.</p>
       </div>
       {plugins.sessions.map((session) => {
         const users = usersOf(session);
         const { info } = session;
         return (
-          <div key={info.id} className="flex items-center gap-3 rounded-md border border-line bg-surface p-3">
+          <div key={info.id} className="flex items-center gap-3 rounded-lg border-2 border-line bg-surface p-3">
             <PluginIcon info={info} className="size-8" />
             <div className="min-w-0 flex-1 text-sm">
-              <p className="truncate font-semibold">{info.name}</p>
-              {info.description && <p className="line-clamp-2 text-xs text-soft">{info.description}</p>}
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-soft">
+              <p className="truncate font-bold">{info.name}</p>
+              {info.description && <p className="line-clamp-2 text-xs font-medium text-soft">{info.description}</p>}
+              <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-soft">
                 {users.length > 0 && <Faces people={users} />}
                 {users.length ? `${users.length} usando` : "Ninguém usando"}
               </p>
@@ -368,7 +406,7 @@ export function PluginPanel({ plugins, onOpen, onClose }: { plugins: Plugins; on
             <button
               type="button"
               onClick={() => (session.open ? onClose(info.id) : onOpen(info.id))}
-              className={`type-link-sm h-9 shrink-0 rounded-sm px-3 transition ${session.open ? "bg-surface-hi text-ink hover:brightness-110" : "bg-blurple text-ink hover:brightness-110"}`}
+              className={`type-link-sm h-10 shrink-0 rounded-full border-2 px-4 shadow-sticker transition hover:-translate-y-px active:translate-y-px active:shadow-none ${session.open ? "border-line bg-surface-hi text-ink hover:bg-line" : "border-accent-hi bg-accent text-on-accent hover:bg-accent-hi"}`}
             >
               {session.open ? "Fechar" : users.length ? "Entrar" : "Abrir"}
             </button>

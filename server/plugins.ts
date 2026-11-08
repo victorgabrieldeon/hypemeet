@@ -10,6 +10,8 @@ export interface PluginInfo {
   icon: string | null;
   /** Page the room embeds. */
   url: string;
+  /** Opens with ?pass=<pass> on its address (server/pass.ts), for a server of its own that has to know who's calling. */
+  pass?: true;
 }
 
 const MANIFEST = "hypemeet-plugin.json";
@@ -36,7 +38,7 @@ export function parseManifest(raw: unknown, base: URL): PluginInfo | null {
   const name = text(m.name, 40);
   const url = sameOriginUrl(m.entry ?? base.href, base);
   if (!id || !name || !url) return null;
-  return { id, name, description: text(m.description, 200), icon: sameOriginUrl(m.icon, base), url };
+  return { id, name, description: text(m.description, 200), icon: sameOriginUrl(m.icon, base), url, ...(m.pass === true && { pass: true }) };
 }
 
 export function createPlugins(bases: string[]) {

@@ -21,9 +21,12 @@ export function useDismiss(ref: RefObject<HTMLElement | null>, open: boolean, cl
  }, [ref, open, close]);
 }
 
-/** Popover box that opens above its trigger; the trigger's wrapper must be `relative`. */
+/**
+ * Popover box that opens above its trigger; the trigger's wrapper must be `relative`. On phones it
+ * hangs from the trigger's left edge instead, so the dock's first buttons don't push it off screen.
+ */
 const MENU_PANEL_CLASS =
- "absolute bottom-full left-1/2 z-40 mb-3 w-[min(18rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop rounded-lg bg-canvas p-2 shadow-float ring-1 ring-line";
+ "absolute bottom-full left-1/2 z-40 mb-3 w-[min(18rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop rounded-lg border-2 border-line bg-panel p-2 shadow-float max-sm:left-0 max-sm:translate-x-0";
 
 /**
  * Small chevron pinned to the corner of a control button that opens a menu above it.
@@ -41,9 +44,10 @@ export function MenuChevron({ label, children }: { label: string; children: (clo
     aria-label={label}
     aria-expanded={open}
     title={label}
-    className="absolute -right-1 -bottom-1 z-10 grid size-6 place-items-center rounded-full bg-surface-hi text-ink ring-2 ring-panel transition hover:bg-blurple"
+    className={`absolute -top-1.5 -right-1.5 z-10 grid size-6 place-items-center rounded-full border-2 border-canvas transition hover:-translate-y-px ${open ? "bg-accent text-on-accent" : "bg-surface-hi text-ink hover:bg-accent hover:text-on-accent"
+     }`}
    >
-    <ChevronUp className={`size-3.5 transition ${open ? "" : "rotate-180"}`} />
+    <ChevronUp strokeWidth={2.8} className={`size-3.5 transition ${open ? "rotate-180" : ""}`} />
    </button>
    {open && (
     <div role="menu" className={MENU_PANEL_CLASS}>
@@ -57,7 +61,7 @@ export function MenuChevron({ label, children }: { label: string; children: (clo
 export function MenuSection({ title, children }: { title: string; children: ReactNode }) {
  return (
   <div className="flex flex-col gap-0.5 [&+&]:mt-2 [&+&]:border-t [&+&]:border-line [&+&]:pt-2">
-   <p className="px-2.5 pt-1 pb-1.5 text-xs font-bold tracking-wide text-soft uppercase">{title}</p>
+   <p className="type-label px-3 pt-1.5 pb-2 text-soft">{title}</p>
    {children}
   </div>
  );
@@ -77,11 +81,11 @@ function MenuItem({
    role="menuitemradio"
    aria-checked={active}
    onClick={onClick}
-   className={`flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm transition ${active ? "bg-surface text-ink" : "text-soft hover:bg-surface hover:text-ink"
+   className={`flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm font-semibold transition ${active ? "bg-[color-mix(in_srgb,var(--color-accent)_16%,var(--color-panel))] text-ink" : "text-soft hover:bg-surface-hi hover:text-ink"
     }`}
   >
    <span className="min-w-0 flex-1">{children}</span>
-   {active && <Check className="size-4 shrink-0 text-blurple" />}
+   {active && <Check strokeWidth={2.8} className="size-4 shrink-0 text-accent-hi" />}
   </button>
  );
 }
@@ -103,15 +107,17 @@ export function MenuToggle({
    role="menuitemcheckbox"
    aria-checked={checked}
    onClick={() => onChange(!checked)}
-   className="flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-left transition hover:bg-surface"
+   className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition hover:bg-surface-hi"
   >
    <span className="min-w-0 flex-1 text-sm">
-    <span className="block font-medium text-ink">{label}</span>
+    <span className="block font-bold text-ink">{label}</span>
     <span className="block text-xs text-soft">{hint}</span>
    </span>
-   <span className={`relative h-6 w-10 shrink-0 rounded-full transition ${checked ? "bg-blurple" : "bg-surface-hi"}`}>
+   <span
+    className={`relative h-6 w-10 shrink-0 rounded-full border-2 transition ${checked ? "border-accent-hi bg-accent" : "border-line bg-surface-hi"}`}
+   >
     <span
-     className={`absolute top-1 left-1 size-4 rounded-full bg-ink shadow transition-transform duration-200 ease-out-expo ${checked ? "translate-x-4" : ""
+     className={`absolute top-0.5 left-0.5 size-4 rounded-full shadow transition-transform duration-200 ease-out-expo ${checked ? "translate-x-4 bg-on-accent" : "bg-ink"
       }`}
     />
    </span>
@@ -163,7 +169,7 @@ export function DeviceMenu({
   }
  }
 
- if (!devices) return <p className="px-2.5 py-2 text-sm text-soft">Procurando dispositivos…</p>;
+ if (!devices) return <p className="px-3 py-2 text-sm text-soft">Procurando dispositivos…</p>;
 
  return (
   <>
@@ -178,7 +184,7 @@ export function DeviceMenu({
      return (
       <MenuSection key={kind} title={KIND_TITLES[kind]}>
        {ofKind.length === 0 ? (
-        <p className="px-2.5 py-1.5 text-sm text-soft">Nenhum encontrado</p>
+        <p className="px-3 py-1.5 text-sm text-soft">Nenhum encontrado</p>
        ) : (
         ofKind.map((device, i) => (
          <MenuItem

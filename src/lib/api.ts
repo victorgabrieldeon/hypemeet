@@ -28,6 +28,8 @@ export interface PluginInfo {
   description: string;
   icon: string | null;
   url: string;
+  /** Opens with ?pass=<pass> on its address (server/pass.ts). */
+  pass?: true;
 }
 
 /** Room code → people connected right now. Empty rooms are absent. */
@@ -67,6 +69,9 @@ export const api = {
   /** A browser-transmitter link for whoever holds this room token (see room/cast.ts). */
   castLink: (token: string) => request<{ url: string }>("/api/cast", { method: "POST", body: JSON.stringify({ token }) }),
   plugins: () => request<PluginInfo[]>("/api/plugins"),
+  /** A pass to this plugin (server/pass.ts), for whoever holds this room token. */
+  pluginPass: (id: string, token: string) =>
+    request<{ pass: string }>(`/api/plugins/${encodeURIComponent(id)}/pass`, { method: "POST", body: JSON.stringify({ token }) }),
   /** A YouTube video relayed by the server (server/youtube.ts), for a <video> in the Discord Activity. */
   youTubeStream: (videoId: string, token: string) => `/api/youtube/${videoId}?t=${encodeURIComponent(token)}`,
   discordToken: (code: string) =>

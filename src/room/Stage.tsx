@@ -7,17 +7,23 @@ import { WatchTile } from "./WatchPlayer";
 
 const GAP = 12;
 const ASPECT = 16 / 9;
+/** Strip tiles share the row's width, so it lines up with the pinned tile; up to 2:1 wide, and it scrolls below 160px. */
+const STRIP_TILE = "h-full min-w-40 max-w-56 flex-1 sm:max-w-64";
 
-/** Picks the column count that makes 16:9 tiles as large as possible inside the box. */
+/**
+ * Picks the column count that makes tiles as large as possible inside the box. Tiles are 16:9, except on a
+ * portrait box (a phone) they may grow taller, up to square, to fill it: else one column of thin strips wins.
+ */
 function fitGrid(width: number, height: number, count: number) {
+  const minAspect = height > width ? 1 : ASPECT;
   let best = { tileWidth: 0, tileHeight: 0 };
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
+    const cellHeight = (height - GAP * (rows - 1)) / rows;
     // floor: sub-pixel overflow would make flex-wrap push the last tile onto an extra row.
-    const tileWidth = Math.floor(
-      Math.min((width - GAP * (cols - 1)) / cols, ((height - GAP * (rows - 1)) / rows) * ASPECT),
-    );
-    if (tileWidth > best.tileWidth) best = { tileWidth, tileHeight: tileWidth / ASPECT };
+    const tileWidth = Math.floor(Math.min((width - GAP * (cols - 1)) / cols, cellHeight * ASPECT));
+    const tileHeight = Math.floor(Math.min(cellHeight, tileWidth / minAspect));
+    if (tileWidth * tileHeight > best.tileWidth * best.tileHeight) best = { tileWidth, tileHeight };
   }
   return best;
 }
@@ -46,22 +52,23 @@ export function Stage({ tiles, watch, watchJoined = true, plugins = [], pinnedId
   const pinned = tiles.find((t) => t.id === pinnedId);
   const toggle = (id: string) => onPin(pinnedId === id ? null : id);
 
+  // The padding keeps a speaker's ring from being clipped by the scroller; the negative margin cancels it out.
   const strip = (others: TileModel[]) => (
-    <div className="scrollbar-thin flex h-28 shrink-0 gap-3 overflow-x-auto sm:h-32">
+    <div className="scrollbar-thin -m-1 flex h-30 shrink-0 gap-3 overflow-x-auto p-1 sm:h-34">
       {!watchPinned && watch && (
-        <div className="aspect-video h-full shrink-0">
+        <div className={STRIP_TILE}>
           <WatchTile party={watch} joined={watchJoined} compact onOpen={() => onPin(WATCH_TILE_ID)} />
         </div>
       )}
       {plugins
         .filter((p) => p !== pluginPinned)
         .map((p) => (
-          <div key={p.info.id} className="aspect-video h-full shrink-0">
+          <div key={p.info.id} className={STRIP_TILE}>
             <PluginTile session={p} compact onOpen={() => onPin(pluginTileId(p.info.id))} />
           </div>
         ))}
       {others.map((tile) => (
-        <div key={tile.id} className="aspect-video h-full shrink-0">
+        <div key={tile.id} className={STRIP_TILE}>
           <Tile tile={tile} pinned={false} compact onTogglePin={() => toggle(tile.id)} />
         </div>
       ))}

@@ -12,7 +12,7 @@ export function UpdateButton() {
       <span className={`${headerLinkClass} pointer-events-none`} role="status" title={`Baixando a versão ${state.version}`}>
         <Spinner className="size-4" />
         <span className="hidden sm:inline">Baixando atualização</span>
-        <span className="tabular-nums">{state.percent}%</span>
+        <span className="font-mono font-medium">{state.percent}%</span>
       </span>
     );
   }
@@ -25,7 +25,7 @@ export function UpdateButton() {
         type="button"
         onClick={apply}
         title={ready ? `Reinicia o app na versão ${state.version}` : `Baixa a versão ${state.version} no navegador`}
-        className={`${headerLinkClass} animate-fade-in border-blurple/60 bg-blurple/15 text-ink hover:bg-blurple/25`}
+        className={`${headerLinkClass} animate-fade-in border-accent! bg-accent/15! text-ink hover:bg-accent/25!`}
       >
         <Icon className="size-4" />
         <span>{ready ? "Atualizar" : "Baixar atualização"}</span>

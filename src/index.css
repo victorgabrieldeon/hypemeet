@@ -1,38 +1,50 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/hanken-grotesk";
+/* opsz: Bricolage and DM Sans adapt their optical size to the font size. */
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
+@import "@fontsource-variable/dm-sans/opsz.css";
+@import "@fontsource/dm-mono/500.css";
 
-/* Near-black indigo canvas, inset panels, one Blurple accent, violet light for atmosphere. */
+/*
+ * Adesivo Noite (see DESIGN.md): cool charcoal, one grape accent, and colour only where people are.
+ * Chrome stays neutral; each participant's sticker colour (lib/color.ts) marks their avatar, tile,
+ * speaking ring, chat name and ink.
+ */
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Hanken Grotesk Variable", "Inter Variable", ui-sans-serif, sans-serif;
+  --font-sans: "DM Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "DM Sans Variable", ui-sans-serif, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
 
-  --color-canvas: #07070c;
-  --color-panel: #0c0c14;
-  --color-surface: #11111b;
-  --color-surface-hi: #191926;
-  --color-line: rgb(255 255 255 / 0.07);
-  --color-blurple: #5865f2;
-  --color-blurple-hi: #8b93ff;
-  --color-glow: #7457ff;
-  --color-ink: #ffffff;
-  --color-ink-dark: #07070c;
-  /* Secondary text; ≥7:1 on canvas/panel, ≥6:1 on surface-hi. */
-  --color-soft: #a0a2b8;
+  --color-canvas: #131418;
+  --color-panel: #1a1c22;
+  --color-surface: #23262e;
+  --color-surface-hi: #2e313b;
+  /* Borders and the 2px die-cut rim of stickers. */
+  --color-line: #383b47;
+  --color-accent: #9070ff;
+  /* Hover, links, focus, grape text on dark. */
+  --color-accent-hi: #b1a0ff;
+  --color-ink: #f2f3f7;
+  /* Text on every coloured fill (accent, danger, person colours): white on grape is only 3.5:1. */
+  --color-on-accent: #121019;
+  /* Secondary text; ≥5.5:1 on every surface. */
+  --color-soft: #a4a9b8;
   /* Functional only: leave, mute, errors, LIVE. */
-  --color-danger: #f0384c;
+  --color-danger: #ff5c6f;
   /* Functional only: degraded state (poor connection). */
-  --color-warn: #f5a524;
+  --color-warn: #ffb547;
+  /* Translucent dark chip over video. */
+  --color-scrim: rgb(19 20 24 / 0.74);
 
-  --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 16px;
-  --radius-xl: 28px;
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  /* Hand-cut sticker blob for avatars. */
+  --radius-blob: 52% 48% 55% 45% / 47% 55% 45% 53%;
 
-  --shadow-float: 0 24px 60px -12px rgb(0 0 0 / 0.7);
-  /* Violet rim + bloom for the hero/lobby cards. */
-  --shadow-glow: 0 0 0 1px rgb(124 108 255 / 0.2), 0 40px 120px -30px rgb(116 87 255 / 0.55);
+  --shadow-float: 0 1px 0 rgb(0 0 0 / 0.35), 0 16px 32px -18px rgb(0 0 0 / 0.8);
+  --shadow-sticker: 0 1px 0 rgb(0 0 0 / 0.35), 0 6px 12px -8px rgb(0 0 0 / 0.7);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -57,14 +69,14 @@
   }
   body {
     @apply bg-canvas font-sans text-ink antialiased;
-    font-feature-settings: "cv11", "ss01";
   }
   ::selection {
-    background: rgb(88 101 242 / 0.55);
+    background: rgb(144 112 255 / 0.45);
     color: var(--color-ink);
   }
-  input {
-    caret-color: var(--color-blurple-hi);
+  input,
+  textarea {
+    caret-color: var(--color-accent-hi);
   }
   button {
     cursor: pointer;
@@ -73,7 +85,7 @@
     cursor: not-allowed;
   }
   :focus-visible {
-    outline: 2px solid var(--color-blurple-hi);
+    outline: 2px dashed var(--color-accent-hi);
     outline-offset: 3px;
   }
   html {
@@ -84,83 +96,61 @@
 @utility type-heading-sm {
   font-family: var(--font-display);
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.01em;
 }
 @utility type-link {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.4;
 }
 @utility type-link-sm {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
 }
 /* Small tracked caps for panel labels. */
 @utility type-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-/*
- * Two glowing planet-horizon rims sweeping across the canvas. Each pseudo-element is a huge dark
- * ellipse whose top edge carries a violet light; only the rim is ever on screen.
- */
-@utility aurora {
-  position: relative;
-  /* clip, not hidden: hidden boxes stay programmatically scrollable, so focus could shift the page sideways. */
-  overflow: clip;
-  isolation: isolate;
-  &::before,
-  &::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    border-radius: 50%;
-    background: var(--color-canvas);
-    pointer-events: none;
-  }
-  &::before {
-    width: 190vmax;
-    height: 120vmax;
-    left: -20vmax;
-    top: 62%;
-    border-top: 1.5px solid rgb(150 132 255 / 0.85);
-    box-shadow:
-      0 -24px 90px -6px rgb(116 87 255 / 0.5),
-      inset 0 36px 70px -36px rgb(116 87 255 / 0.55);
-    transform: rotate(-17deg);
-    transform-origin: 50% 0;
-    animation: horizon-drift 32s ease-in-out infinite alternate;
-  }
-  &::after {
-    width: 110vmax;
-    height: 110vmax;
-    left: 74%;
-    top: 6%;
-    border-top: 1.5px solid rgb(150 132 255 / 0.7);
-    box-shadow:
-      0 -20px 70px -10px rgb(116 87 255 / 0.4),
-      inset 0 30px 60px -32px rgb(116 87 255 / 0.4);
-    transform: rotate(-28deg);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &::before {
-      animation: none;
-    }
-  }
+/* A sticker: 2px die-cut rim one step above the surface, low soft shadow. */
+@utility sticker {
+  border: 2px solid var(--color-line);
+  box-shadow: var(--shadow-sticker);
 }
 
-@keyframes horizon-drift {
-  from { transform: rotate(-17deg); }
-  to { transform: rotate(-14deg) translateY(-2%); }
+/* Dark frosted chip that stays readable over any shared screen or camera. */
+@utility scrim {
+  background: var(--color-scrim);
+  border: 1.5px solid rgb(255 255 255 / 0.1);
+  backdrop-filter: blur(8px);
+}
+
+/*
+ * Someone's colour, set as --p on the element (style={personStyle(identity)}): a filled name tag,
+ * a tinted frame, the speaking ring.
+ */
+@utility person-tag {
+  background: var(--p);
+  color: var(--color-on-accent);
+  border: 1.5px solid color-mix(in srgb, var(--p) 60%, white);
+}
+@utility person-frame {
+  border: 2px solid color-mix(in srgb, var(--p) 45%, var(--color-surface));
+}
+@utility person-speaking {
+  border-color: var(--p);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--p) 28%, transparent),
+    0 8px 26px -6px color-mix(in srgb, var(--p) 50%, transparent);
 }
 
 /*
@@ -201,24 +191,23 @@
   scrollbar-color: var(--color-surface-hi) transparent;
 }
 
-/* Range input as a slim Blurple slider; --fill is set inline (0–100%). */
+/* Range input as a slim grape slider; --fill is set inline (0–100%). */
 @utility range-accent {
   appearance: none;
   height: 6px;
   border-radius: 999px;
   background: linear-gradient(
     to right,
-    var(--color-blurple) 0,
-    var(--color-blurple-hi) var(--fill, 50%),
+    var(--color-accent) 0,
+    var(--color-accent-hi) var(--fill, 50%),
     rgb(255 255 255 / 0.18) var(--fill, 50%)
   );
-  outline: none;
   &::-webkit-slider-thumb {
     appearance: none;
     width: 16px;
     height: 16px;
     border-radius: 999px;
-    background: white;
+    background: var(--color-ink);
     box-shadow: 0 1px 6px rgb(0 0 0 / 0.4);
   }
   &::-moz-range-thumb {
@@ -226,6 +215,6 @@
     height: 16px;
     border: 0;
     border-radius: 999px;
-    background: white;
+    background: var(--color-ink);
   }
 }

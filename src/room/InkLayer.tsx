@@ -21,23 +21,28 @@ function strokeAlpha(settledAt: number | null, now: number) {
   return clamp01(1 - (now - settledAt - HOLD_MS) / FADE_MS);
 }
 
-/** Author tag next to someone else's mark, kept inside the picture. */
+/** Author tag next to someone else's mark (a filled person tag), kept inside the picture. */
 function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, width: number, height: number) {
   const name = text.length > 18 ? `${text.slice(0, 17)}…` : text;
   ctx.save();
   ctx.shadowColor = "transparent";
-  ctx.font = "600 12px 'Inter Variable', sans-serif";
-  const w = ctx.measureText(name).width + 12;
-  const h = 20;
+  ctx.font = "800 12px 'Bricolage Grotesque Variable', sans-serif";
+  const w = ctx.measureText(name).width + 16;
+  const h = 22;
   const left = Math.max(2, Math.min(x + 10, width - w - 2));
   const top = Math.max(2, Math.min(y - h - 6, height - h - 2));
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.roundRect(left, top, w, h, 6);
+  ctx.roundRect(left, top, w, h, h / 2);
   ctx.fill();
-  ctx.fillStyle = "#07070c";
+  // The tag's lighter rim.
+  ctx.strokeStyle = "rgb(255 255 255 / 0.4)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // --color-on-accent: dark text on every person colour.
+  ctx.fillStyle = "#121019";
   ctx.textBaseline = "middle";
-  ctx.fillText(name, left + 6, top + h / 2 + 0.5);
+  ctx.fillText(name, left + 8, top + h / 2 + 0.5);
   ctx.restore();
 }
 

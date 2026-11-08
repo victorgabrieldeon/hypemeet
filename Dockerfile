@@ -11,8 +11,6 @@ ENV NODE_ENV=production PORT=3001 DB_PATH=/app/data/hypemeet.db
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 COPY server ./server
-# The link-preview card draws the logo from here.
-COPY public ./public
 COPY --from=build /app/dist ./dist
 # YouTube in the Discord Activity (server/youtube.ts). Latest on every build: YouTube changes often and old
 # yt-dlps stop working. shortcut: x86_64 only; on ARM use yt-dlp_linux_aarch64.

@@ -1,6 +1,5 @@
 import { Resvg, initWasm } from "@resvg/resvg-wasm";
 import satori from "satori";
-import { join } from "node:path";
 
 // Link previews (WhatsApp, Discord, Telegram…) for invite links: a 1200×630 PNG with the room name
 // and who's in it. Satori lays out the card and turns text into paths; resvg rasterizes the SVG.
@@ -23,46 +22,48 @@ const read = (spec: string) => Bun.file(resolve(spec)).arrayBuffer();
 // Satori needs ttf/otf/woff (not woff2), so these come from the static @fontsource packages.
 // latin covers Portuguese; latin-ext catches the rest of Europe.
 const fontFiles = [
-  ["Hanken Grotesk", 800, "@fontsource/hanken-grotesk/files/hanken-grotesk-latin-800-normal.woff"],
-  ["Hanken Grotesk", 800, "@fontsource/hanken-grotesk/files/hanken-grotesk-latin-ext-800-normal.woff"],
-  ["Hanken Grotesk", 700, "@fontsource/hanken-grotesk/files/hanken-grotesk-latin-700-normal.woff"],
-  ["Hanken Grotesk", 700, "@fontsource/hanken-grotesk/files/hanken-grotesk-latin-ext-700-normal.woff"],
-  ["Inter", 500, "@fontsource/inter/files/inter-latin-500-normal.woff"],
-  ["Inter", 500, "@fontsource/inter/files/inter-latin-ext-500-normal.woff"],
-  ["Inter", 600, "@fontsource/inter/files/inter-latin-600-normal.woff"],
-  ["Inter", 600, "@fontsource/inter/files/inter-latin-ext-600-normal.woff"],
+  ["Bricolage Grotesque", 800, "@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-800-normal.woff"],
+  ["Bricolage Grotesque", 800, "@fontsource/bricolage-grotesque/files/bricolage-grotesque-latin-ext-800-normal.woff"],
+  ["DM Sans", 500, "@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff"],
+  ["DM Sans", 500, "@fontsource/dm-sans/files/dm-sans-latin-ext-500-normal.woff"],
+  ["DM Sans", 700, "@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff"],
+  ["DM Sans", 700, "@fontsource/dm-sans/files/dm-sans-latin-ext-700-normal.woff"],
+  ["DM Mono", 500, "@fontsource/dm-mono/files/dm-mono-latin-500-normal.woff"],
 ] as const;
 
 const ready = (async () => {
-  const [fonts, logo] = await Promise.all([
+  const [fonts] = await Promise.all([
     Promise.all(fontFiles.map(async ([name, weight, spec]) => ({ name, weight, data: await read(spec) }))),
-    Bun.file(join(import.meta.dir, "..", "public", "favicon.svg")).text(),
     initWasm(read("@resvg/resvg-wasm/index_bg.wasm")),
   ]);
-  return { fonts, logo: svgData(logo) };
+  return { fonts };
 })();
 
 function svgData(svg: string | ArrayBuffer): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg as string).toString("base64")}`;
 }
 
-// Violet light for atmosphere, same mood as the app's hero glow. Drawn as plain SVG because
-// satori's radial-gradient rasterizes into hard-edged blocks.
-const BACKDROP = svgData(`<svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}">
-  <radialGradient id="a" cx="1040" cy="20" r="680" gradientUnits="userSpaceOnUse">
-    <stop offset="0" stop-color="#7457ff" stop-opacity=".5"/><stop offset="1" stop-color="#7457ff" stop-opacity="0"/>
-  </radialGradient>
-  <radialGradient id="b" cx="60" cy="720" r="560" gradientUnits="userSpaceOnUse">
-    <stop offset="0" stop-color="#5865f2" stop-opacity=".26"/><stop offset="1" stop-color="#5865f2" stop-opacity="0"/>
-  </radialGradient>
-  <rect width="100%" height="100%" fill="#07070c"/>
-  <rect width="100%" height="100%" fill="url(#a)"/>
-  <rect width="100%" height="100%" fill="url(#b)"/>
-</svg>`);
+// Adesivo Noite tokens (src/index.css); satori has no CSS variables or color-mix, so literal hexes.
+const C = {
+  canvas: "#131418",
+  panel: "#1a1c22",
+  surface: "#23262e",
+  surfaceHi: "#2e313b",
+  line: "#383b47",
+  accent: "#9070ff",
+  accentHi: "#b1a0ff",
+  ink: "#f2f3f7",
+  onAccent: "#121019",
+  soft: "#a4a9b8",
+  danger: "#ff5c6f",
+  // color-mix(danger 55%, white): the rim of the "Ao vivo" sticker.
+  dangerRim: "#ffa5b0",
+};
+const SHADOW_STICKER = "0 1px 0 rgba(0, 0, 0, 0.35), 0 6px 12px -8px rgba(0, 0, 0, 0.7)";
 
 // lucide arrow-right; the latin font subsets have no "→".
 const ARROW = svgData(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${C.accentHi}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`,
 );
 
 // Room names love emoji ("Sala do 🎮"); satori asks for each one and we hand back Twemoji SVGs.
@@ -116,14 +117,29 @@ function h(type: string, props: { style?: Style; [key: string]: unknown }, ...ch
   return { type, props: { ...props, children: kids.length > 1 ? kids : kids[0] } };
 }
 
-// Mirrors Avatar in src/components/ui.tsx so people look the same in the preview and in the call.
-const AVATAR_FILLS = [
-  ["#7457ff", "#5865f2"],
-  ["#5865f2", "#3d47c9"],
-  ["#9a6bff", "#5b3fd6"],
-  ["#4c5bd4", "#2b2f7a"],
-];
-function avatar(name: string, index: number): Node {
+// Server copy of PERSON_COLORS and assignPersonColors in src/lib/color.ts (the source of truth; the
+// production image ships server/ without src/). Keep both in sync. Same free-slot walk, so no two
+// avatars on the card share a colour.
+const PERSON_COLORS = ["#ff9b5e", "#ff85c2", "#54dfb1", "#ffd45e", "#62c4ff", "#b5e35c", "#e89bff", "#e6c69a"];
+function personColors(keysInJoinOrder: string[]): string[] {
+  const taken = new Set<number>();
+  return keysInJoinOrder.map((key) => {
+    let hash = 0;
+    for (const ch of key) hash = (hash * 31 + ch.codePointAt(0)!) | 0;
+    let i = Math.abs(hash) % PERSON_COLORS.length;
+    if (taken.size < PERSON_COLORS.length) while (taken.has(i)) i = (i + 1) % PERSON_COLORS.length;
+    taken.add(i);
+    return PERSON_COLORS[i]!;
+  });
+}
+
+// Hand-cut sticker blob (--radius-blob).
+const BLOB = "52% 48% 55% 45% / 47% 55% 45% 53%";
+
+// Mirrors Avatar in src/components/ui.tsx: a sticker blob in the person's colour, dark initials.
+// Presence only knows display names, so the name picks the colour here (not the room's identity
+// colour).
+function avatar(name: string, index: number, color: string): Node {
   const initials =
     name
       .split(/\s+/)
@@ -131,9 +147,6 @@ function avatar(name: string, index: number): Node {
       .slice(0, 2)
       .map((p) => [...p][0]!.toUpperCase())
       .join("") || "?";
-  let hash = 0;
-  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
-  const [from, to] = AVATAR_FILLS[Math.abs(hash) % AVATAR_FILLS.length]!;
   return h(
     "div",
     {
@@ -143,14 +156,14 @@ function avatar(name: string, index: number): Node {
         justifyContent: "center",
         width: 76,
         height: 76,
-        marginLeft: index === 0 ? 0 : -18,
-        borderRadius: 999,
-        border: "5px solid #07070c",
-        backgroundImage: `linear-gradient(135deg, ${from}, ${to})`,
-        fontFamily: "Hanken Grotesk",
-        fontWeight: 700,
-        fontSize: 26,
-        color: "#fff",
+        marginLeft: index === 0 ? 0 : -14,
+        borderRadius: BLOB,
+        border: `5px solid ${C.panel}`,
+        backgroundColor: color,
+        fontFamily: "Bricolage Grotesque",
+        fontWeight: 800,
+        fontSize: 28,
+        color: C.onAccent,
       },
     },
     initials,
@@ -167,14 +180,14 @@ function extra(count: number): Node {
         justifyContent: "center",
         width: 76,
         height: 76,
-        marginLeft: -18,
-        borderRadius: 999,
-        border: "5px solid #07070c",
-        backgroundColor: "#191926",
-        fontFamily: "Inter",
-        fontWeight: 600,
+        marginLeft: -14,
+        borderRadius: BLOB,
+        border: `5px solid ${C.panel}`,
+        backgroundColor: C.surfaceHi,
+        fontFamily: "DM Sans",
+        fontWeight: 700,
         fontSize: 24,
-        color: "#a0a2b8",
+        color: C.ink,
       },
     },
     `+${count}`,
@@ -189,10 +202,10 @@ function pill(children: Child[], style: Style = {}): Node {
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "12px 24px",
+        padding: "10px 22px",
         borderRadius: 999,
-        fontFamily: "Inter",
-        fontWeight: 600,
+        fontFamily: "DM Sans",
+        fontWeight: 700,
         fontSize: 24,
         ...style,
       },
@@ -201,39 +214,64 @@ function pill(children: Child[], style: Style = {}): Node {
   );
 }
 
-function card({ name, code, people = [] }: InviteCard, logo: string): Node {
+function card({ name, code, people = [] }: InviteCard): Node {
   const live = people.length > 0;
   const shown = people.length > 5 ? people.slice(0, 4) : people;
+  const colors = personColors(shown);
   const titleSize = !name ? 92 : name.length <= 14 ? 112 : name.length <= 26 ? 92 : 72;
 
   const header = h(
     "div",
     { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+    // Wordmark: "Hype" plus "Meet" on a tilted grape sticker, as in src/components/ui.tsx.
     h(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 20 } },
-      h("img", { src: logo, width: 64, height: 64 }),
+      {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          fontFamily: "Bricolage Grotesque",
+          fontWeight: 800,
+          fontSize: 46,
+          letterSpacing: -1.4,
+          color: C.ink,
+        },
+      },
+      "Hype",
       h(
         "div",
-        { style: { display: "flex", fontFamily: "Hanken Grotesk", fontWeight: 800, fontSize: 38, letterSpacing: -0.4 } },
-        h("span", { style: { color: "#fff" } }, "HYPE"),
-        h("span", { style: { color: "#8b93ff" } }, "MEET"),
+        {
+          style: {
+            display: "flex",
+            marginLeft: 8,
+            padding: "2px 16px 9px",
+            borderRadius: 17,
+            border: `3px solid ${C.accentHi}`,
+            backgroundColor: C.accent,
+            color: C.onAccent,
+            boxShadow: SHADOW_STICKER,
+            transform: "rotate(-3deg)",
+          },
+        },
+        "Meet",
       ),
     ),
     live
       ? pill(
           [
-            h("div", { style: { width: 14, height: 14, borderRadius: 999, backgroundColor: "#f0384c" } }),
-            `AO VIVO · ${people.length} na sala`,
+            h("div", { style: { width: 12, height: 12, borderRadius: 999, backgroundColor: C.onAccent } }),
+            `Ao vivo · ${people.length} ${people.length === 1 ? "pessoa" : "pessoas"} agora`,
           ],
-          { backgroundColor: "rgba(240, 56, 76, 0.14)", border: "2px solid rgba(240, 56, 76, 0.4)", color: "#fff" },
+          { backgroundColor: C.danger, border: `2px solid ${C.dangerRim}`, color: C.onAccent, boxShadow: SHADOW_STICKER },
         )
       : code
         ? pill([formatCode(code)], {
-            backgroundColor: "#11111b",
-            border: "2px solid rgba(255, 255, 255, 0.07)",
-            color: "#a0a2b8",
-            letterSpacing: 4,
+            backgroundColor: C.surface,
+            border: `2px solid ${C.line}`,
+            fontFamily: "DM Mono",
+            fontWeight: 500,
+            color: C.ink,
+            letterSpacing: 1,
           })
         : null,
   );
@@ -243,7 +281,7 @@ function card({ name, code, people = [] }: InviteCard, logo: string): Node {
     { style: { display: "flex", flexDirection: "column", gap: 18 } },
     h(
       "div",
-      { style: { fontFamily: "Inter", fontWeight: 500, fontSize: 30, color: "#a0a2b8" } },
+      { style: { fontFamily: "DM Sans", fontWeight: 500, fontSize: 30, color: C.soft } },
       name ? "Você foi chamado pra sala" : "Chamada de voz e vídeo pra galera",
     ),
     h(
@@ -251,12 +289,12 @@ function card({ name, code, people = [] }: InviteCard, logo: string): Node {
       {
         style: {
           display: "block",
-          fontFamily: "Hanken Grotesk",
+          fontFamily: "Bricolage Grotesque",
           fontWeight: 800,
           fontSize: titleSize,
-          lineHeight: 1.02,
+          lineHeight: 1.04,
           letterSpacing: -titleSize * 0.02,
-          color: "#fff",
+          color: C.ink,
           lineClamp: 2,
         },
       },
@@ -274,7 +312,7 @@ function card({ name, code, people = [] }: InviteCard, logo: string): Node {
         ? h(
             "div",
             { style: { display: "flex", flexShrink: 0 } },
-            ...shown.map(avatar),
+            ...shown.map((person, i) => avatar(person, i, colors[i]!)),
             people.length > shown.length ? extra(people.length - shown.length) : null,
           )
         : null,
@@ -283,10 +321,10 @@ function card({ name, code, people = [] }: InviteCard, logo: string): Node {
         {
           style: {
             display: "block",
-            fontFamily: "Inter",
-            fontWeight: live ? 600 : 500,
+            fontFamily: "DM Sans",
+            fontWeight: live ? 700 : 500,
             fontSize: 30,
-            color: live ? "#fff" : "#a0a2b8",
+            color: live ? C.ink : C.soft,
             lineClamp: 2,
           },
         },
@@ -294,40 +332,69 @@ function card({ name, code, people = [] }: InviteCard, logo: string): Node {
       ),
     ),
     name
-      ? pill(["Entrar na sala", h("img", { src: ARROW, width: 30, height: 30 })], {
-          flexShrink: 0,
-          padding: "18px 34px",
-          fontSize: 28,
-          color: "#fff",
-          backgroundColor: "#5865f2",
-          boxShadow: "0 18px 50px -12px rgba(116, 87, 255, 0.7)",
-        })
+      ? pill(
+          [
+            "Entrar na sala",
+            h(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 60,
+                  height: 60,
+                  borderRadius: 999,
+                  backgroundColor: C.onAccent,
+                },
+              },
+              h("img", { src: ARROW, width: 32, height: 32 }),
+            ),
+          ],
+          {
+            flexShrink: 0,
+            gap: 22,
+            padding: "9px 9px 9px 34px",
+            border: `3px solid ${C.accentHi}`,
+            fontFamily: "Bricolage Grotesque",
+            fontWeight: 800,
+            fontSize: 30,
+            color: C.onAccent,
+            backgroundColor: C.accent,
+            boxShadow: SHADOW_STICKER,
+          },
+        )
       : null,
   );
 
+  // A flat panel card on the charcoal canvas, with the 2px die-cut rim of the app's cards.
   return h(
     "div",
-    {
-      style: {
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        width: OG_WIDTH,
-        height: OG_HEIGHT,
-        padding: "64px 72px",
+    { style: { display: "flex", width: OG_WIDTH, height: OG_HEIGHT, padding: 28, backgroundColor: C.canvas } },
+    h(
+      "div",
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          flex: 1,
+          padding: "40px 46px",
+          border: `2px solid ${C.line}`,
+          borderRadius: 24,
+          backgroundColor: C.panel,
+        },
       },
-    },
-    h("img", { src: BACKDROP, width: OG_WIDTH, height: OG_HEIGHT, style: { position: "absolute", top: 0, left: 0 } }),
-    header,
-    title,
-    footer,
+      header,
+      title,
+      footer,
+    ),
   );
 }
 
 export async function renderInviteCard(input: InviteCard): Promise<Uint8Array> {
-  const { fonts, logo } = await ready;
-  const svg = await satori(card(input, logo) as never, {
+  const { fonts } = await ready;
+  const svg = await satori(card(input) as never, {
     width: OG_WIDTH,
     height: OG_HEIGHT,
     fonts: fonts.map((f) => ({ ...f, style: "normal" as const })),

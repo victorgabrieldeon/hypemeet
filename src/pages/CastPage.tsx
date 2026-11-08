@@ -1,7 +1,7 @@
 import { DisconnectReason, Room, RoomEvent } from "livekit-client";
 import { ArrowRight, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Button, inputClass, Logo, Spinner, glowCardClass } from "../components/ui";
+import { Button, inputClass, Logo, Spinner, cardClass } from "../components/ui";
 import { api } from "../lib/api";
 import { obeyOwner } from "../room/cast";
 import { deviceRoomOptions, loadScreenPrefs, saveScreenPrefs } from "../room/devices";
@@ -51,8 +51,8 @@ function readLink(): CastLink | null {
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="aurora grid min-h-full place-items-center px-4 py-10">
-      <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>{children}</div>
+    <div className="grid min-h-full place-items-center px-4 py-10">
+      <div className={`${cardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>{children}</div>
     </div>
   );
 }
@@ -249,7 +249,7 @@ function Transmitter({
 
   return (
     <div
-      className={`aurora flex min-h-full flex-col items-center justify-center gap-6 px-4 py-10 ${video ? "lg:flex-row lg:items-start" : ""}`}
+      className={`flex min-h-full flex-col items-center justify-center gap-6 px-4 py-10 ${video ? "lg:flex-row lg:items-start" : ""}`}
     >
       {/* Always mounted: the crop target has to exist when the picker opens. Square: the crop is a rectangle.
           Sticky and on top: the crop sends whatever covers it, and nothing if it scrolls away. */}
@@ -273,37 +273,37 @@ function Transmitter({
           </p>
         )}
       </div>
-      <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>
+      <div className={`${cardClass} flex w-full max-w-md animate-pop flex-col gap-6 p-6 sm:p-8`}>
         <Logo />
         <div>
           <h1 className="type-heading-sm text-2xl">{live ? "Você está ao vivo" : "Escolha o que transmitir"}</h1>
           <p className="mt-2 text-soft">
-            Transmitindo como <span className="font-semibold text-ink">{name}</span>
+            Transmitindo como <span className="font-bold text-ink">{name}</span>
             {roomName && (
               <>
                 {" "}
-                em <span className="font-semibold text-ink">{roomName}</span>
+                em <span className="font-bold text-ink">{roomName}</span>
               </>
             )}
             . Quem está na atividade do Discord vê tudo como seu.
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-md border border-line bg-surface p-3">
+        <div className="flex items-center gap-3 rounded-lg border-2 border-line bg-surface py-3 pr-3 pl-4">
           <p className="min-w-0 flex-1 text-sm">
-            <span className="block font-medium">Câmera</span>
+            <span className="block font-bold">Câmera</span>
             <span className="block text-xs text-soft">{cameraOn ? "No ar, no seu quadro da sala" : "Aparece no seu quadro da sala"}</span>
           </p>
-          <button
+          <Button
             type="button"
             disabled={cameraBusy}
             onClick={() => void setCamera(!cameraOn)}
-            className="type-link-sm flex h-9 shrink-0 items-center gap-1.5 rounded-md bg-surface-hi px-3 text-ink transition hover:bg-blurple/25 disabled:opacity-60"
+            size="sm"
           >
             {cameraBusy ? <Spinner className="size-4" /> : cameraOn ? <VideoOff className="size-4" /> : <Video className="size-4" />}
             {cameraOn ? "Desligar" : "Ligar"}
-          </button>
+          </Button>
         </div>
-        <form onSubmit={(e) => void playVideo(e)} className="flex flex-col gap-2 rounded-md border border-line bg-surface p-3">
+        <form onSubmit={(e) => void playVideo(e)} className="flex flex-col gap-2 rounded-lg border-2 border-line bg-surface p-3">
           <span className="type-label px-0.5 pt-1 text-soft">Vídeo do YouTube</span>
           <div className="flex gap-2">
             <input

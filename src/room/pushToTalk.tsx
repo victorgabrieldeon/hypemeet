@@ -1,5 +1,6 @@
 import type { LocalParticipant } from "livekit-client";
 import { useEffect, useRef } from "react";
+import { kbdClass } from "../components/ui";
 import { pttBridge, type PttState } from "../lib/ptt";
 import { MenuSection, MenuToggle } from "./menus";
 import { playCue } from "./sounds";
@@ -95,14 +96,14 @@ export function PushToTalkSection({ ptt }: { ptt: PttState }) {
         checked={ptt.enabled}
         onChange={(on) => bridge.setEnabled(on)}
       />
-      <div className="flex items-center gap-2 px-2.5 py-1.5">
+      <div className="flex items-center gap-2 px-3 py-1.5">
         <span className="min-w-0 flex-1 text-sm" aria-live="polite">
           {capturing ? (
             <span className="text-ink">Aperte uma tecla ou botão do mouse… (Esc cancela)</span>
           ) : ptt.binding ? (
             <>
               <span className="text-soft">Tecla: </span>
-              <kbd className="rounded-xs bg-surface-hi px-1.5 py-0.5 font-mono text-xs text-ink">{ptt.binding}</kbd>
+              <kbd className={kbdClass}>{ptt.binding}</kbd>
             </>
           ) : (
             <span className="text-soft">Nenhuma tecla escolhida</span>
@@ -111,12 +112,12 @@ export function PushToTalkSection({ ptt }: { ptt: PttState }) {
         <button
           type="button"
           onClick={() => bridge.capture(!capturing)}
-          className="type-link-sm h-8 shrink-0 rounded-sm bg-surface px-2.5 text-ink transition hover:bg-surface-hi"
+          className="type-link-sm h-8 shrink-0 rounded-full border-2 border-line bg-surface px-3 text-ink transition hover:-translate-y-px hover:bg-surface-hi active:translate-y-px"
         >
           {capturing ? "Cancelar" : ptt.binding ? "Trocar" : "Escolher"}
         </button>
       </div>
-      {ptt.error && <p className="px-2.5 pb-1 text-xs text-danger">{ptt.error}</p>}
+      {ptt.error && <p className="px-3 pb-1 text-xs font-semibold text-danger">{ptt.error}</p>}
     </MenuSection>
   );
 }

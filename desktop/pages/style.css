@@ -1,32 +1,44 @@
 :root {
   color-scheme: dark;
-  --canvas: #07070c;
-  --panel: #0c0c14;
-  --surface: #11111b;
-  --surface-hi: #191926;
-  --line: rgb(255 255 255 / 0.07);
-  --blurple: #5865f2;
-  --blurple-hi: #8b93ff;
-  --soft: #a0a2b8;
-  --danger: #f0384c;
-  font: 15px/1.5 "Inter Variable", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  /* Adesivo Noite, same values as src/index.css. Local files, no bundler: system fonts stand in. */
+  --canvas: #131418;
+  --panel: #1a1c22;
+  --surface: #23262e;
+  --surface-hi: #2e313b;
+  --line: #383b47;
+  --accent: #9070ff;
+  --accent-hi: #b1a0ff;
+  --ink: #f2f3f7;
+  /* Text on every coloured fill: white on grape is only 3.5:1. */
+  --on-accent: #121019;
+  --soft: #a4a9b8;
+  --danger: #ff5c6f;
+  --shadow-float: 0 1px 0 rgb(0 0 0 / 0.35), 0 16px 32px -18px rgb(0 0 0 / 0.8);
+  --shadow-sticker: 0 1px 0 rgb(0 0 0 / 0.35), 0 6px 12px -8px rgb(0 0 0 / 0.7);
+  --font-display: "Bricolage Grotesque", "DM Sans", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font: 500 15px/1.5 "DM Sans", "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* .audio and .audio-pick set display, which would otherwise beat the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   background: var(--canvas);
-  color: #fff;
+  color: var(--ink);
 }
 
 h1 {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
+  font: 800 22px/1.2 var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 p {
@@ -34,7 +46,7 @@ p {
 }
 
 .fingerprint {
-  font: 12px/1.4 ui-monospace, "Cascadia Mono", monospace;
+  font: 500 12px/1.4 "DM Mono", ui-monospace, "Cascadia Mono", monospace;
   word-break: break-all;
 }
 
@@ -57,45 +69,76 @@ select {
 input[type="text"],
 input[type="url"] {
   width: 100%;
-  padding: 11px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  height: 52px;
+  padding: 0 16px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
   background: var(--surface);
   outline: none;
+  caret-color: var(--accent-hi);
+}
+
+input::placeholder {
+  color: var(--soft);
+}
+
+input[type="text"]:focus,
+input[type="url"]:focus {
+  border-color: var(--accent);
 }
 
 input:focus-visible,
 select:focus-visible,
 button:focus-visible {
-  outline: 2px solid var(--blurple-hi);
-  outline-offset: 2px;
+  outline: 2px dashed var(--accent-hi);
+  outline-offset: 3px;
 }
 
+/* Pill sticker: lifts on hover, presses on click. */
 .btn {
-  padding: 10px 18px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-hi);
-  font-weight: 600;
+  height: 44px;
+  padding: 0 18px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sticker);
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s,
+    background-color 0.15s;
 }
 
 .btn:hover {
-  background: #22223a;
+  transform: translateY(-1px);
+  background: var(--surface-hi);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
 }
 
 .btn.primary {
-  border-color: transparent;
-  background: var(--blurple);
+  border-color: var(--accent-hi);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn.primary:hover {
-  background: #6a76ff;
+  background: var(--accent-hi);
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  transform: none;
+  opacity: 0.5;
   cursor: default;
+}
+
+.btn.primary:disabled {
+  background: var(--accent);
 }
 
 /* ---- setup ---- */
@@ -105,7 +148,6 @@ button:focus-visible {
   place-items: center;
   min-height: 100vh;
   padding: 24px;
-  background: radial-gradient(60% 50% at 50% 0%, rgb(116 87 255 / 0.18), transparent 70%), var(--canvas);
 }
 
 .card {
@@ -113,11 +155,10 @@ button:focus-visible {
   gap: 18px;
   width: min(440px, 100%);
   padding: 32px;
-  border-radius: 28px;
+  border: 2px solid var(--line);
+  border-radius: 24px;
   background: var(--panel);
-  box-shadow:
-    0 0 0 1px rgb(124 108 255 / 0.2),
-    0 40px 120px -30px rgb(116 87 255 / 0.55);
+  box-shadow: var(--shadow-float);
 }
 
 .card img {
@@ -150,11 +191,11 @@ button:focus-visible {
 }
 
 .picker header {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
 }
 
 .picker footer {
-  border-top: 1px solid var(--line);
+  border-top: 2px solid var(--line);
 }
 
 .picker footer .row {
@@ -165,23 +206,30 @@ button:focus-visible {
   display: flex;
   gap: 4px;
   padding: 4px;
-  border-radius: 10px;
+  border: 2px solid var(--line);
+  border-radius: 999px;
   background: var(--surface);
 }
 
 .tabs button {
-  padding: 6px 14px;
+  height: 34px;
+  padding: 0 16px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 999px;
   background: none;
   color: var(--soft);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 
+.tabs button:hover {
+  color: var(--ink);
+}
+
 .tabs button[aria-selected="true"] {
-  background: var(--surface-hi);
-  color: #fff;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent-hi);
+  color: var(--on-accent);
 }
 
 .grid {
@@ -197,26 +245,32 @@ button:focus-visible {
   display: grid;
   gap: 8px;
   padding: 8px;
-  border: 2px solid transparent;
-  border-radius: 14px;
+  border: 2px solid var(--line);
+  border-radius: 20px;
   background: var(--surface);
+  box-shadow: var(--shadow-sticker);
   text-align: left;
   cursor: pointer;
+  transition:
+    transform 0.15s,
+    background-color 0.15s;
 }
 
 .source:hover {
+  transform: translateY(-1px);
   background: var(--surface-hi);
 }
 
 .source[aria-pressed="true"] {
-  border-color: var(--blurple);
+  border-color: var(--accent);
   background: var(--surface-hi);
+  box-shadow: 0 0 0 3px rgb(144 112 255 / 0.28);
 }
 
 .thumb {
   aspect-ratio: 16 / 9;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #000 center / contain no-repeat;
 }
 
@@ -226,6 +280,7 @@ button:focus-visible {
   align-items: center;
   min-width: 0;
   font-size: 14px;
+  font-weight: 700;
 }
 
 .label img {
@@ -259,7 +314,7 @@ button:focus-visible {
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: var(--blurple);
+  accent-color: var(--accent);
 }
 
 .audio small {
@@ -278,10 +333,15 @@ button:focus-visible {
 
 .audio-pick select {
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  height: 44px;
+  padding: 0 12px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
   background: var(--surface);
+}
+
+.audio-pick > span {
+  font-weight: 700;
 }
 
 .audio-pick small {

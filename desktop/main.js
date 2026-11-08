@@ -18,7 +18,7 @@ const IS_WAYLAND = process.platform === "linux" && process.env.XDG_SESSION_TYPE 
 // Windows and macOS (14.2+, CoreAudio tap) can drop our own playout (the room's voices) from
 // loopback; on Linux it echoes back, so there app-audio.js (PipeWire) replaces it when it can.
 const LOOPBACK_EXCLUDES_SELF = IS_WINDOWS || IS_MAC;
-const BACKGROUND = "#07070c";
+const BACKGROUND = "#131418";
 const ICON = path.join(__dirname, "icon.png");
 const PAGES = path.join(__dirname, "pages");
 const PAGES_URL = pathToFileURL(PAGES).href + "/";

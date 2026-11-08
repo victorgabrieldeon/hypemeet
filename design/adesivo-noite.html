@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HypeMeet · 11 Adesivo Noite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=DM+Sans:opsz,wght@9..40,400..800&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+:root{
+  /* core contract */
+  --color-canvas:#131418;      /* carvão frio, quase neutro */
+  --color-panel:#1A1C22;       /* cards, chat */
+  --color-surface:#23262E;     /* campos, botões, tiles */
+  --color-surface-hi:#2E313B;  /* hover / selecionado */
+  --color-line:#3A3E4A;
+  --color-accent:#9070FF;      /* uva, afinado pro escuro */
+  --color-accent-hi:#B1A0FF;   /* hover, links, foco, texto uva */
+  --color-ink:#F2F3F7;
+  --color-on-accent:#121019;   /* branco no uva dá 3,5:1 — texto escuro em todo preenchimento */
+  --color-soft:#A4A9B8;
+  --color-danger:#FF5C6F;      /* só funcional */
+  --color-warn:#FFB547;        /* só funcional */
+  --radius-xs:8px; --radius-sm:12px; --radius-md:16px; --radius-lg:20px; --radius-xl:24px;
+  --font-sans:"DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display:"Bricolage Grotesque", "DM Sans", ui-sans-serif, sans-serif;
+  --shadow-float:0 1px 0 rgb(0 0 0 / .35), 0 16px 32px -18px rgb(0 0 0 / .8);
+  /* style-specific */
+  --x-die:#363945;             /* borda de recorte: 2px, um tom acima da superfície */
+  --x-rim:2px;
+  --x-shadow-sticker:0 1px 0 rgb(0 0 0 / .35), 0 6px 12px -8px rgb(0 0 0 / .7);
+  --x-scrim:rgb(19 20 24 / .74);
+  --x-tangerine:#FF9B5E; --x-bubblegum:#FF85C2; --x-mint:#54DFB1; --x-sun:#FFD45E;
+  --x-font-mono:"DM Mono", ui-monospace, monospace;
+  --x-wobble:52% 48% 55% 45% / 47% 55% 45% 53%;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:#0B0C0F;font-family:var(--font-sans);color:var(--color-ink);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;padding:40px;display:flex;flex-direction:column;gap:20px;align-items:flex-start}
+body.single{padding:0;gap:0;background:var(--color-canvas)}
+.cap{font:700 14px/1 var(--font-sans);color:var(--color-soft);margin:20px 0 0}
+.single .cap{display:none}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+:focus-visible,.is-focus{outline:2px dashed var(--color-accent-hi);outline-offset:3px}
+.lucide{width:20px;height:20px;stroke-width:2.2;flex:none}
+
+/* ---------- boards ---------- */
+.board{position:relative;overflow:hidden;background:var(--color-canvas);flex:none}
+#b-home,#b-room{width:1440px;height:900px}
+#b-mobile{width:390px;height:844px}
+#b-tokens{width:1440px;height:1500px}
+
+/* ---------- primitives ---------- */
+.paper{background:var(--color-panel);border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-xl);box-shadow:var(--shadow-float)}
+.av{--p:var(--color-accent);display:inline-grid;place-items:center;width:34px;height:34px;border-radius:var(--x-wobble);background:var(--p);color:var(--color-on-accent);border:2px solid var(--ring,var(--color-panel));font:800 14px/1 var(--font-display);flex:none}
+.av.xs{width:22px;height:22px;font-size:10px}
+.av.sm{width:28px;height:28px;font-size:12px}
+.stack{display:flex}.stack .av+.av{margin-left:-7px}
+.stack .av.xs+.av.xs{margin-left:-6px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:999px;border:2px solid var(--x-die);background:var(--color-surface);color:var(--color-ink);box-shadow:var(--x-shadow-sticker);font:700 15px/1 var(--font-sans);white-space:nowrap;transition:transform .15s,box-shadow .15s,background-color .15s}
+.btn .lucide{width:18px;height:18px}
+.btn:hover,.btn.is-hover{transform:translateY(-1px);background:var(--color-surface-hi)}
+.btn:active,.btn.is-pressed{transform:translateY(1px);box-shadow:none}
+.btn-primary{background:var(--color-accent);border-color:var(--color-accent-hi);color:var(--color-on-accent)}
+.btn-primary:hover,.btn-primary.is-hover{background:var(--color-accent-hi)}
+.btn-primary:active,.btn-primary.is-pressed{background:color-mix(in srgb,var(--color-accent) 92%,var(--color-on-accent));box-shadow:inset 0 2px 0 rgb(0 0 0 / .25)}
+.btn-danger{background:var(--color-danger);border-color:color-mix(in srgb,var(--color-danger) 55%,white);color:var(--color-on-accent)}
+.btn-danger:hover{background:color-mix(in srgb,var(--color-danger) 85%,white)}
+.btn-icon{width:44px;padding:0}
+.btn.sm{height:36px;padding:0 14px;font-size:14px}
+.btn-icon.sm{width:36px;height:36px;padding:0}
+.btn-icon.sm .lucide{width:16px;height:16px}
+.btn-quiet{background:transparent;border-color:transparent;box-shadow:none;color:var(--color-soft)}
+.btn-quiet:hover{background:var(--color-surface);color:var(--color-ink)}
+
+.code{font:500 14px/1 var(--x-font-mono);letter-spacing:.04em;color:var(--color-ink)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:999px;background:var(--color-surface);border:1.5px solid var(--x-die);font:700 13px/1 var(--font-sans);color:var(--color-ink);white-space:nowrap}
+.chip .lucide{width:15px;height:15px}
+.chip.scrim{background:var(--x-scrim);border-color:rgb(255 255 255 / .10);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.chip.fill{--p:var(--x-mint);background:var(--p);color:var(--color-on-accent);border-color:color-mix(in srgb,var(--p) 60%,white)}
+.live{background:var(--color-danger);color:var(--color-on-accent);border-color:color-mix(in srgb,var(--color-danger) 55%,white)}
+.live::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.weak{background:var(--x-scrim);border-color:color-mix(in srgb,var(--color-warn) 30%,transparent);color:var(--color-warn)}
+.bars{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+.bars i{width:3px;border-radius:2px;background:var(--color-warn)}
+.bars i:nth-child(1){height:5px}.bars i:nth-child(2){height:8px}.bars i:nth-child(3){height:12px;background:rgb(255 255 255 / .22)}
+.count{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--color-accent);color:var(--color-on-accent);border:2px solid var(--color-canvas);font:800 12px/1 var(--font-sans)}
+.count.n{background:var(--color-surface-hi);color:var(--color-ink);border-color:transparent}
+
+.field{display:flex;flex-direction:column;gap:8px}
+.lbl{font:700 14px/1 var(--font-sans);color:var(--color-ink)}
+.inp{display:flex;align-items:center;gap:10px;height:52px;padding:0 16px 0 10px;border-radius:var(--radius-md);background:var(--color-surface);border:2px solid var(--x-die);transition:border-color .15s}
+.inp input{flex:1;min-width:0;border:0;background:none;outline:none;font:500 16px/1 var(--font-sans);color:var(--color-ink)}
+.inp input::placeholder{color:var(--color-soft)}
+.inp:focus-within,.inp.is-focus{border-color:var(--color-accent);outline:2px dashed var(--color-accent-hi);outline-offset:3px}
+.inp.plain{padding-left:16px}
+
+.seg{display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:999px;background:var(--color-surface);border:2px solid var(--x-die)}
+.seg button{height:42px;border-radius:999px;font:700 15px/1 var(--font-sans);color:var(--color-soft)}
+.seg button[aria-pressed="true"]{background:var(--color-accent);color:var(--color-on-accent);box-shadow:inset 0 0 0 2px var(--color-accent-hi)}
+
+/* dock buttons */
+.dk{position:relative;display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:var(--color-surface);color:var(--color-ink);border:2px solid var(--x-die);box-shadow:var(--x-shadow-sticker);transition:transform .15s,background-color .15s;flex:none}
+.dk .lucide{width:23px;height:23px}
+.dk:hover,.dk.is-hover{transform:translateY(-2px);background:var(--color-surface-hi)}
+.dk.is-off{background:color-mix(in srgb,var(--color-danger) 14%,var(--color-surface));border-color:color-mix(in srgb,var(--color-danger) 40%,var(--color-surface));color:var(--color-danger)}
+.dk.is-active{background:var(--color-accent);border-color:var(--color-accent-hi);color:var(--color-on-accent)}
+.dk .chev{position:absolute;top:-5px;right:-6px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--color-surface-hi);color:var(--color-ink);border:2px solid var(--color-canvas)}
+.dk .chev .lucide{width:13px;height:13px;stroke-width:2.8}
+.dk .count{position:absolute;top:-5px;right:-5px}
+.dk-leave{display:inline-flex;align-items:center;gap:8px;height:56px;padding:0 22px 0 18px;border-radius:999px;background:var(--color-danger);color:var(--color-on-accent);border:2px solid color-mix(in srgb,var(--color-danger) 55%,white);box-shadow:var(--x-shadow-sticker);font:800 17px/1 var(--font-display)}
+.dk-leave .lucide{width:21px;height:21px}
+.tip{position:absolute;bottom:calc(100% + 10px);left:50%;transform:translateX(-50%);background:var(--color-surface-hi);color:var(--color-ink);font:700 13px/1 var(--font-sans);padding:8px 12px;border-radius:var(--radius-sm);border:1.5px solid var(--color-line);box-shadow:var(--x-shadow-sticker);white-space:nowrap;z-index:5}
+.kbd{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:7px;background:var(--color-surface);border:1.5px solid var(--color-line);box-shadow:0 2px 0 var(--color-line);font:500 12px/1 var(--x-font-mono);color:var(--color-ink)}
+.vsep{width:1px;height:28px;background:var(--color-line);margin:0 6px}
+
+/* chat bubbles: neutro com um sopro da cor da pessoa */
+.bub{--p:var(--x-bubblegum);position:relative;display:inline-block;max-width:290px;padding:10px 14px;border-radius:16px 16px 16px 6px;background:color-mix(in srgb,var(--p) 4%,var(--color-surface));border:1px solid color-mix(in srgb,var(--p) 30%,var(--color-surface));color:var(--color-ink);font:500 15px/1.4 var(--font-sans);text-wrap:pretty}
+.bub.me{border-radius:16px 16px 6px 16px;background:color-mix(in srgb,var(--color-accent) 28%,var(--color-surface));border-color:color-mix(in srgb,var(--color-accent) 50%,var(--color-surface))}
+.bub a{color:var(--color-accent-hi);font-weight:700;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;display:inline-flex;align-items:center;gap:5px}
+.bub a .lucide{width:15px;height:15px}
+
+/* camera tiles */
+.tile{--p:var(--color-accent);position:relative;margin:0;border-radius:var(--radius-md);overflow:hidden;background:var(--color-surface);border:2px solid color-mix(in srgb,var(--p) 45%,var(--color-surface));box-shadow:var(--x-shadow-sticker)}
+.tile>svg,.tile .ph>svg{display:block;width:100%;height:100%}
+.tile .ph{position:absolute;inset:0}
+.tile.speaking{border-color:var(--p);box-shadow:0 0 0 3px color-mix(in srgb,var(--p) 28%,transparent),0 8px 26px -6px color-mix(in srgb,var(--p) 50%,transparent)}
+.tile .bl,.tile .br,.tile .tl{position:absolute;display:flex;align-items:center;gap:6px;z-index:2}
+.tile .bl{left:8px;bottom:8px}.tile .br{right:8px;bottom:8px}.tile .tl{left:8px;top:8px}
+.tag{--p:var(--color-accent);display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:var(--p);color:var(--color-on-accent);border:1.5px solid color-mix(in srgb,var(--p) 60%,white);font:800 14px/1 var(--font-display);white-space:nowrap}
+.tag small{font:500 12px/1 var(--font-sans)}
+.ico{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--x-scrim);color:var(--color-ink)}
+.ico .lucide{width:14px;height:14px}
+.muted{background:var(--color-danger);color:var(--color-on-accent)}
+.muted .lucide{stroke-width:2.6}
+.tile .camoff{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--p) 5%,var(--color-surface))}
+.tile .camoff .av{width:60px;height:60px;font-size:26px;border-color:color-mix(in srgb,var(--p) 5%,var(--color-surface))}
+.wave{display:inline-flex;align-items:center;gap:2px;height:12px}
+.wave i{width:3px;border-radius:2px;background:currentColor;animation:wv .9s ease-in-out infinite}
+.wave i:nth-child(1){height:6px}.wave i:nth-child(2){height:12px;animation-delay:.15s}.wave i:nth-child(3){height:8px;animation-delay:.3s}.wave i:nth-child(4){height:11px;animation-delay:.45s}
+@keyframes wv{50%{transform:scaleY(.45)}}
+.emo{position:absolute;z-index:2;font-size:30px;line-height:1;font-family:"Noto Color Emoji",sans-serif;filter:drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff) drop-shadow(0 4px 5px rgb(0 0 0 / .35));animation:rise 2.6s ease-in-out infinite alternate}
+@keyframes rise{to{translate:0 -8px}}
+
+/* pinned screen */
+.screen{position:absolute;border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-lg);background:var(--color-surface);box-shadow:var(--shadow-float);overflow:hidden}
+.screen>svg{display:block;width:100%;height:100%}
+.ov{position:absolute;display:flex;align-items:center;gap:8px;z-index:2}
+.tool{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--x-scrim);color:var(--color-ink);border:1.5px solid rgb(255 255 255 / .10);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.tool .lucide{width:17px;height:17px}
+
+/* ---------- HOME ---------- */
+.wordmark{display:inline-flex;align-items:center;font:800 30px/1 var(--font-display);letter-spacing:-.03em;color:var(--color-ink)}
+.wordmark .m{display:inline-block;margin-left:5px;padding:3px 11px 6px;border-radius:var(--radius-sm);background:var(--color-accent);color:var(--color-on-accent);border:2px solid var(--color-accent-hi);box-shadow:var(--x-shadow-sticker);transform:rotate(-3deg)}
+.h-top{position:absolute;left:48px;right:48px;top:32px;height:52px;display:flex;align-items:center;justify-content:space-between}
+.create{position:absolute;left:178px;top:204px;width:520px;padding:36px 36px 34px;display:flex;flex-direction:column;gap:20px}
+.create h1{margin:0 0 4px;font:800 31px/1.12 var(--font-display);letter-spacing:-.02em;text-wrap:balance}
+.create h1 mark{background:none;color:inherit;position:relative;z-index:0;white-space:nowrap}
+.create h1 mark::before{content:"";position:absolute;z-index:-1;left:-4px;right:-4px;bottom:-5px;height:9px;background:var(--color-accent);border-radius:5px;opacity:.85}
+.go{justify-content:space-between;height:60px;padding:0 8px 0 24px;font:800 18px/1 var(--font-display);width:100%}
+.go .arr{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:var(--color-on-accent);color:var(--color-accent-hi)}
+.go .arr .lucide{width:22px;height:22px;stroke-width:2.6}
+.tape{position:absolute;z-index:4;width:104px;height:26px;transform:rotate(-8deg);background:repeating-linear-gradient(-45deg,rgb(177 160 255 / .30) 0 8px,rgb(177 160 255 / .22) 8px 16px);
+  clip-path:polygon(3% 0,97% 0,100% 18%,97% 36%,100% 54%,97% 72%,100% 90%,97% 100%,3% 100%,0 82%,3% 64%,0 46%,3% 28%,0 10%)}
+.rooms{position:absolute;left:762px;top:204px;width:500px}
+.rooms-h{display:flex;align-items:center;gap:12px;margin:2px 0 20px 4px;height:40px}
+.rooms-h h2{margin:0;font:800 30px/1 var(--font-display);letter-spacing:-.02em}
+.rcard{position:relative;display:flex;gap:16px;padding:18px 18px 18px 20px;margin-bottom:16px;background:var(--color-panel);border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-lg);box-shadow:var(--shadow-float)}
+.stamp{--p:var(--x-tangerine);display:grid;place-items:center;width:56px;height:56px;border-radius:var(--x-wobble);background:color-mix(in srgb,var(--p) 16%,var(--color-surface));color:var(--p);border:2px solid color-mix(in srgb,var(--p) 34%,var(--color-surface));flex:none}
+.stamp .lucide{width:26px;height:26px}
+.rc-b{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.rc-t{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.rc-t h3{margin:3px 0 0;font:800 20px/1.15 var(--font-display);letter-spacing:-.01em}
+.rc-m{display:flex;align-items:center;gap:10px;font:500 14px/1 var(--font-sans);color:var(--color-soft)}
+.rc-m .code{padding:5px 8px;border-radius:var(--radius-xs);background:var(--color-surface);font-size:13px}
+.rc-f{display:flex;align-items:center;justify-content:space-between;min-height:36px}
+.pres{display:flex;align-items:center;gap:10px;font:700 14px/1 var(--font-sans);color:var(--color-ink)}
+.pres .dot{width:8px;height:8px;border-radius:50%;background:var(--x-mint);box-shadow:0 0 0 3px color-mix(in srgb,var(--x-mint) 22%,transparent)}
+.deco{position:absolute;pointer-events:none;transform:rotate(var(--rot,0deg))}
+.gg{padding:6px 12px 8px;border-radius:16px 16px 16px 5px;background:var(--x-bubblegum);border:2px solid color-mix(in srgb,var(--x-bubblegum) 60%,white);box-shadow:var(--x-shadow-sticker);font:800 22px/1 var(--font-display);color:var(--color-on-accent)}
+
+/* ---------- ROOM ---------- */
+.r-top{position:absolute;left:24px;right:24px;top:16px;height:52px;display:flex;align-items:center;gap:14px}
+.mark{display:grid;place-items:center;width:40px;height:40px;border-radius:var(--radius-sm);background:var(--color-accent);color:var(--color-on-accent);border:2px solid var(--color-accent-hi);font:800 21px/1 var(--font-display);transform:rotate(-3deg)}
+.r-name{font:800 24px/1 var(--font-display);letter-spacing:-.02em;margin:0;white-space:nowrap}
+.codechip{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 5px 0 12px;border-radius:999px;background:var(--color-surface);border:1.5px solid var(--x-die)}
+.codechip .cp-btn{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--color-surface-hi);color:var(--color-ink)}
+.codechip .lucide{width:13px;height:13px}
+.people{display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 14px 0 8px;border-radius:999px;background:var(--color-surface);border:2px solid var(--x-die);font:800 17px/1 var(--font-display)}
+.people .lucide{width:18px;height:18px;color:var(--color-soft)}
+.people .av{--ring:var(--color-surface)}
+.chat{position:absolute;left:1000px;top:84px;width:416px;height:792px;display:flex;flex-direction:column;background:var(--color-panel);border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-xl);box-shadow:var(--shadow-float)}
+.chat-h{display:flex;align-items:center;justify-content:space-between;height:68px;padding:0 14px 0 22px;border-bottom:1.5px solid var(--color-surface-hi)}
+.chat-h h2{margin:0;font:800 22px/1 var(--font-display);letter-spacing:-.01em}
+.msgs{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:18px;padding:16px 20px 18px 18px;min-height:0}
+.day{align-self:center;font:700 12px/1 var(--font-sans);color:var(--color-soft);padding:6px 12px;border-radius:999px;background:var(--color-surface)}
+.msg{display:flex;gap:12px;align-items:flex-start}
+.msg>.av{margin-top:1px}
+.msg .who{display:flex;align-items:baseline;gap:8px;margin:0 0 6px 2px;font:800 14px/1 var(--font-display);color:var(--p)}
+.msg .who time{font:500 12px/1 var(--font-sans);color:var(--color-soft)}
+.msg.me{flex-direction:row-reverse}
+.msg.me .who{justify-content:flex-end;margin:0 2px 6px 0}
+.msg.me>div{display:flex;flex-direction:column;align-items:flex-end}
+.compose{padding:12px 14px 14px}
+.compose .inp{height:54px;padding:0 6px 0 18px;border-radius:999px;gap:4px}
+.compose .inp input{font-size:14.5px}
+.compose .send{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--color-accent);color:var(--color-on-accent);border:2px solid var(--color-accent-hi)}
+.compose .send .lucide{width:18px;height:18px}
+.compose .att{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--color-soft)}
+.dock{position:absolute;left:24px;top:820px;width:960px;display:flex;justify-content:center;align-items:center;gap:10px}
+.hint{display:inline-flex;align-items:center;gap:7px;margin-left:6px;font:600 13px/1 var(--font-sans);color:var(--color-soft);white-space:nowrap}
+
+/* ---------- MOBILE ---------- */
+#b-mobile .r-name{font-size:21px}
+#b-mobile .chip{height:26px;padding:0 9px;font-size:11.5px;gap:5px}
+#b-mobile .chip .lucide{width:13px;height:13px}
+#b-mobile .tool{width:30px;height:30px}
+#b-mobile .tool .lucide{width:14px;height:14px}
+#b-mobile .tag{height:24px;padding:0 9px;font-size:13px}
+#b-mobile .ico{width:24px;height:24px}
+#b-mobile .dk{width:52px;height:52px}
+#b-mobile .dk .lucide{width:22px;height:22px}
+.tray{position:absolute;left:16px;right:16px;top:666px;display:grid;grid-template-columns:repeat(4,1fr);padding:14px 2px 12px;background:var(--color-panel);border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-lg);box-shadow:var(--shadow-float)}
+.tray::after{content:"";position:absolute;bottom:-9px;left:264px;width:14px;height:14px;background:var(--color-panel);border-right:var(--x-rim) solid var(--x-die);border-bottom:var(--x-rim) solid var(--x-die);transform:rotate(45deg)}
+.tray button{display:flex;flex-direction:column;align-items:center;gap:8px;font:700 11.5px/1 var(--font-sans);color:var(--color-ink)}
+.tray .ic{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:var(--color-surface);border:2px solid var(--x-die)}
+.tray .ic .lucide{width:21px;height:21px}
+
+/* ---------- TOKENS ---------- */
+#b-tokens{padding:40px 56px}
+.t-head{display:grid;grid-template-columns:600px 1fr;gap:56px;align-items:start}
+.t-title{display:flex;align-items:center;gap:20px}
+.t-num{display:grid;place-items:center;width:88px;height:88px;border-radius:var(--x-wobble);background:var(--color-accent);color:var(--color-on-accent);border:2px solid var(--color-accent-hi);box-shadow:var(--x-shadow-sticker);font:800 42px/1 var(--font-display);transform:rotate(-3deg)}
+.t-title{margin:0;gap:18px;font:800 64px/1 var(--font-display);letter-spacing:-.035em}
+.t-title .sep{color:var(--color-soft);font-weight:600;margin:0 -4px}
+.t-mood{margin:18px 0 0;font:500 18px/1.45 var(--font-sans);color:var(--color-soft);max-width:560px}
+.manifesto{margin:0;padding:22px 28px}
+.manifesto p{margin:0;font:500 15.5px/1.55 var(--font-sans);color:var(--color-ink)}
+.t-sec{margin-top:28px}
+.t-h{display:flex;align-items:baseline;gap:10px;margin:0 0 14px;font:800 22px/1 var(--font-display);letter-spacing:-.01em}
+.t-h small{font:600 13px/1 var(--font-sans);color:var(--color-soft);letter-spacing:0}
+.sw-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:14px 18px}
+.sw .chipc{height:46px;border-radius:var(--radius-md);border:2px solid var(--x-die);display:flex;align-items:flex-end;padding:8px 10px;font:800 15px/1 var(--font-display)}
+.sw .nm{margin:10px 0 0 2px;font:500 12px/1.2 var(--x-font-mono);color:var(--color-ink)}
+.sw .hx{margin:4px 0 0 2px;font:500 12px/1.2 var(--x-font-mono);color:var(--color-soft)}
+.sw .cr{margin:5px 0 0 2px;font:600 12px/1.4 var(--font-sans);color:var(--color-soft)}
+.sw .cr b{color:var(--color-ink);font-weight:700}
+.t-mid{display:grid;grid-template-columns:420px 1fr 1fr;gap:24px;margin-top:28px}
+.type-row{display:grid;grid-template-columns:92px 1fr;align-items:baseline;gap:14px;padding:11px 0;border-bottom:1.5px solid var(--color-surface-hi)}
+.type-row:last-child{border-bottom:0}
+.type-row .k{font:500 11.5px/1.3 var(--x-font-mono);color:var(--color-soft)}
+.card{padding:16px 18px 18px;background:var(--color-panel);border:var(--x-rim) solid var(--x-die);border-radius:var(--radius-lg)}
+.card h4{margin:0 0 12px;font:700 12px/1 var(--font-sans);color:var(--color-soft);letter-spacing:.06em;text-transform:uppercase}
+.row{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;justify-items:center}
+.st{display:flex;flex-direction:column;align-items:center;gap:10px;font:600 11.5px/1 var(--font-sans);color:var(--color-soft);white-space:nowrap}
+.rad{width:40px;height:40px;background:var(--color-line);border:2px solid color-mix(in srgb,var(--color-ink) 16%,var(--color-line))}
+.why{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:24px}
+.why .card{padding:18px 22px 20px}
+.why h3{margin:0 0 8px;font:800 19px/1.1 var(--font-display);letter-spacing:-.01em}
+.why p{margin:0;font:500 13.5px/1.55 var(--font-sans);color:var(--color-ink)}
+</style>
+</head>
+<body>
+
+<!-- ================= HOME ================= -->
+<p class="cap">view=home · 1440×900</p>
+<section class="board" id="b-home" data-view="home">
+  <!-- só duas figurinhas pequenas, nas margens -->
+  <div class="deco" style="left:94px;top:690px;--rot:-12deg">
+    <svg width="46" height="46" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6l12.6 26.3 28.8 3.7-21.2 19.9 5.5 28.6L50 70.6 24.3 84.5l5.5-28.6L8.6 36l28.8-3.7z" fill="var(--x-sun)" stroke="#FFE9A8" stroke-width="5" stroke-linejoin="round" style="filter:drop-shadow(0 4px 5px rgb(0 0 0 / .5))"/></svg>
+  </div>
+  <div class="deco gg" style="left:1304px;top:238px;--rot:8deg">gg!</div>
+
+  <header class="h-top">
+    <div class="wordmark" aria-label="HypeMeet">Hype<span class="m">Meet</span></div>
+    <a class="btn" href="#" style="text-decoration:none"><i data-lucide="download"></i>Baixar app</a>
+  </header>
+
+  <form class="create paper" onsubmit="return false">
+    <span class="tape" style="left:-22px;top:-10px"></span>
+    <h1>Crie uma sala, mande o código pra galera e compartilhe quantas telas quiser — <mark>com som.</mark></h1>
+    <label class="field"><span class="lbl">Seu apelido</span>
+      <span class="inp"><span class="av sm" style="--ring:var(--color-surface)">V</span><input value="Victor" aria-label="Seu apelido"></span>
+    </label>
+    <div class="seg" role="group" aria-label="Criar ou entrar"><button type="button" aria-pressed="true">Criar</button><button type="button" aria-pressed="false">Entrar</button></div>
+    <label class="field"><span class="lbl">Nome da nova sala</span>
+      <span class="inp plain"><input placeholder="Ex.: Ranked de sexta" aria-label="Nome da nova sala"></span>
+    </label>
+    <button class="btn btn-primary go" type="submit">Criar sala<span class="arr"><i data-lucide="arrow-right"></i></span></button>
+  </form>
+
+  <section class="rooms" aria-labelledby="h-salas">
+    <div class="rooms-h"><h2 id="h-salas">Suas salas</h2><span class="count n" style="min-width:28px;height:28px;font-size:14px">3</span></div>
+
+    <article class="rcard">
+      <div class="stamp" style="--p:var(--x-tangerine)"><i data-lucide="swords"></i></div>
+      <div class="rc-b">
+        <div class="rc-t"><h3>Ranked de sexta</h3><button class="btn btn-icon sm btn-quiet" aria-label="Remover sala" title="Remover sala"><i data-lucide="trash-2"></i></button></div>
+        <div class="rc-m"><span class="code">K7Q-M2X</span><span>há 5 minutos</span></div>
+        <div class="rc-f">
+          <div class="pres"><span class="stack"><span class="av xs" style="--p:var(--x-bubblegum)">L</span><span class="av xs" style="--p:var(--x-mint)">D</span><span class="av xs" style="--p:var(--x-tangerine)">C</span></span><span class="dot"></span>3 pessoas agora</div>
+          <button class="btn sm">Entrar<i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="rcard">
+      <div class="stamp" style="--p:var(--x-bubblegum)"><i data-lucide="clapperboard"></i></div>
+      <div class="rc-b">
+        <div class="rc-t"><h3>Cineminha do domingo</h3><button class="btn btn-icon sm btn-quiet" aria-label="Remover sala" title="Remover sala"><i data-lucide="trash-2"></i></button></div>
+        <div class="rc-m"><span class="code">P4T-9WZ</span><span>ontem</span></div>
+        <div class="rc-f"><span></span><button class="btn sm">Entrar<i data-lucide="arrow-right"></i></button></div>
+      </div>
+    </article>
+
+    <article class="rcard">
+      <div class="stamp" style="--p:var(--x-mint)"><i data-lucide="book-open"></i></div>
+      <div class="rc-b">
+        <div class="rc-t"><h3>Grupo de estudo — Cálculo II</h3><button class="btn btn-icon sm btn-quiet" aria-label="Remover sala" title="Remover sala"><i data-lucide="trash-2"></i></button></div>
+        <div class="rc-m"><span class="code">H2N-R8B</span><span>há 3 dias</span></div>
+        <div class="rc-f">
+          <div class="pres"><span class="av xs" style="--p:var(--x-sun)">B</span><span class="dot"></span>1 pessoa agora</div>
+          <button class="btn sm">Entrar<i data-lucide="arrow-right"></i></button>
+        </div>
+      </div>
+    </article>
+  </section>
+</section>
+
+<!-- ================= ROOM ================= -->
+<p class="cap">view=room · 1440×900</p>
+<section class="board" id="b-room" data-view="room">
+  <header class="r-top">
+    <span class="mark" aria-label="HypeMeet">H</span>
+    <h1 class="r-name">Ranked de sexta</h1>
+    <span class="codechip"><span class="code">K7Q-M2X</span><button class="cp-btn" aria-label="Copiar código" title="Copiar código"><i data-lucide="copy"></i></button></span>
+    <span style="flex:1"></span>
+    <span class="people" title="4 pessoas na sala"><span class="stack"><span class="av sm">V</span><span class="av sm" style="--p:var(--x-bubblegum)">L</span><span class="av sm" style="--p:var(--x-mint)">D</span><span class="av sm" style="--p:var(--x-tangerine)">C</span></span><i data-lucide="users"></i>4</span>
+    <button class="btn btn-primary"><i data-lucide="user-plus"></i>Convidar</button>
+  </header>
+
+  <!-- pinned screen, 16:9, reto -->
+  <div class="screen" style="left:24px;top:84px;width:960px;height:540px">
+    <div class="slot-game"></div>
+    <div class="ov" style="left:14px;top:14px"><span class="chip fill" style="--p:var(--x-mint)"><i data-lucide="monitor"></i>Tela de Duda</span><span class="chip live">Ao vivo</span></div>
+    <div class="ov" style="right:14px;top:14px"><button class="tool" aria-label="Desenhar na tela" title="Desenhar"><i data-lucide="pencil"></i></button><button class="tool" aria-label="Janela flutuante" title="Janela flutuante"><i data-lucide="picture-in-picture-2"></i></button><button class="tool" aria-label="Tela cheia" title="Tela cheia"><i data-lucide="maximize"></i></button></div>
+    <div class="ov" style="left:14px;bottom:14px"><span class="chip scrim"><i data-lucide="gamepad-2"></i>Jogo · 60 fps</span></div>
+    <div class="ov" style="right:14px;bottom:14px"><span class="chip scrim" title="3 pessoas assistindo"><i data-lucide="eye"></i><span class="stack"><span class="av xs" style="--ring:var(--color-surface)">V</span><span class="av xs" style="--p:var(--x-bubblegum);--ring:var(--color-surface)">L</span><span class="av xs" style="--p:var(--x-tangerine);--ring:var(--color-surface)">C</span></span>3</span></div>
+  </div>
+
+  <!-- camera row -->
+  <figure class="tile speaking" style="--p:var(--x-bubblegum);position:absolute;left:24px;top:640px;width:228px;height:128px">
+    <div class="ph"><div class="slot-lia"></div></div>
+    <span class="emo" style="right:14px;top:30px">🔥</span>
+    <span class="emo" style="right:46px;top:8px;font-size:22px;opacity:.9;animation-delay:-1.2s">😂</span>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-bubblegum)"><span class="wave"><i></i><i></i><i></i><i></i></span>Lia <small>falando</small></span></figcaption>
+    <span class="br"><span class="ico" title="Microfone ligado"><i data-lucide="mic"></i></span></span>
+  </figure>
+
+  <figure class="tile" style="--p:var(--x-mint);position:absolute;left:268px;top:640px;width:228px;height:128px">
+    <div class="ph"><div class="slot-duda"></div></div>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-mint)">Duda</span></figcaption>
+    <span class="br"><span class="ico" title="Compartilhando tela"><i data-lucide="monitor-up"></i></span><span class="ico" title="Microfone ligado"><i data-lucide="mic"></i></span></span>
+  </figure>
+
+  <figure class="tile" style="--p:var(--x-tangerine);position:absolute;left:512px;top:640px;width:228px;height:128px">
+    <div class="camoff"><span class="av" style="--p:var(--x-tangerine)">C</span></div>
+    <span class="tl"><span class="chip weak" style="height:24px;font-size:12px;padding:0 9px" title="Conexão ruim"><span class="bars"><i></i><i></i><i></i></span>conexão ruim</span></span>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-tangerine)">Caio</span></figcaption>
+    <span class="br"><span class="ico muted" title="Microfone desligado"><i data-lucide="mic-off"></i></span></span>
+  </figure>
+
+  <figure class="tile" style="--p:var(--color-accent);position:absolute;left:756px;top:640px;width:228px;height:128px">
+    <div class="camoff"><span class="av">V</span></div>
+    <span class="tl" style="font:600 12px/1 var(--font-sans);color:var(--color-soft);gap:5px"><i data-lucide="video-off" style="width:14px;height:14px"></i>câmera desligada</span>
+    <figcaption class="bl"><span class="tag">Victor <small>(você)</small></span></figcaption>
+    <span class="br"><span class="ico" title="Microfone ligado"><i data-lucide="mic"></i></span></span>
+  </figure>
+
+  <!-- dock + dica de push-to-talk ao lado -->
+  <nav class="dock" aria-label="Controles da chamada">
+    <button class="dk" aria-label="Microfone" title="Microfone"><i data-lucide="mic"></i><span class="chev" aria-label="Escolher microfone"><i data-lucide="chevron-up"></i></span></button>
+    <button class="dk is-off" aria-label="Câmera (desligada)" title="Câmera"><i data-lucide="video-off"></i><span class="chev" aria-label="Escolher câmera"><i data-lucide="chevron-up"></i></span></button>
+    <span class="vsep"></span>
+    <button class="dk" aria-label="Compartilhar tela" title="Compartilhar tela"><i data-lucide="monitor-up"></i></button>
+    <button class="dk" aria-label="Reações" title="Reações"><i data-lucide="smile-plus"></i></button>
+    <button class="dk is-hover" aria-label="Assistir junto" title="Assistir junto"><i data-lucide="popcorn"></i><span class="tip">Assistir junto</span></button>
+    <button class="dk" aria-label="Soundboard" title="Soundboard"><i data-lucide="megaphone"></i></button>
+    <button class="dk" aria-label="Plugins" title="Plugins"><i data-lucide="blocks"></i></button>
+    <span class="vsep"></span>
+    <button class="dk is-active" aria-label="Chat" aria-pressed="true" title="Chat"><i data-lucide="message-circle"></i></button>
+    <button class="dk-leave" aria-label="Sair da sala"><i data-lucide="phone-off"></i>Sair</button>
+    <span class="hint">Segure <span class="kbd">V</span> para falar</span>
+  </nav>
+
+  <!-- chat -->
+  <aside class="chat" aria-label="Chat">
+    <div class="chat-h"><h2>Chat</h2><button class="btn btn-icon sm btn-quiet" aria-label="Fechar chat" title="Fechar chat"><i data-lucide="x"></i></button></div>
+    <div class="msgs">
+      <span class="day">hoje</span>
+      <div class="msg" style="--p:var(--x-bubblegum)"><span class="av" style="--p:var(--x-bubblegum)">L</span><div><p class="who">Lia <time>21:14</time></p><span class="bub" style="--p:var(--x-bubblegum)">bora que essa partida tá decidida 🔥</span></div></div>
+      <div class="msg" style="--p:var(--x-tangerine)"><span class="av" style="--p:var(--x-tangerine)">C</span><div><p class="who">Caio <time>21:15</time></p><span class="bub" style="--p:var(--x-tangerine)">alguém viu o clutch do Duda??</span></div></div>
+      <div class="msg" style="--p:var(--x-mint)"><span class="av" style="--p:var(--x-mint)">D</span><div><p class="who">Duda <time>21:15</time></p><span class="bub" style="--p:var(--x-mint)">compartilhei com som, tão ouvindo?</span></div></div>
+      <div class="msg me" style="--p:var(--color-accent-hi)"><span class="av">V</span><div><p class="who">Victor <time>(você) · 21:16</time></p><span class="bub me">ouvindo de boa, 200% no volume kkk</span></div></div>
+      <div class="msg" style="--p:var(--x-bubblegum)"><span class="av" style="--p:var(--x-bubblegum)">L</span><div><p class="who">Lia <time>21:17</time></p><span class="bub" style="--p:var(--x-bubblegum)"><a href="#"><i data-lucide="link"></i>youtu.be/dQw4w9WgXcQ</a><br>depois a gente assiste junto</span></div></div>
+    </div>
+    <div class="compose">
+      <label class="inp"><input placeholder="Mensagem para Ranked de sexta" aria-label="Mensagem"><button class="att" aria-label="Anexar imagem" title="Anexar imagem"><i data-lucide="image-plus"></i></button><button class="send" aria-label="Enviar"><i data-lucide="send-horizontal"></i></button></label>
+    </div>
+  </aside>
+</section>
+
+<!-- ================= MOBILE ================= -->
+<p class="cap">view=mobile · 390×844</p>
+<section class="board" id="b-mobile" data-view="mobile">
+  <header style="position:absolute;left:16px;right:16px;top:14px;height:58px;display:flex;align-items:center;gap:10px">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+      <h1 class="r-name">Ranked de sexta</h1>
+      <span class="codechip" style="height:26px;padding:0 3px 0 9px;gap:6px;align-self:flex-start"><span class="code" style="font-size:12px">K7Q-M2X</span><button class="cp-btn" style="width:20px;height:20px" aria-label="Copiar código"><i data-lucide="copy" style="width:11px;height:11px"></i></button></span>
+    </div>
+    <span class="people" style="height:44px;padding:0 13px;font-size:16px;gap:6px" title="4 pessoas"><i data-lucide="users"></i>4</span>
+    <button class="btn btn-primary btn-icon" aria-label="Convidar" title="Convidar"><i data-lucide="user-plus"></i></button>
+  </header>
+
+  <div class="screen" style="left:16px;top:86px;width:358px;height:201px;border-radius:var(--radius-md)">
+    <div class="slot-game"></div>
+    <div class="ov" style="left:10px;top:10px"><span class="chip live">Ao vivo</span></div>
+    <div class="ov" style="right:10px;top:10px;gap:5px"><button class="tool" aria-label="Desenhar"><i data-lucide="pencil"></i></button><button class="tool" aria-label="Janela flutuante"><i data-lucide="picture-in-picture-2"></i></button><button class="tool" aria-label="Tela cheia"><i data-lucide="maximize"></i></button></div>
+    <div class="ov" style="left:10px;bottom:10px;gap:5px"><span class="chip fill" style="--p:var(--x-mint)"><i data-lucide="monitor"></i>Tela de Duda</span><span class="chip scrim">Jogo · 60 fps</span></div>
+    <div class="ov" style="right:10px;bottom:10px"><span class="chip scrim" title="3 assistindo"><i data-lucide="eye"></i><span class="stack"><span class="av xs" style="--ring:var(--color-surface);width:18px;height:18px;font-size:8px">V</span><span class="av xs" style="--p:var(--x-bubblegum);--ring:var(--color-surface);width:18px;height:18px;font-size:8px">L</span><span class="av xs" style="--p:var(--x-tangerine);--ring:var(--color-surface);width:18px;height:18px;font-size:8px">C</span></span>3</span></div>
+  </div>
+
+  <figure class="tile speaking" style="--p:var(--x-bubblegum);position:absolute;left:16px;top:301px;width:173px;height:168px">
+    <div class="ph"><div class="slot-lia"></div></div>
+    <span class="emo" style="right:10px;top:44px;font-size:24px">🔥</span>
+    <span class="emo" style="right:34px;top:14px;font-size:18px;opacity:.9;animation-delay:-1.2s">😂</span>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-bubblegum)"><span class="wave"><i></i><i></i><i></i><i></i></span>Lia <small>falando</small></span></figcaption>
+    <span class="br"><span class="ico"><i data-lucide="mic"></i></span></span>
+  </figure>
+  <figure class="tile" style="--p:var(--x-mint);position:absolute;left:201px;top:301px;width:173px;height:168px">
+    <div class="ph"><div class="slot-duda"></div></div>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-mint)">Duda</span></figcaption>
+    <span class="br"><span class="ico"><i data-lucide="monitor-up"></i></span><span class="ico"><i data-lucide="mic"></i></span></span>
+  </figure>
+  <figure class="tile" style="--p:var(--x-tangerine);position:absolute;left:16px;top:481px;width:173px;height:168px">
+    <div class="camoff"><span class="av" style="--p:var(--x-tangerine);width:56px;height:56px;font-size:24px">C</span></div>
+    <span class="tl"><span class="chip weak" style="height:22px;padding:0 8px" title="Conexão ruim"><span class="bars"><i></i><i></i><i></i></span>ruim</span></span>
+    <figcaption class="bl"><span class="tag" style="--p:var(--x-tangerine)">Caio</span></figcaption>
+    <span class="br"><span class="ico muted"><i data-lucide="mic-off"></i></span></span>
+  </figure>
+  <figure class="tile" style="position:absolute;left:201px;top:481px;width:173px;height:168px">
+    <div class="camoff"><span class="av" style="width:56px;height:56px;font-size:24px">V</span></div>
+    <span class="tl" style="color:var(--color-soft)"><i data-lucide="video-off" style="width:14px;height:14px"></i></span>
+    <figcaption class="bl"><span class="tag">Victor <small>(você)</small></span></figcaption>
+    <span class="br"><span class="ico"><i data-lucide="mic"></i></span></span>
+  </figure>
+
+  <!-- bandeja "mais" aberta -->
+  <div class="tray" role="menu" aria-label="Mais controles">
+    <button role="menuitem"><span class="ic"><i data-lucide="smile-plus"></i></span>Reações</button>
+    <button role="menuitem"><span class="ic"><i data-lucide="popcorn"></i></span>Assistir junto</button>
+    <button role="menuitem"><span class="ic"><i data-lucide="megaphone"></i></span>Soundboard</button>
+    <button role="menuitem"><span class="ic"><i data-lucide="blocks"></i></span>Plugins</button>
+  </div>
+
+  <nav class="dock" style="left:0;top:776px;width:390px;gap:9px" aria-label="Controles da chamada">
+    <button class="dk" aria-label="Microfone"><i data-lucide="mic"></i><span class="chev"><i data-lucide="chevron-up"></i></span></button>
+    <button class="dk is-off" aria-label="Câmera (desligada)"><i data-lucide="video-off"></i></button>
+    <button class="dk" aria-label="Compartilhar tela"><i data-lucide="monitor-up"></i></button>
+    <button class="dk" aria-label="Chat, 2 mensagens novas"><i data-lucide="message-circle"></i><span class="count">2</span></button>
+    <button class="dk is-active" aria-label="Mais" aria-expanded="true"><i data-lucide="ellipsis"></i></button>
+    <button class="dk" style="background:var(--color-danger);border-color:color-mix(in srgb,var(--color-danger) 55%,white);color:var(--color-on-accent)" aria-label="Sair da sala"><i data-lucide="phone-off"></i></button>
+  </nav>
+</section>
+
+<!-- ================= TOKENS ================= -->
+<p class="cap">view=tokens · 1440 de largura</p>
+<section class="board" id="b-tokens" data-view="tokens">
+  <div class="t-head">
+    <div>
+      <h1 class="t-title"><span class="t-num">11</span><span class="sep">·</span>Adesivo Noite</h1>
+      <p class="t-mood">O álbum de figurinhas depois das dez: o mesmo jeito redondo e brincalhão, com a luz baixa e a cor guardada para as pessoas.</p>
+    </div>
+    <div class="manifesto paper">
+      <p>É o Adesivo Pop com a luz apagada. Trocamos o céu claro por um carvão frio e neutro, tiramos fita, pontilhado, figurinhas soltas e inclinação de tudo que se usa na chamada, e o contorno branco grosso virou uma borda de recorte de 2px. A cor agora é das pessoas: cada amigo mantém a sua figurinha no avatar, na moldura, no anel de fala e no nome do chat, e o uva fica como único destaque da marca. Quem brilha é a tela do jogo; a interface fica quieta em volta.</p>
+    </div>
+  </div>
+
+  <div class="t-sec">
+    <h2 class="t-h">Paleta <small>contraste WCAG calculado ao vivo a partir dos tokens</small></h2>
+    <div class="sw-grid" id="swatches"></div>
+  </div>
+
+  <div class="t-mid">
+    <div class="col">
+      <h2 class="t-h">Tipografia <small>Bricolage Grotesque · DM Sans · DM Mono</small></h2>
+      <div class="card" style="padding:4px 20px">
+        <div class="type-row"><span class="k">display<br>800 · 48/1</span><span style="font:800 48px/1 var(--font-display);letter-spacing:-.03em">Bora jogar?</span></div>
+        <div class="type-row"><span class="k">heading<br>800 · 28/1.1</span><span style="font:800 28px/1.1 var(--font-display);letter-spacing:-.02em">Suas salas</span></div>
+        <div class="type-row"><span class="k">body<br>500 · 16/1.5</span><span style="font:500 16px/1.5 var(--font-sans)">Crie uma sala, mande o código pra galera e compartilhe quantas telas quiser — com som.</span></div>
+        <div class="type-row"><span class="k">label<br>700 · 14/1</span><span style="font:700 14px/1 var(--font-sans)">Seu apelido · Nome da nova sala</span></div>
+        <div class="type-row"><span class="k">mono<br>500 · 24/1</span><span style="font:500 24px/1 var(--x-font-mono);letter-spacing:.06em">K7Q-M2X</span></div>
+      </div>
+      <h2 class="t-h" style="margin-top:24px">Raios e sombras</h2>
+      <div class="card" style="padding:16px 18px">
+        <div class="row" style="gap:10px;justify-content:space-between;flex-wrap:nowrap">
+          <div class="st"><span class="rad" style="border-radius:var(--radius-xs)"></span>xs 8</div>
+          <div class="st"><span class="rad" style="border-radius:var(--radius-sm)"></span>sm 12</div>
+          <div class="st"><span class="rad" style="border-radius:var(--radius-md)"></span>md 16</div>
+          <div class="st"><span class="rad" style="border-radius:var(--radius-lg)"></span>lg 20</div>
+          <div class="st"><span class="rad" style="border-radius:var(--radius-xl)"></span>xl 24</div>
+          <div class="st"><span class="rad" style="border-radius:var(--x-wobble);background:var(--color-accent);border-color:var(--color-accent-hi)"></span>bolha</div>
+          <div class="st"><span class="rad" style="border-radius:var(--radius-md);background:var(--color-panel);box-shadow:var(--shadow-float)"></span>float</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2 class="t-h">Componentes <small>hover, pressionado e foco estáticos</small></h2>
+      <div class="card">
+        <h4>Botões</h4>
+        <div class="bgrid">
+          <div class="st"><button class="btn btn-primary"><i data-lucide="user-plus"></i>Convidar</button>padrão</div>
+          <div class="st"><button class="btn btn-primary is-hover"><i data-lucide="user-plus"></i>Convidar</button>hover</div>
+          <div class="st"><button class="btn btn-primary is-pressed"><i data-lucide="user-plus"></i>Convidar</button>pressionado</div>
+          <div class="st"><button class="btn">Baixar app</button>ghost</div>
+          <div class="st"><button class="btn is-focus">Baixar app</button>foco (linha de corte)</div>
+          <div class="st"><button class="btn btn-danger"><i data-lucide="phone-off"></i>Sair</button>danger</div>
+          <div class="st"><button class="btn btn-icon" aria-label="Copiar código"><i data-lucide="copy"></i></button>ícone</div>
+          <div class="st"><button class="btn btn-primary btn-icon is-focus" aria-label="Enviar"><i data-lucide="send-horizontal"></i></button>ícone · foco</div>
+          <div class="st"><button class="btn btn-icon is-hover" aria-label="Remover sala"><i data-lucide="trash-2"></i></button>ícone · hover</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h4>Campo e alternador</h4>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <label class="field"><span class="lbl">Seu apelido</span><span class="inp"><span class="av sm" style="--ring:var(--color-surface)">V</span><input value="Victor" aria-label="Seu apelido"></span></label>
+          <span class="inp plain is-focus"><input placeholder="Ex.: Ranked de sexta" aria-label="Nome da nova sala"></span>
+          <div class="seg"><button aria-pressed="true">Criar</button><button aria-pressed="false">Entrar</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2 class="t-h">Na chamada <small>controles, selos, pessoas</small></h2>
+      <div class="card">
+        <h4>Botão do dock</h4>
+        <div class="row" style="justify-content:space-between;padding:6px 8px 0">
+          <div class="st"><span class="dk"><i data-lucide="mic"></i><span class="chev"><i data-lucide="chevron-up"></i></span></span>ligado</div>
+          <div class="st"><span class="dk is-off"><i data-lucide="video-off"></i></span>desligado</div>
+          <div class="st"><span class="dk is-active"><i data-lucide="message-circle"></i></span>ativo</div>
+          <div class="st"><span class="dk is-hover"><i data-lucide="popcorn"></i></span>hover</div>
+        </div>
+        <h4 style="margin-top:18px">Selos</h4>
+        <div class="row" style="gap:10px">
+          <span class="chip live">Ao vivo</span>
+          <span class="chip weak"><span class="bars"><i></i><i></i><i></i></span>conexão ruim</span>
+          <span class="count">2</span>
+          <span class="chip"><i data-lucide="gamepad-2"></i>Jogo · 60 fps</span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h4>Pessoas — cada uma, uma cor</h4>
+        <div class="row" style="gap:10px">
+          <span class="av" style="width:40px;height:40px;font-size:17px">V</span>
+          <span class="av" style="--p:var(--x-bubblegum);width:40px;height:40px;font-size:17px">L</span>
+          <span class="av" style="--p:var(--x-mint);width:40px;height:40px;font-size:17px">D</span>
+          <span class="av" style="--p:var(--x-tangerine);width:40px;height:40px;font-size:17px">C</span>
+          <span class="av" style="--p:var(--x-sun);width:40px;height:40px;font-size:17px">B</span>
+          <span class="tag" style="--p:var(--x-bubblegum);margin-left:6px"><span class="wave"><i></i><i></i><i></i><i></i></span>Lia</span>
+        </div>
+        <h4 style="margin-top:18px">Balões do chat</h4>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="msg" style="--p:var(--x-mint)"><span class="av" style="--p:var(--x-mint);width:30px;height:30px;font-size:12px">D</span><div><p class="who">Duda <time>21:15</time></p><span class="bub" style="--p:var(--x-mint)">compartilhei com som, tão ouvindo?</span></div></div>
+          <span class="bub me" style="align-self:flex-end">ouvindo de boa kkk</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="why">
+    <div class="card"><h3>Por que combina com o HypeMeet</h3><p>HypeMeet é a sala da galera, e a galera joga à noite. O carvão neutro deixa a tela compartilhada ser a estrela, enquanto a figurinha de cada amigo continua dizendo quem está falando, quem rabiscou a tela e quem mandou a mensagem, sem precisar ler o nome. Continua com cara de brincadeira, só que sem gritar.</p></div>
+    <div class="card"><h3>Trade-offs</h3><p>Com menos enfeite, a personalidade mora nos detalhes: formas redondas, avatares de bolha, o wordmark adesivado e a cor de cada pessoa. Sem disciplina, vira só mais um app escuro. O uva pede texto escuro (branco dá 3,5:1), e laranja, rosa e âmbar ficam perto de alerta e perigo; por isso estado sempre vem com ícone e texto, nunca só com cor.</p></div>
+    <div class="card"><h3>Dentro do Discord</h3><p>O carvão frio fica bem dentro do cliente escuro do Discord sem parecer cópia dele, porque não tem roxo no fundo. Na Activity pequena a tela fixada ocupa a largura toda, as câmeras viram uma grade 2×2 e os controles ficam em 5 botões redondos + "Mais" (alvos de 52px), com o resto numa bandeja. Sem inclinação nem fita, nada quebra quando a janela encolhe.</p></div>
+  </div>
+</section>
+
+<!-- ================= ART TEMPLATES (conteúdo, não interface) ================= -->
+<template id="tpl-game">
+<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-label="Partida de corrida de kart">
+  <defs>
+    <linearGradient id="gk-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2F86FF"/><stop offset=".55" stop-color="#8AD2FF"/><stop offset="1" stop-color="#E2F6FF"/></linearGradient>
+    <linearGradient id="gk-road" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9A94C8"/><stop offset="1" stop-color="#3D376B"/></linearGradient>
+    <linearGradient id="gk-box" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF85C2"/><stop offset=".5" stop-color="#FFD23F"/><stop offset="1" stop-color="#34D6A0"/></linearGradient>
+    <radialGradient id="gk-sun"><stop offset="0" stop-color="#FFF7B8"/><stop offset=".5" stop-color="#FFE15A" stop-opacity=".8"/><stop offset="1" stop-color="#FFE15A" stop-opacity="0"/></radialGradient>
+    <g id="gk-cloud"><ellipse cx="0" cy="22" rx="96" ry="34"/><ellipse cx="-42" cy="2" rx="48" ry="40"/><ellipse cx="28" cy="-8" rx="58" ry="52"/></g>
+    <g id="gk-tree"><rect x="-7" y="-4" width="14" height="66" rx="7" fill="#8A5A3C"/><circle cy="-22" r="46" fill="#1FA463"/><circle cx="-16" cy="-38" r="15" fill="#6BEAA6"/></g>
+  </defs>
+  <rect width="1600" height="900" fill="url(#gk-sky)"/>
+  <circle cx="1210" cy="150" r="170" fill="url(#gk-sun)"/>
+  <circle cx="1210" cy="150" r="60" fill="#FFE15A"/>
+  <g fill="#fff"><use href="#gk-cloud" x="250" y="150"/><use href="#gk-cloud" transform="translate(1480 260) scale(.8)"/><use href="#gk-cloud" transform="translate(980 220) scale(.45)"/></g>
+  <path d="M0 470 L150 330 L260 410 L420 250 L600 430 L760 300 L900 420 L1080 270 L1260 420 L1420 310 L1600 410 V540 H0Z" fill="#8F8AFF"/>
+  <path d="M420 250 L372 296 L402 290 L424 308 L448 288 L470 300Z M1080 270 L1036 312 L1066 306 L1086 322 L1108 302 L1126 312Z M760 300 L728 330 L752 326 L768 338Z" fill="#fff"/>
+  <path d="M0 500 C 200 440, 360 470, 520 488 S 860 444, 1040 478 S 1400 450, 1600 476 V 900 H0Z" fill="#46D18A"/>
+  <g fill="#36BD76"><rect y="530" width="1600" height="22"/><rect y="596" width="1600" height="34"/><rect y="690" width="1600" height="48"/><rect y="812" width="1600" height="70"/></g>
+  <use href="#gk-tree" transform="translate(440 506) scale(.55)"/><use href="#gk-tree" transform="translate(300 548) scale(.85)"/><use href="#gk-tree" transform="translate(120 620) scale(1.35)"/>
+  <use href="#gk-tree" transform="translate(1160 506) scale(.55)"/><use href="#gk-tree" transform="translate(1300 550) scale(.85)"/><use href="#gk-tree" transform="translate(1490 630) scale(1.35)"/>
+  <path d="M -120 900 C 360 720, 700 560, 772 478 L 828 478 C 900 560, 1240 720, 1720 900 Z" fill="url(#gk-road)"/>
+  <g fill="none" stroke-width="26"><path d="M -120 900 C 360 720, 700 560, 772 478" stroke="#FF4D6D"/><path d="M -120 900 C 360 720, 700 560, 772 478" stroke="#fff" stroke-dasharray="36 36"/><path d="M 1720 900 C 1240 720, 900 560, 828 478" stroke="#FF4D6D"/><path d="M 1720 900 C 1240 720, 900 560, 828 478" stroke="#fff" stroke-dasharray="36 36"/></g>
+  <path d="M800 900 L800 480" stroke="#fff" stroke-width="12" stroke-dasharray="52 44" opacity=".85"/>
+  <g transform="translate(648 590) rotate(-10) scale(.8)"><rect x="-38" y="-38" width="76" height="76" rx="16" fill="url(#gk-box)" stroke="#fff" stroke-width="7"/><text y="18" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="52" fill="#fff">?</text></g>
+  <g transform="translate(962 600) rotate(9) scale(.72)"><rect x="-38" y="-38" width="76" height="76" rx="16" fill="url(#gk-box)" stroke="#fff" stroke-width="7"/><text y="18" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="52" fill="#fff">?</text></g>
+  <!-- rival kart -->
+  <g transform="translate(846 522) scale(.42)">
+    <ellipse cx="0" cy="70" rx="170" ry="20" fill="#1A1240" opacity=".3"/>
+    <rect x="-150" y="-6" width="56" height="72" rx="18" fill="#1A1240"/><rect x="94" y="-6" width="56" height="72" rx="18" fill="#1A1240"/>
+    <circle cx="0" cy="-84" r="50" fill="#FFD23F"/><rect x="-36" y="-98" width="72" height="22" rx="11" fill="#1A1240"/>
+    <rect x="-120" y="-40" width="240" height="96" rx="32" fill="#FF85C2"/><rect x="-150" y="-62" width="300" height="28" rx="12" fill="#1A1240"/>
+  </g>
+  <!-- player kart -->
+  <g transform="translate(800 806) scale(.9)">
+    <ellipse cx="0" cy="112" rx="250" ry="26" fill="#1A1240" opacity=".35"/>
+    <g stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".75"><line x1="-470" y1="-40" x2="-330" y2="-4"/><line x1="-520" y1="40" x2="-350" y2="60"/><line x1="470" y1="-40" x2="330" y2="-4"/><line x1="520" y1="40" x2="350" y2="60"/></g>
+    <circle cx="0" cy="-118" r="68" fill="#fff"/><path d="M-68 -118 a68 68 0 0 1 136 0 Z" fill="#6C3BFF"/><rect x="-14" y="-186" width="28" height="68" fill="#fff"/>
+    <rect x="-250" y="-18" width="100" height="126" rx="32" fill="#1A1240"/><rect x="150" y="-18" width="100" height="126" rx="32" fill="#1A1240"/>
+    <g stroke="#3B3470" stroke-width="8"><line x1="-238" y1="20" x2="-162" y2="20"/><line x1="-238" y1="56" x2="-162" y2="56"/><line x1="162" y1="20" x2="238" y2="20"/><line x1="162" y1="56" x2="238" y2="56"/></g>
+    <path d="M-176 -36 Q -176 -76 -126 -76 H 126 Q 176 -76 176 -36 V 64 Q 176 96 144 96 H -144 Q -176 96 -176 64 Z" fill="#FF8A3D"/>
+    <rect x="-176" y="2" width="352" height="22" fill="#fff" opacity=".92"/>
+    <rect x="-46" y="38" width="92" height="44" rx="10" fill="#fff"/><text y="73" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="38" fill="#1A1240">07</text>
+    <circle cx="-110" cy="74" r="16" fill="#2B2350"/><circle cx="110" cy="74" r="16" fill="#2B2350"/>
+    <path d="M-110 88 q -14 30 0 52 q 14 -22 0 -52Z M110 88 q -14 30 0 52 q 14 -22 0 -52Z" fill="#FFD23F"/>
+    <rect x="-212" y="-112" width="424" height="38" rx="14" fill="#6C3BFF" stroke="#fff" stroke-width="5"/><rect x="-150" y="-80" width="16" height="40" fill="#4A1FD6"/><rect x="134" y="-80" width="16" height="40" fill="#4A1FD6"/>
+  </g>
+  <!-- HUD -->
+  <g font-family="Bricolage Grotesque" font-weight="800">
+    <g transform="translate(800 70)"><rect x="-160" y="-38" width="320" height="76" rx="38" fill="#1A1240" fill-opacity=".85" stroke="#fff" stroke-width="6"/><text y="15" text-anchor="middle" font-size="42" fill="#fff" letter-spacing="2">VOLTA 2/3</text></g>
+    <text x="800" y="160" text-anchor="middle" font-size="40" fill="#fff" stroke="#1A1240" stroke-width="10" paint-order="stroke">1:12.48</text>
+    <g transform="translate(66 610) skewX(-10)"><text font-size="210" fill="#FFD23F" stroke="#1A1240" stroke-width="16" paint-order="stroke">2º</text><text x="200" y="0" font-size="70" fill="#fff" stroke="#1A1240" stroke-width="12" paint-order="stroke">/8</text></g>
+    <g transform="translate(90 690)"><circle r="26" fill="#FFD23F" stroke="#fff" stroke-width="6"/><text x="44" y="16" font-size="46" fill="#fff" stroke="#1A1240" stroke-width="10" paint-order="stroke">×08</text></g>
+    <g transform="translate(1388 300)"><rect width="176" height="200" rx="28" fill="#1A1240" fill-opacity=".6" stroke="#fff" stroke-width="6"/><ellipse cx="88" cy="100" rx="52" ry="70" fill="none" stroke="#fff" stroke-width="12"/><g transform="translate(24 94)"><rect width="24" height="12" fill="#fff"/><rect width="6" height="6" fill="#1A1240"/><rect x="12" width="6" height="6" fill="#1A1240"/><rect x="6" y="6" width="6" height="6" fill="#1A1240"/><rect x="18" y="6" width="6" height="6" fill="#1A1240"/></g><circle cx="136" cy="72" r="13" fill="#6C3BFF" stroke="#fff" stroke-width="5"/><circle cx="118" cy="44" r="11" fill="#FF85C2" stroke="#fff" stroke-width="4"/></g>
+    <g transform="translate(1560 700) skewX(-10)" text-anchor="end"><text font-size="120" fill="#fff" stroke="#1A1240" stroke-width="14" paint-order="stroke">212</text><text y="50" font-size="38" fill="#fff" stroke="#1A1240" stroke-width="9" paint-order="stroke">km/h</text></g>
+  </g>
+  <!-- Lia's ink on the screen -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#fff" stroke-width="22"><path d="M 752 516 C 748 456, 944 448, 948 514 C 952 578, 770 590, 752 534 C 748 518, 760 502, 790 492"/><path d="M 520 300 C 590 346, 650 410, 722 474"/><path d="M 680 472 L 726 480 L 716 434"/></g>
+    <g stroke="#FF85C2" stroke-width="11"><path d="M 752 516 C 748 456, 944 448, 948 514 C 952 578, 770 590, 752 534 C 748 518, 760 502, 790 492"/><path d="M 520 300 C 590 346, 650 410, 722 474"/><path d="M 680 472 L 726 480 L 716 434"/></g>
+  </g>
+  <g transform="translate(436 238) rotate(-6)"><rect x="0" y="0" width="118" height="60" rx="30" fill="#FF85C2" stroke="#fff" stroke-width="6"/><text x="59" y="42" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="36" fill="#1A1240">Lia</text></g>
+</svg>
+</template>
+
+<template id="tpl-lia">
+<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-label="Câmera de Lia">
+  <defs>
+    <linearGradient id="lia-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFB3D4"/><stop offset="1" stop-color="#FFDDB5"/></linearGradient>
+    <filter id="lia-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+  </defs>
+  <rect width="400" height="300" fill="url(#lia-bg)"/>
+  <rect x="270" y="40" width="96" height="124" rx="10" fill="#8B5CFF" opacity=".55" transform="rotate(5 318 102)"/>
+  <path d="M318 76 l8 17 18 2 -13 12 4 18 -17 -9 -16 9 3 -18 -13 -12 18 -2z" fill="#FFE15A" opacity=".9"/>
+  <path d="M0 38 Q 100 84 200 48 T 400 54" stroke="#8A4A64" stroke-width="2" fill="none" opacity=".45"/>
+  <g fill="#FFF3A6" filter="url(#lia-blur)"><circle cx="30" cy="52" r="9"/><circle cx="90" cy="70" r="9"/><circle cx="150" cy="64" r="9"/><circle cx="250" cy="44" r="9"/><circle cx="320" cy="44" r="9"/><circle cx="380" cy="54" r="9"/></g>
+  <g fill="#FFF8D0"><circle cx="30" cy="52" r="4"/><circle cx="90" cy="70" r="4"/><circle cx="150" cy="64" r="4"/><circle cx="250" cy="44" r="4"/><circle cx="320" cy="44" r="4"/><circle cx="380" cy="54" r="4"/></g>
+  <rect x="22" y="228" width="58" height="72" rx="10" fill="#FF8A3D"/>
+  <g fill="#22A866"><ellipse cx="40" cy="214" rx="12" ry="28" transform="rotate(-20 40 214)"/><ellipse cx="62" cy="208" rx="12" ry="30" transform="rotate(18 62 208)"/><ellipse cx="52" cy="200" rx="10" ry="30"/></g>
+  <path d="M118 170 C 100 64, 300 64, 282 170 L 294 270 C 260 286, 140 286, 106 270 Z" fill="#3A1F33"/>
+  <path d="M66 300 C 76 236, 140 216, 200 216 C 260 216, 324 236, 334 300 Z" fill="#5CB8FF"/>
+  <path d="M168 222 Q 200 252 232 222" stroke="#2E7FD0" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <rect x="182" y="180" width="36" height="46" rx="14" fill="#E39E78"/>
+  <ellipse cx="200" cy="138" rx="56" ry="64" fill="#F6BC96"/>
+  <path d="M142 130 C 140 82, 176 68, 204 70 C 242 72, 262 96, 260 132 C 234 110, 200 102, 168 114 C 158 118, 150 124, 142 130Z" fill="#3A1F33"/>
+  <ellipse cx="180" cy="146" rx="6" ry="7" fill="#1A1240"/><ellipse cx="222" cy="146" rx="6" ry="7" fill="#1A1240"/>
+  <circle cx="166" cy="166" r="10" fill="#FF85C2" opacity=".45"/><circle cx="236" cy="166" r="10" fill="#FF85C2" opacity=".45"/>
+  <path d="M186 170 Q 201 194 216 170 Z" fill="#7A2340"/>
+  <path d="M136 132 C 136 50, 264 50, 264 132" stroke="#FF85C2" stroke-width="13" fill="none" stroke-linecap="round"/>
+  <rect x="120" y="116" width="30" height="52" rx="13" fill="#FF85C2"/><rect x="250" y="116" width="30" height="52" rx="13" fill="#FF85C2"/>
+</svg>
+</template>
+
+<template id="tpl-duda">
+<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-label="Câmera de Duda">
+  <defs>
+    <linearGradient id="duda-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B2F86"/><stop offset="1" stop-color="#1F7A9C"/></linearGradient>
+    <filter id="duda-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+  </defs>
+  <rect width="400" height="300" fill="url(#duda-bg)"/>
+  <ellipse cx="340" cy="90" rx="90" ry="70" fill="#FF85C2" opacity=".55" filter="url(#duda-blur)"/>
+  <rect x="0" y="80" width="400" height="10" fill="#5CF2FF" filter="url(#duda-blur)"/>
+  <rect x="0" y="82" width="400" height="5" rx="2" fill="#B8FBFF"/>
+  <rect x="28" y="136" width="96" height="8" rx="4" fill="#2A2266"/>
+  <rect x="40" y="104" width="22" height="32" rx="6" fill="#FFD23F"/><rect x="70" y="112" width="18" height="24" rx="5" fill="#FF8A3D"/><circle cx="104" cy="122" r="12" fill="#34D6A0"/>
+  <path d="M60 300 C 70 232, 140 214, 200 214 C 260 214, 330 232, 340 300 Z" fill="#2B2350"/>
+  <path d="M176 220 L 172 270 M 224 220 L 228 270" stroke="#34D6A0" stroke-width="6" stroke-linecap="round"/>
+  <rect x="182" y="178" width="36" height="46" rx="14" fill="#A86A44"/>
+  <ellipse cx="200" cy="140" rx="54" ry="62" fill="#C0825A"/>
+  <path d="M146 120 C 146 72, 254 70, 254 120 Z" fill="#FF8A3D"/>
+  <path d="M146 120 C 132 122, 118 116, 112 108 C 124 104, 138 106, 150 110 Z" fill="#E06A20"/>
+  <rect x="146" y="114" width="108" height="10" rx="5" fill="#E06A20"/>
+  <ellipse cx="180" cy="148" rx="6" ry="6.5" fill="#1A1240"/><ellipse cx="220" cy="148" rx="6" ry="6.5" fill="#1A1240"/>
+  <path d="M184 172 Q 200 184 216 172" stroke="#5A2A1A" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M140 136 C 140 70, 260 70, 260 136" stroke="#34D6A0" stroke-width="11" fill="none" stroke-linecap="round" opacity="0"/>
+  <rect x="124" y="124" width="30" height="50" rx="13" fill="#34D6A0"/><rect x="246" y="124" width="30" height="50" rx="13" fill="#34D6A0"/>
+  <path d="M146 166 C 150 186, 164 192, 182 186" stroke="#1A1240" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="184" cy="186" r="6" fill="#1A1240"/>
+</svg>
+</template>
+
+<script>
+(function(){
+  var v=new URLSearchParams(location.search).get('view');
+  if(v){
+    document.body.classList.add('single');
+    document.querySelectorAll('.board').forEach(function(b){ if(b.dataset.view!==v) b.remove(); });
+    document.querySelectorAll('.cap').forEach(function(c){ c.remove(); });
+  }
+  // shortcut: every slot clones the same template, so SVG ids repeat when all boards show; fine for a mockup.
+  [['slot-game','tpl-game'],['slot-lia','tpl-lia'],['slot-duda','tpl-duda']].forEach(function(p){
+    var t=document.getElementById(p[1]);
+    document.querySelectorAll('.'+p[0]).forEach(function(s){ s.replaceWith(t.content.cloneNode(true)); });
+  });
+
+  // palette sheet: live WCAG contrast from the declared tokens
+  var grid=document.getElementById('swatches');
+  if(grid){
+    var cs=getComputedStyle(document.documentElement);
+    var tok=function(n){return cs.getPropertyValue(n).trim().toUpperCase();};
+    var lum=function(h){h=h.replace('#','');return [0,2,4].map(function(i){var c=parseInt(h.substr(i,2),16)/255;return c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4);}).reduce(function(a,c,i){return a+c*[.2126,.7152,.0722][i];},0);};
+    var ratio=function(a,b){var x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+    var cr=function(a,b){return ratio(a,b).toFixed(2).replace('.',',')+':1';};
+    console.assert(Math.abs(ratio('#FFFFFF','#000000')-21)<1e-9,'contrast math');
+    var ink=tok('--color-ink'),soft=tok('--color-soft'),on=tok('--color-on-accent'),panel=tok('--color-panel'),surface=tok('--color-surface'),canvas=tok('--color-canvas');
+    var S=[
+      ['--color-canvas','bg'],['--color-panel','bg'],['--color-surface','bg'],['--color-surface-hi','bg'],
+      ['--color-line','line'],['--color-ink','text'],['--color-soft','text'],['--color-on-accent','on'],
+      ['--color-accent','fill'],['--color-accent-hi','fill+text'],['--color-danger','fill+text'],['--color-warn','fill+text'],
+      ['--x-tangerine','fill+text'],['--x-bubblegum','fill+text'],['--x-mint','fill+text'],['--x-sun','fill+text']
+    ];
+    S.forEach(function(s){
+      var hex=tok(s[0]),k=s[1],lines;
+      if(k==='bg') lines='<b>ink</b> '+cr(ink,hex)+' · <b>soft</b> '+cr(soft,hex);
+      else if(k==='line') lines='borda e divisor · sem texto';
+      else if(k==='text') lines='<b>no canvas</b> '+cr(hex,canvas)+'<br><b>no surface</b> '+cr(hex,surface);
+      else if(k==='on') lines='<b>no uva</b> '+cr(hex,tok('--color-accent'))+'<br><b>no danger</b> '+cr(hex,tok('--color-danger'));
+      else if(k==='fill') lines='<b>rótulo escuro</b> '+cr(on,hex)+'<br><b>branco</b> '+cr('#FFFFFF',hex)+' ✕';
+      else lines='<b>rótulo escuro</b> '+cr(on,hex)+'<br><b>texto no panel</b> '+cr(hex,panel)+'<br><b>texto no surface</b> '+cr(hex,surface);
+      var fg=ratio(ink,hex)>=ratio(on,hex)?'var(--color-ink)':'var(--color-on-accent)';
+      var d=document.createElement('div');d.className='sw';
+      d.innerHTML='<div class="chipc" style="background:var('+s[0]+');color:'+fg+'">Aa</div><p class="nm">'+s[0]+'</p><p class="hx">'+hex+'</p><p class="cr">'+lines+'</p>';
+      grid.appendChild(d);
+    });
+  }
+  if(window.lucide) lucide.createIcons();
+})();
+</script>
+</body>
+</html>

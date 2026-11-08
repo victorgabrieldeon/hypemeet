@@ -191,7 +191,7 @@ export function readWatch(room: Room): WatchParty | null {
 }
 
 /** Server-assigned join time, so every client ranks participants the same way. */
-function byJoinOrder(a: Participant, b: Participant): number {
+export function byJoinOrder(a: Participant, b: Participant): number {
   const at = (p: Participant) => p.joinedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
   return at(a) - at(b) || (a.identity < b.identity ? -1 : a.identity > b.identity ? 1 : 0);
 }

@@ -1,5 +1,6 @@
 import { RoomEvent, type RemoteParticipant, type Room } from "livekit-client";
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { personColor } from "../lib/color";
 
 /**
  * Ink: freehand strokes, arrows and click pings drawn over a screen tile, seen by everyone watching
@@ -66,16 +67,6 @@ type Message =
   | { t: "stroke"; s: string; id: string; tool: InkTool; from: number; pts: number[]; done?: 1 }
   | { t: "ping"; s: string; x: number; y: number };
 
-/** Bright enough to read on top of anything someone might share. */
-const COLORS = ["#ff3b5c", "#ffb020", "#2ee59d", "#33c3ff", "#b36bff", "#ff6bd6", "#ffe14d", "#7cff4d"];
-
-/** Each person's ink colour, the same on every screen in the room. */
-export function inkColor(identity: string): string {
-  let hash = 0;
-  for (const ch of identity) hash = (hash * 31 + ch.codePointAt(0)!) | 0;
-  return COLORS[Math.abs(hash) % COLORS.length]!;
-}
-
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const toWire = (v: number) => Math.round(v * SCALE);
@@ -89,9 +80,9 @@ export class InkStore {
 
   constructor(private room: Room) {}
 
-  /** Our own ink colour. */
+  /** Our own ink colour: our colour in the room (lib/color.ts). */
   get color(): string {
-    return inkColor(this.room.localParticipant.identity);
+    return personColor(this.room.localParticipant.identity);
   }
 
   /** Calls back whenever marks on this screen change; returns the unsubscribe. */
@@ -188,7 +179,7 @@ export class InkStore {
     } catch {
       return;
     }
-    const color = inkColor(participant.identity);
+    const color = personColor(participant.identity);
     const name = participant.name || participant.identity;
     const now = performance.now();
     if (msg.t === "ping") {
