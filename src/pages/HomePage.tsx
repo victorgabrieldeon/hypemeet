@@ -1,22 +1,11 @@
-import { ArrowRight, Clock, Download, Hash, Plus, Trash2, UserRound } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowRight, Download, Trash2, UserRound } from "lucide-react";
+import { useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CallPreview } from "../components/CallPreview";
 import { UpdateButton } from "../components/UpdateButton";
-import {
-  Avatar,
-  Button,
-  Field,
-  Logo,
-  LogoMark,
-  Spinner,
-  Wordmark,
-  glowCardClass,
-  headerLinkClass,
-  inputClass,
-} from "../components/ui";
+import { Avatar, Button, Field, Logo, Spinner, cardClass, headerLinkClass, inputClass } from "../components/ui";
 import { api, type PresentPerson } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
+import { PERSON_COLORS } from "../lib/color";
 import { IS_DESKTOP_APP } from "../lib/downloads";
 import { usePresence } from "../lib/presence";
 import { forgetRoom, loadNickname, rememberRoom, saveNickname, useSavedRooms } from "../lib/storage";
@@ -31,25 +20,33 @@ function timeAgo(ts: number): string {
   return relativeTime.format(Math.round(hours / 24), "day");
 }
 
+/** --p for a fixed sticker colour (the person-* utilities and the classes below read it). */
+const tint = (color: string) => ({ "--p": color }) as CSSProperties;
+const [, BUBBLEGUM, MINT, SUN] = PERSON_COLORS;
+
 const PRESENCE_AVATARS = 3;
 
 /** "3 pessoas agora" with the first faces stacked; names on hover. */
 function RoomPresence({ people }: { people: PresentPerson[] }) {
   const extra = people.length - PRESENCE_AVATARS;
-  const ring = "ring-2 ring-panel transition group-hover:ring-surface";
   return (
-    <div className="mt-1.5 flex items-center gap-2 text-sm" title={people.map((p) => p.name).join(", ")}>
-      <div className="flex -space-x-1.5" aria-hidden>
+    <div className="flex items-center gap-2.5 text-sm font-bold text-ink" title={people.map((p) => p.name).join(", ")}>
+      <div className="flex -space-x-1" aria-hidden>
         {people.slice(0, PRESENCE_AVATARS).map((p) => (
-          <Avatar key={p.identity} name={p.name} size="xs" className={ring} />
+          <Avatar key={p.identity} name={p.name} seed={p.identity} size="xs" className="ring-2 ring-panel" />
         ))}
         {extra > 0 && (
-          <span className={`grid size-6 place-items-center rounded-full bg-surface-hi text-[0.625rem] font-bold ${ring}`}>
+          <span className="grid size-6 place-items-center rounded-full bg-surface-hi text-[0.625rem] font-bold ring-2 ring-panel">
             +{extra}
           </span>
         )}
       </div>
-      <span className="font-semibold text-blurple-hi">
+      <span
+        aria-hidden
+        style={tint(MINT)}
+        className="size-2 shrink-0 rounded-full bg-(--p) shadow-[0_0_0_3px_color-mix(in_srgb,var(--p)_22%,transparent)]"
+      />
+      <span>
         {people.length} {people.length === 1 ? "pessoa" : "pessoas"} agora
       </span>
     </div>
@@ -70,6 +67,7 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const persistNickname = () => saveNickname(nickname.trim());
+  const hasRooms = savedRooms.length > 0;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -95,7 +93,7 @@ export function HomePage() {
   }
 
   const modeSwitch = (
-    <div className="flex rounded-full bg-surface-hi p-0.5" role="group" aria-label="Criar ou entrar">
+    <div className="grid grid-cols-2 rounded-full border-2 border-line bg-surface p-1" role="group" aria-label="Criar ou entrar">
       {(["create", "join"] as const).map((m) => (
         <button
           key={m}
@@ -105,7 +103,9 @@ export function HomePage() {
             setMode(m);
             setError(null);
           }}
-          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${mode === m ? "bg-blurple text-ink" : "text-soft hover:text-ink"
+          className={`type-link h-10.5 rounded-full transition ${mode === m
+            ? "bg-accent text-on-accent shadow-[inset_0_0_0_2px_var(--color-accent-hi)]"
+            : "text-soft hover:text-ink"
             }`}
         >
           {m === "create" ? "Criar" : "Entrar"}
@@ -115,8 +115,8 @@ export function HomePage() {
   );
 
   return (
-    <div className="aurora min-h-full">
-      <header className="mx-auto flex max-w-[1240px] items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
+    <div className="min-h-full overflow-x-clip">
+      <header className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-12 sm:pt-8 sm:pb-6">
         <Logo />
         {IS_DESKTOP_APP ? (
           <UpdateButton />
@@ -128,102 +128,54 @@ export function HomePage() {
         )}
       </header>
 
-      <main className="mx-auto grid max-w-[1240px] items-center gap-8 px-5 pt-4 pb-16 sm:px-8 lg:min-h-[calc(100svh-7.5rem)] lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:pb-24">
-        {/* Returning visitors see their rooms first; newcomers get the call preview instead. */}
-        {savedRooms.length > 0 ? (
-          <section aria-labelledby="salas-titulo" className="flex min-w-0 animate-fade-in flex-col gap-4">
-            <h2 id="salas-titulo" className="flex items-baseline gap-3 font-display text-xl font-bold">
-              Suas salas
-              <span className="text-sm font-medium text-soft">{savedRooms.length}</span>
-            </h2>
-            <ul className="-mr-2 flex max-h-[42svh] flex-col gap-3 overflow-y-auto pr-2 [scrollbar-width:thin] lg:max-h-[min(36rem,calc(100svh-14rem))]">
-              {savedRooms.map((room) => (
-                <li
-                  key={room.code}
-                  className="group flex items-center gap-4 rounded-lg border border-line bg-panel p-3 transition hover:border-white/[0.12] hover:bg-surface"
-                >
-                  <Avatar name={room.name} shape="square" />
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-display font-bold">{room.name}</h3>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-soft">
-                      <span className="font-mono tracking-widest">{formatCode(room.code)}</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="size-3.5" /> {timeAgo(room.lastJoinedAt)}
-                      </span>
-                    </p>
-                    {presence[room.code] && <RoomPresence people={presence[room.code]} />}
-                  </div>
-                  <button
-                    onClick={() => forgetRoom(room.code)}
-                    className="grid size-10 shrink-0 place-items-center rounded-md text-soft opacity-0 transition group-hover:opacity-100 hover:bg-surface-hi hover:text-danger focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                    aria-label={`Remover ${room.name}`}
-                    title="Remover da lista"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                  <Button
-                    variant="primary"
-                    className="type-link-sm h-10"
-                    onClick={() => {
-                      persistNickname();
-                      navigate(`/r/${room.code}`);
-                    }}
-                    aria-label={`Entrar em ${room.name}`}
-                  >
-                    <span className="hidden sm:inline">Entrar</span> <ArrowRight className="size-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : (
-          <div className="hidden lg:block">
-            <CallPreview />
-          </div>
-        )}
+      {/* Returning visitors get the form and their rooms side by side; newcomers just the form, centred. */}
+      <main
+        className={`mx-auto grid max-w-[1440px] justify-items-center gap-10 px-5 pt-4 pb-16 sm:px-12 lg:min-h-[calc(100svh-6.5rem)] lg:content-center lg:py-4 ${hasRooms ? "lg:grid-cols-[minmax(0,520px)_minmax(0,500px)] lg:items-start lg:justify-center lg:gap-16" : ""
+          }`}
+      >
+        <section
+          className={`${cardClass} relative flex w-full animate-pop flex-col gap-5 p-6 sm:p-9 ${hasRooms ? "max-w-[520px]" : "max-w-[600px]"}`}
+        >
+          {/* Decoration in the page margin. */}
+          <svg
+            aria-hidden
+            viewBox="0 0 100 100"
+            style={tint(SUN)}
+            className="pointer-events-none absolute bottom-6 -left-21 hidden size-11.5 -rotate-12 fill-(--p) stroke-[color-mix(in_srgb,var(--p)_55%,white)] drop-shadow-[0_4px_5px_rgb(0_0_0/0.5)] xl:block"
+          >
+            <path
+              d="M50 6l12.6 26.3 28.8 3.7-21.2 19.9 5.5 28.6L50 70.6 24.3 84.5l5.5-28.6L8.6 36l28.8-3.7z"
+              strokeWidth={5}
+              strokeLinejoin="round"
+            />
+          </svg>
 
-        <section className={`${glowCardClass} mx-auto w-full max-w-[34rem] animate-pop p-5 sm:p-10`}>
-          <div className="mb-8 flex flex-col items-center gap-4 text-center">
-            <LogoMark className="size-14" />
-            <h1>
-              <Wordmark className="text-[2.5rem] leading-none sm:text-[2.75rem]" />
-            </h1>
-            <p className="max-w-[36ch] text-soft">
-              Crie uma sala, mande o código pra galera e compartilhe quantas telas quiser — com som.
-            </p>
-          </div>
+          <h1
+            className={`mb-1 font-display text-[26px] leading-[1.12] font-extrabold tracking-[-0.02em] text-balance ${hasRooms ? "sm:text-[31px]" : "sm:text-[42px]"}`}
+          >
+            Crie uma sala, mande o código pra galera e compartilhe quantas telas quiser —{" "}
+            <span className="relative z-0 whitespace-nowrap before:absolute before:-inset-x-1 before:bottom-[-5px] before:-z-10 before:h-[9px] before:rounded-[5px] before:bg-accent/85">
+              com som.
+            </span>
+          </h1>
 
-          <div className="flex flex-col gap-4">
-            <Field label="Seu apelido" htmlFor="nickname" icon={UserRound}>
-              <input
-                id="nickname"
-                className={inputClass}
-                placeholder="Como a galera vai te ver"
-                value={nickname}
-                maxLength={32}
-                onChange={(e) => setNickname(e.target.value)}
-                onBlur={persistNickname}
-              />
-            </Field>
+          <Field label="Seu apelido" htmlFor="nickname" icon={UserRound}>
+            <input
+              id="nickname"
+              className={inputClass}
+              placeholder="Como a galera vai te ver"
+              value={nickname}
+              maxLength={32}
+              onChange={(e) => setNickname(e.target.value)}
+              onBlur={persistNickname}
+            />
+          </Field>
 
-            <form onSubmit={onSubmit} className="flex flex-col gap-2">
-              <Field
-                label={mode === "create" ? "Nome da nova sala" : "Código da sala"}
-                htmlFor="room"
-                icon={mode === "create" ? Plus : Hash}
-                header={modeSwitch}
-                trailing={
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    square
-                    disabled={busy}
-                    aria-label={mode === "create" ? "Criar sala" : "Entrar na sala"}
-                  >
-                    {busy ? <Spinner className="size-5" /> : <ArrowRight className="size-5" strokeWidth={2.25} />}
-                  </Button>
-                }
-              >
+          {modeSwitch}
+
+          <form onSubmit={onSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <Field label={mode === "create" ? "Nome da nova sala" : "Código da sala"} htmlFor="room">
                 {mode === "create" ? (
                   <input
                     id="room"
@@ -248,13 +200,96 @@ export function HomePage() {
                 )}
               </Field>
               {error && (
-                <p role="alert" className="px-1 text-sm text-danger">
+                <p role="alert" className="px-1 text-sm font-medium text-danger">
                   {error}
                 </p>
               )}
-            </form>
-          </div>
+            </div>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={busy}
+              aria-label={mode === "create" ? "Criar sala" : "Entrar na sala"}
+              className="h-15! w-full pr-2 pl-6 font-display text-lg font-extrabold"
+            >
+              {mode === "create" ? "Criar sala" : "Entrar na sala"}
+              <span className="ml-auto grid size-10.5 place-items-center rounded-full bg-on-accent text-accent-hi">
+                {busy ? <Spinner className="size-5" /> : <ArrowRight className="size-5.5" strokeWidth={2.6} />}
+              </span>
+            </Button>
+          </form>
         </section>
+
+        {hasRooms && (
+          <section
+            aria-labelledby="salas-titulo"
+            className="relative flex w-full max-w-[520px] min-w-0 animate-fade-in flex-col gap-5 lg:max-w-none"
+          >
+            {/* Decoration in the page margin. */}
+            <span
+              aria-hidden
+              style={tint(BUBBLEGUM)}
+              className="person-tag pointer-events-none absolute top-8.5 -right-25 hidden rotate-8 rounded-[16px_16px_16px_5px] px-3 pt-1.5 pb-2 font-display text-[22px] leading-none font-extrabold shadow-sticker xl:block"
+            >
+              gg!
+            </span>
+            <h2
+              id="salas-titulo"
+              className="mt-0.5 ml-1 flex items-center gap-3 font-display text-[26px] leading-none font-extrabold tracking-[-0.02em] sm:text-[30px]"
+            >
+              Suas salas
+              <span className="grid h-7 min-w-7 place-items-center rounded-full bg-surface-hi px-2 font-sans text-sm font-extrabold tracking-normal text-ink">
+                {savedRooms.length}
+              </span>
+            </h2>
+            {/* Scrolls on desktop beside the form; the padding keeps the cards' shadows and hover lift inside the box. */}
+            <ul className="flex flex-col gap-4 lg:-m-3 lg:max-h-[min(40rem,calc(100svh-12rem))] lg:overflow-y-auto lg:p-3 lg:scrollbar-thin">
+              {savedRooms.map((room) => (
+                <li
+                  key={room.code}
+                  className="flex gap-4 rounded-lg border-2 border-line bg-panel py-4.5 pr-4.5 pl-5 shadow-float"
+                >
+                  <Avatar name={room.name} seed={room.code} shape="square" className="size-14 text-lg" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="mt-0.5 min-w-0 font-display text-xl leading-tight font-extrabold tracking-[-0.01em] break-words">
+                        {room.name}
+                      </h3>
+                      <button
+                        onClick={() => forgetRoom(room.code)}
+                        className="-mt-1 -mr-1 grid size-10 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface hover:text-ink active:translate-y-px"
+                        aria-label={`Remover ${room.name}`}
+                        title="Remover da lista"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                    <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm font-medium text-soft">
+                      <span className="rounded-xs bg-surface px-2 py-1 font-mono text-[13px] leading-none tracking-[0.04em] text-ink">
+                        {formatCode(room.code)}
+                      </span>
+                      {timeAgo(room.lastJoinedAt)}
+                    </p>
+                    <div className="flex min-h-9 flex-wrap items-center gap-2">
+                      {presence[room.code] && <RoomPresence people={presence[room.code]} />}
+                      <Button
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => {
+                          persistNickname();
+                          navigate(`/r/${room.code}`);
+                        }}
+                        aria-label={`Entrar em ${room.name}`}
+                      >
+                        Entrar <ArrowRight className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     </div>
   );

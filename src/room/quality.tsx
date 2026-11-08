@@ -1,27 +1,50 @@
 import { ConnectionQuality, LocalVideoTrack, RemoteVideoTrack, type Track } from "livekit-client";
 import { useEffect, useState } from "react";
 
-const QUALITY: Partial<Record<ConnectionQuality, { bars: number; label: string; fill: string }>> = {
-  [ConnectionQuality.Excellent]: { bars: 3, label: "excelente", fill: "bg-ink" },
-  [ConnectionQuality.Good]: { bars: 2, label: "boa", fill: "bg-ink" },
-  [ConnectionQuality.Poor]: { bars: 1, label: "ruim", fill: "bg-warn" },
-  [ConnectionQuality.Lost]: { bars: 0, label: "caiu", fill: "bg-danger" },
+const QUALITY: Partial<Record<ConnectionQuality, { bars: number; label: string; tone: string }>> = {
+  [ConnectionQuality.Excellent]: { bars: 3, label: "excelente", tone: "scrim text-ink" },
+  [ConnectionQuality.Good]: { bars: 2, label: "boa", tone: "scrim text-ink" },
+  [ConnectionQuality.Poor]: { bars: 1, label: "ruim", tone: "scrim border-warn/30! px-2.5 text-warn" },
+  // Filled like the mic-off badge: danger text on the scrim falls to 2.65:1 over a bright frame.
+  [ConnectionQuality.Lost]: {
+    bars: 0,
+    label: "caiu",
+    tone: "border-[1.5px] border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger px-2.5 text-on-accent",
+  },
 };
 
-/** Signal-style bars from the quality LiveKit's server scores for each participant (Unknown renders nothing). */
+/**
+ * Signal-style bars from the quality LiveKit's server scores for each participant, as a chip over a tile; a poor or
+ * lost connection also says so in words (Unknown renders nothing).
+ */
 export function ConnectionBars({ quality }: { quality: ConnectionQuality }) {
   const info = QUALITY[quality];
   if (!info) return null;
   const label = `Conexão ${info.label}`;
+  const weak = info.bars < 2;
   return (
-    <span role="img" aria-label={label} title={label} className="flex h-2.5 shrink-0 items-end gap-0.5">
-      {[0.4, 0.7, 1].map((height, i) => (
-        <span
-          key={i}
-          className={`w-[3px] rounded-[1px] ${i < info.bars ? info.fill : quality === ConnectionQuality.Lost ? "bg-danger/50" : "bg-ink/25"}`}
-          style={{ height: `${height * 100}%` }}
-        />
-      ))}
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      // Not scrimClass: its text-ink would beat the tone's. The tone brings the surface and the only text colour.
+      className={`inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-full text-xs font-bold ${weak ? "" : "w-6.5 justify-center"} ${info.tone}`}
+    >
+      <span className="flex h-2.5 items-end gap-0.5">
+        {[0.4, 0.7, 1].map((height, i) => (
+          <span
+            key={i}
+            className={`w-[3px] rounded-[1px] ${i < info.bars ? "bg-current" : "bg-current/25"}`}
+            style={{ height: `${height * 100}%` }}
+          />
+        ))}
+      </span>
+      {weak && (
+        <span>
+          <span className="hidden @min-[12rem]:inline">conexão </span>
+          {info.label}
+        </span>
+      )}
     </span>
   );
 }

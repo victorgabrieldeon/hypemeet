@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { MAX_OPTION, MAX_POLL_OPTIONS, MAX_QUESTION, MIN_POLL_OPTIONS, type ChatMessage } from "./chat";
 
 const fieldClass =
-  "h-10 w-full min-w-0 rounded-sm border border-transparent bg-surface-hi px-3 text-sm text-ink outline-none transition placeholder:text-soft/70 focus:border-blurple/70";
+  "h-11 w-full min-w-0 rounded-md border-2 border-line bg-surface px-3.5 text-sm font-medium text-ink outline-none transition placeholder:text-soft focus:border-accent";
 
 /** Takes the place of the message box while a poll is being written. */
 export function PollComposer({
@@ -96,7 +96,7 @@ export function PollComposer({
                 onClick={() => setOptions(options.filter((_, j) => j !== i))}
                 aria-label={`Remover resposta ${i + 1}`}
                 title="Remover"
-                className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
               >
                 <X className="size-4" />
               </button>
@@ -107,20 +107,20 @@ export function PollComposer({
           <button
             type="button"
             onClick={addOption}
-            className="flex h-9 items-center gap-1.5 self-start rounded-sm px-2 text-sm text-blurple-hi transition hover:bg-surface-hi"
+            className="type-link-sm flex h-9 items-center gap-1.5 self-start rounded-full px-3 text-accent-hi transition hover:-translate-y-px hover:bg-surface-hi active:translate-y-px"
           >
             <Plus className="size-4" /> Adicionar resposta
           </button>
         )}
-        {duplicate && <p className="text-xs text-warn">Tem resposta repetida.</p>}
+        {duplicate && <p className="px-0.5 text-xs font-bold text-danger">Tem resposta repetida.</p>}
       </fieldset>
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
         <input
           type="checkbox"
           checked={multiple}
           onChange={(e) => setMultiple(e.target.checked)}
-          className="size-4 accent-blurple"
+          className="size-4 accent-accent"
         />
         Permitir mais de uma resposta
       </label>
@@ -129,14 +129,14 @@ export function PollComposer({
         <button
           type="button"
           onClick={onCancel}
-          className="type-link-sm h-9 rounded-sm px-4 text-soft transition hover:bg-surface-hi hover:text-ink"
+          className="type-link-sm h-10 rounded-full px-4 text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={!ready}
-          className="type-link-sm h-9 rounded-sm bg-blurple px-4 text-ink transition hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
+          className="type-link-sm h-10 rounded-full border-2 border-accent-hi bg-accent px-4 text-on-accent shadow-sticker transition hover:-translate-y-px hover:bg-accent-hi active:translate-y-px active:shadow-none disabled:translate-y-0 disabled:bg-accent disabled:opacity-50"
         >
           Criar enquete
         </button>
@@ -181,12 +181,12 @@ export function PollCard({
   }
 
   return (
-    <div className="mt-1.5 w-full rounded-md border border-line bg-surface p-3 whitespace-normal">
-      <p className="font-display font-bold">{message.text}</p>
-      <p className="mt-0.5 text-xs text-soft">
+    <div className="w-full rounded-lg border-2 border-line bg-surface p-3.5 whitespace-normal">
+      <p className="font-display text-base leading-snug font-extrabold break-words">{message.text}</p>
+      <p className="mt-1 text-xs font-medium text-soft">
         {poll.closed ? "Enquete encerrada" : poll.multiple ? "Escolha uma ou mais respostas" : "Escolha uma resposta"}
       </p>
-      <div role="group" aria-label={message.text} className="mt-2.5 flex flex-col gap-1.5">
+      <div role="group" aria-label={message.text} className="mt-3 flex flex-col gap-2">
         {poll.options.map((option, i) => {
           const count = names[i]!.length;
           const percent = voters ? Math.round((count / voters) * 100) : 0;
@@ -200,26 +200,27 @@ export function PollCard({
               aria-pressed={chosen}
               aria-disabled={!canVote}
               title={count ? names[i]!.join(", ") : "Ninguém escolheu"}
-              className={`relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-sm bg-surface-hi px-3 py-2 text-left text-sm transition ${
-                canVote ? "hover:ring-1 hover:ring-white/15" : "cursor-default"
-              } ${chosen ? "ring-1 ring-blurple hover:ring-blurple" : ""}`}
+              // Pill rows (radius = half the one-line height, so a wrapped answer stays a rounded box).
+              className={`relative flex min-h-10 w-full items-center gap-2.5 overflow-hidden rounded-[20px] border-2 bg-panel px-3 py-1.5 text-left text-sm font-medium transition ${
+                canVote ? "hover:-translate-y-px active:translate-y-px" : "cursor-default"
+              } ${chosen ? "border-accent" : canVote ? "border-line hover:border-soft" : "border-line"}`}
             >
               <span
                 aria-hidden
                 style={{ width: `${percent}%` }}
-                className={`absolute inset-y-0 left-0 transition-[width] duration-500 ease-out-expo ${chosen || winner ? "bg-blurple/35" : "bg-white/[0.07]"}`}
+                className={`absolute inset-y-0 left-0 transition-[width] duration-500 ease-out-expo ${chosen || winner ? "bg-accent/30" : "bg-accent/15"}`}
               />
               {canVote || chosen ? (
                 <span
                   className={`relative grid size-[18px] shrink-0 place-items-center border-2 ${poll.multiple ? "rounded-[5px]" : "rounded-full"} ${
-                    chosen ? "border-blurple bg-blurple" : "border-soft/60"
+                    chosen ? "border-accent-hi bg-accent text-on-accent" : "border-soft"
                   }`}
                 >
                   {chosen && <Check className="size-3" strokeWidth={3.5} />}
                 </span>
               ) : null}
-              <span className={`relative min-w-0 flex-1 break-words ${winner ? "font-semibold" : ""}`}>{option}</span>
-              <span className="relative shrink-0 text-xs text-soft tabular-nums">
+              <span className={`relative min-w-0 flex-1 break-words ${winner ? "font-bold" : ""}`}>{option}</span>
+              <span className="relative shrink-0 font-mono text-xs text-soft tabular-nums">
                 {count > 0 && `${count} · `}
                 {percent}%
               </span>
@@ -227,22 +228,34 @@ export function PollCard({
           );
         })}
       </div>
-      <p className="mt-2.5 flex items-center gap-2 text-xs text-soft">
+      <p className="mt-3 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-soft">
         {votersLabel(voters)}
         {canVote && message.from === me && (
-          <span className="ml-auto flex items-center gap-3">
+          <span className="ml-auto flex items-center gap-1 whitespace-nowrap">
             {confirming ? (
               <>
                 Encerrar de vez?
-                <button type="button" onClick={onClosePoll} className="font-medium text-danger transition hover:brightness-125">
+                <button
+                  type="button"
+                  onClick={onClosePoll}
+                  className="h-7 rounded-full border-2 border-[color-mix(in_srgb,var(--color-danger)_40%,var(--color-surface))] px-3 font-bold text-danger transition hover:-translate-y-px hover:border-danger hover:bg-danger hover:text-on-accent active:translate-y-px"
+                >
                   Encerrar
                 </button>
-                <button type="button" onClick={() => setConfirming(false)} className="font-medium transition hover:text-ink">
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="h-7 rounded-full px-3 font-bold transition hover:bg-surface-hi hover:text-ink"
+                >
                   Não
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => setConfirming(true)} className="font-medium transition hover:text-ink">
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="h-7 rounded-full px-3 font-bold transition hover:bg-surface-hi hover:text-ink"
+              >
                 Encerrar enquete
               </button>
             )}

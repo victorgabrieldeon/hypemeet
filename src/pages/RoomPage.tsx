@@ -1,8 +1,8 @@
 import { Room } from "livekit-client";
-import { ArrowLeft, Mic, MicOff, UserRound, Video, VideoOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Mic, MicOff, UserRound, Video, VideoOff } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Field, Logo, Spinner, glowCardClass, inputClass } from "../components/ui";
+import { Button, Field, Logo, Spinner, cardClass, chipClass, inputClass } from "../components/ui";
 import { api, type JoinGrant, type RoomInfo } from "../lib/api";
 import { formatCode, normalizeCode } from "../lib/code";
 import { loadNickname, rememberRoom, saveNickname } from "../lib/storage";
@@ -21,8 +21,8 @@ type Phase =
 
 function CenteredCard({ children }: { children: ReactNode }) {
   return (
-    <div className="aurora grid min-h-full place-items-center px-4 py-10">
-      <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-7 p-6 sm:p-10`}>
+    <div className="grid min-h-full place-items-center px-4 py-10">
+      <div className={`${cardClass} flex w-full max-w-md animate-pop flex-col gap-7 p-6 sm:p-9`}>
         {children}
       </div>
     </div>
@@ -66,7 +66,7 @@ export function RoomPage() {
         <div>
           <h1 className="type-heading-sm text-2xl">{phase.message}</h1>
           <p className="mt-2 text-soft">
-            Confira o código <span className="font-mono text-ink">{formatCode(code)}</span> com quem te convidou.
+            Confira o código <span className="font-mono font-medium text-ink">{formatCode(code)}</span> com quem te convidou.
           </p>
         </div>
         <Button variant="primary" onClick={() => navigate("/")}>
@@ -129,22 +129,23 @@ function Lobby({
   }
 
   const toggleClass = (on: boolean) =>
-    `type-link-sm flex h-12 flex-1 items-center justify-center gap-2 rounded-md border transition ${on
-      ? "border-blurple/60 bg-blurple/15 text-ink hover:bg-blurple/25"
+    `type-link-sm flex h-12 flex-1 items-center justify-center gap-2 rounded-full border-2 shadow-sticker transition hover:-translate-y-px active:translate-y-px active:shadow-none ${on
+      ? "border-accent-hi bg-accent text-on-accent hover:bg-accent-hi"
       : "border-line bg-surface text-soft hover:bg-surface-hi hover:text-ink"
     }`;
 
   return (
     <CenteredCard>
       <div className="flex items-center justify-between">
-        <Link to="/" className="type-link-sm flex items-center gap-1.5 text-soft transition hover:text-ink">
+        <Link
+          to="/"
+          className="type-link-sm -ml-3 flex h-9 items-center gap-1.5 rounded-full px-3 text-soft transition hover:bg-surface hover:text-ink"
+        >
           <ArrowLeft className="size-4" /> Início
         </Link>
-        <span className="rounded-md border border-line bg-surface px-3 py-1.5 font-mono text-sm tracking-widest text-soft">
-          {formatCode(info.code)}
-        </span>
+        <span className={`${chipClass} font-mono font-medium! tracking-[0.04em]`}>{formatCode(info.code)}</span>
       </div>
-      <h1 className="font-display text-[clamp(1.75rem,1.3rem+2vw,2.25rem)] leading-tight font-bold tracking-[-0.02em] break-words">
+      <h1 className="-mt-2 font-display text-[clamp(1.75rem,1.3rem+2vw,2.25rem)] leading-tight font-extrabold tracking-[-0.02em] break-words">
         {info.name}
       </h1>
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
@@ -168,12 +169,20 @@ function Lobby({
           </button>
         </div>
         {error && (
-          <p role="alert" className="px-1 text-sm text-danger">
+          <p role="alert" className="px-1 text-sm font-medium text-danger">
             {error}
           </p>
         )}
-        <Button type="submit" variant="primary" className="mt-2" disabled={joining}>
-          {joining && <Spinner className="size-5" />} Entrar na sala
+        <Button
+          type="submit"
+          variant="primary"
+          className="mt-2 h-15! pr-2 pl-6 font-display text-lg font-extrabold"
+          disabled={joining}
+        >
+          Entrar na sala
+          <span className="ml-auto grid size-10.5 place-items-center rounded-full bg-on-accent text-accent-hi">
+            {joining ? <Spinner className="size-5" /> : <ArrowRight className="size-5.5" strokeWidth={2.6} />}
+          </span>
         </Button>
       </form>
     </CenteredCard>

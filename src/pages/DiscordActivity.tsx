@@ -1,7 +1,7 @@
 import { Common, DiscordSDK, Events, RPCCloseCodes } from "@discord/embedded-app-sdk";
 import { ExternalLink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Button, Logo, Spinner, glowCardClass } from "../components/ui";
+import { Button, Logo, Spinner, cardClass } from "../components/ui";
 import { api, type DiscordGrant } from "../lib/api";
 import { discordClientId, proxiedLiveKitUrl } from "../lib/discord";
 import { LiveRoom } from "./RoomPage";
@@ -100,8 +100,8 @@ export function DiscordActivity() {
 
   if (phase.step === "error") {
     return (
-      <div className="aurora grid min-h-full place-items-center px-4 py-10">
-        <div className={`${glowCardClass} flex w-full max-w-md animate-pop flex-col gap-7 p-6 sm:p-10`}>
+      <div className="grid min-h-full place-items-center px-4 py-10">
+        <div className={`${cardClass} flex w-full max-w-md animate-pop flex-col gap-7 p-6 sm:p-9`}>
           <Logo />
           <div>
             <h1 className="type-heading-sm text-2xl">Não deu para abrir a sala</h1>

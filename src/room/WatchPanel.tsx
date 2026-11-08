@@ -1,6 +1,6 @@
 import { ArrowRight, ExternalLink, EyeOff, FolderOpen, Popcorn, Square } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
-import { Button, inputClass, Spinner } from "../components/ui";
+import { Button, cardClass, inputClass, Spinner } from "../components/ui";
 import type { WatchAction, WatchControls } from "./watch";
 import { watchTitle } from "./WatchPlayer";
 import { parseYouTube } from "./youtube";
@@ -52,26 +52,26 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
     <div
       role="dialog"
       aria-label="Assistir junto"
-      className="absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 rounded-lg bg-panel p-3 shadow-float ring-1 ring-line"
+      className={`absolute bottom-full left-1/2 z-40 mb-3 flex w-[min(23rem,calc(100vw-1.5rem))] -translate-x-1/2 animate-pop flex-col gap-3 p-3 ${cardClass}`}
     >
       <div className="px-1 pt-1">
-        <h2 className="type-link">Assistir junto</h2>
-        <p className="mt-0.5 text-xs text-soft">Cada um toca o vídeo no próprio player, com play e pause pra todo mundo.</p>
+        <h2 className="type-heading-sm">Assistir junto</h2>
+        <p className="mt-1 text-xs font-medium text-soft">Cada um toca o vídeo no próprio player, com play e pause pra todo mundo.</p>
       </div>
 
       {party && (
-        <div className="flex flex-col gap-2.5 rounded-md border border-line bg-surface p-3">
+        <div className="flex flex-col gap-2.5 rounded-lg border-2 border-line bg-surface p-3">
           <div className="flex items-center gap-2.5">
-            <span className="size-2 shrink-0 rounded-full bg-blurple-hi shadow-[0_0_8px_rgb(139_147_255/0.9)]" />
+            <span className="size-2 shrink-0 rounded-full bg-accent-hi shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_28%,transparent)]" />
             <p className="min-w-0 flex-1 text-sm">
-              <span className="block truncate font-semibold">{watchTitle(party.state.source)}</span>
-              <span className="block truncate text-xs text-soft">
+              <span className="block truncate font-bold">{watchTitle(party.state.source)}</span>
+              <span className="block truncate text-xs font-medium text-soft">
                 {party.state.playing ? "Tocando" : party.state.by ? `Pausado por ${party.state.by}` : "Pausado"}
                 {!following && " · você não está acompanhando"}
               </span>
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
@@ -80,7 +80,9 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
                 onDone();
               }}
               title={following ? "Fecha o vídeo só pra você; a sessão segue pros outros" : undefined}
-              className={`type-link-sm flex h-9 items-center justify-center gap-1.5 rounded-sm transition ${following ? "bg-surface-hi text-ink hover:bg-blurple/25" : "bg-blurple text-ink hover:brightness-110"
+              className={`type-link-sm flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border-2 px-3.5 whitespace-nowrap shadow-sticker transition hover:-translate-y-px active:translate-y-px active:shadow-none ${following
+                ? "border-line bg-surface-hi text-ink hover:bg-line"
+                : "border-accent-hi bg-accent text-on-accent hover:bg-accent-hi"
                 }`}
             >
               {following ? <EyeOff className="size-4" /> : <Popcorn className="size-4" />}
@@ -91,7 +93,7 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
               disabled={pending !== null}
               onClick={() => void run("stop", { type: "stop" })}
               title="Termina a sessão pra todo mundo"
-              className="type-link-sm flex h-9 items-center justify-center gap-1.5 rounded-sm bg-danger/15 text-danger transition hover:bg-danger hover:text-ink disabled:opacity-50"
+              className="type-link-sm flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full border-2 border-[color-mix(in_srgb,var(--color-danger)_40%,var(--color-surface))] px-3.5 whitespace-nowrap text-danger transition hover:-translate-y-px hover:border-danger hover:bg-danger hover:text-on-accent active:translate-y-px disabled:translate-y-0 disabled:opacity-50"
             >
               {pending === "stop" ? <Spinner className="size-3.5" /> : <Square className="size-3 fill-current" />}
               Encerrar pra todos
@@ -100,12 +102,12 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
         </div>
       )}
 
-      <div className="flex flex-col gap-3 rounded-md border border-line bg-surface p-3">
+      <div className="flex flex-col gap-3 rounded-lg border-2 border-line bg-surface p-3">
         <p className="type-label px-0.5 pt-1 text-soft">{party ? "Trocar vídeo" : "Escolher vídeo"}</p>
-        <form onSubmit={submit} className="flex gap-2">
+        <form onSubmit={submit} className="flex items-center gap-2">
           <input
             autoFocus
-            className={`${inputClass} ${invalid ? "border-danger/70" : ""}`}
+            className={`${inputClass} placeholder:text-sm ${invalid ? "border-danger!" : ""}`}
             value={link}
             onChange={(e) => {
               setLink(e.target.value);
@@ -120,7 +122,7 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
           </Button>
         </form>
         {invalid && (
-          <p role="alert" className="-mt-1 px-1 text-xs text-danger">
+          <p role="alert" className="-mt-1 px-1 text-xs font-bold text-danger">
             Isso não parece um link de vídeo do YouTube.
           </p>
         )}
@@ -132,15 +134,15 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
               onCastTab();
               onDone();
             }}
-            className="-mt-1 flex items-center gap-1.5 px-1 text-left text-xs text-soft transition hover:text-ink"
+            className="-mt-1 flex items-center gap-1.5 px-1 text-left text-xs font-bold text-soft transition hover:text-ink"
           >
             <ExternalLink className="size-3.5 shrink-0" /> Não tocou ou é live? Transmita pelo navegador
           </button>
         )}
-        <div className="flex items-center gap-3 text-xs text-soft">
-          <span className="h-px flex-1 bg-line" /> ou <span className="h-px flex-1 bg-line" />
+        <div className="flex items-center gap-3 text-xs font-bold text-soft">
+          <span className="h-0.5 flex-1 rounded-full bg-line" /> ou <span className="h-0.5 flex-1 rounded-full bg-line" />
         </div>
-        <Button className="type-link-sm h-11" disabled={pending !== null} onClick={() => fileInput.current?.click()}>
+        <Button className="type-link-sm h-11!" disabled={pending !== null} onClick={() => fileInput.current?.click()}>
           {pending === "file" ? <Spinner className="size-4" /> : <FolderOpen className="size-4" />}
           Vídeo do computador
         </Button>
@@ -157,7 +159,7 @@ export function WatchPanel({ watch, following, onJoin, onLeave, onFileChosen, on
             void run("file", { type: "load", source: { kind: "file", name: file.name, size: file.size } });
           }}
         />
-        <p className="px-0.5 text-xs text-soft">
+        <p className="px-0.5 text-xs font-medium text-soft">
           Quem for assistir abre a própria cópia do arquivo: nada é enviado, então chega em qualidade original.
         </p>
       </div>

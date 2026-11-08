@@ -68,6 +68,7 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 | Mídia | [LiveKit](https://livekit.io) (SFU) — `livekit-client` no browser |
 | Front | Vite + React 19 + TypeScript + Tailwind v4 |
 | API | Bun (`server/index.ts`) + SQLite (`bun:sqlite`) — salas e tokens |
+| Design | "Adesivo Noite": tokens em `src/index.css`, kit em `src/components/ui.tsx`; regras em [DESIGN.md](DESIGN.md) |
 
 A API só guarda `código → nome` e emite tokens LiveKit; vídeo/áudio vão direto browser ⇄ LiveKit.
 

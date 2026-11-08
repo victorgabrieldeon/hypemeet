@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   Maximize,
+  Mic,
   MicOff,
   Minimize,
   MonitorUp,
@@ -20,15 +21,18 @@ import {
   Pin,
   PinOff,
   Play,
+  VideoOff,
   Volume1,
   Volume2,
   VolumeX,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Avatar, Spinner } from "../components/ui";
+import { Avatar, personTagClass, scrimClass, Spinner } from "../components/ui";
+import { personStyle } from "../lib/color";
 import { inDiscord } from "../lib/discord";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
+import { castOwnerOf } from "./cast";
 import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
@@ -48,12 +52,13 @@ function VolumeControl({ participant, pub, label }: { participant: Participant; 
   const percent = Math.round(volume * 100);
   return (
     <div
-      className="flex items-center gap-2 rounded-full bg-black/70 py-1 pr-3.5 pl-1 backdrop-blur-md"
+      className={`${scrimClass} h-9 pr-3 pl-0.5`}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
     >
       <button
-        className={`grid size-8 place-items-center rounded-full transition hover:bg-white/15 ${silent ? "text-danger" : "text-ink"}`}
+        // Filled when silent: danger as icon colour on the scrim drops below 3:1 over a bright frame.
+        className={`grid size-7.5 place-items-center rounded-full transition ${silent ? "bg-danger text-on-accent hover:brightness-110" : "text-ink hover:bg-surface-hi"}`}
         onClick={() => volumes.set(key, { muted: !muted, ...(volume === 0 ? { volume: 1 } : {}) })}
         aria-label={muted ? `Ativar som: ${label}` : `Mutar: ${label}`}
         title={muted ? "Ativar som (só pra você)" : "Mutar (só pra você)"}
@@ -71,21 +76,17 @@ function VolumeControl({ participant, pub, label }: { participant: Participant; 
         style={{ "--fill": `${((muted ? 0 : percent) / (MAX_VOLUME * 100)) * 100}%` } as CSSProperties}
         aria-label={`Volume: ${label}`}
       />
-      <span
-        className={`w-10 text-right text-xs font-semibold tabular-nums ${percent > 100 && !muted ? "text-blurple-hi" : "text-ink/75"}`}
-      >
-        {muted ? "mudo" : `${percent}%`}
-      </span>
+      <span className="w-10 text-right font-mono text-xs text-ink tabular-nums">{muted ? "mudo" : `${percent}%`}</span>
     </div>
   );
 }
 
-export function Pill({ title, children }: { title?: string; children: ReactNode }) {
+/** Chip sizes over a screen; a bit smaller on narrow tiles. */
+const CHIP = "h-7.5 gap-1.5 px-3 text-[13px] font-bold @max-xs:h-6 @max-xs:px-2.5 @max-xs:text-xs";
+
+function Pill({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <div
-      title={title}
-      className="type-link-sm flex max-w-full items-center gap-1.5 truncate rounded-sm bg-black/65 px-2.5 py-1 text-[13px] text-ink backdrop-blur-md"
-    >
+    <div title={title} className={`${scrimClass} ${CHIP} max-w-full truncate`}>
       {children}
     </div>
   );
@@ -94,22 +95,29 @@ export function Pill({ title, children }: { title?: string; children: ReactNode 
 const VIEWER_AVATARS = 3;
 const listFormat = new Intl.ListFormat("pt-BR");
 
-/** Who's watching a screen: an eye, the first faces stacked and the count; names on hover. */
+/** Who's watching a screen: an eye, the first faces stacked (not when compact) and the count; names on hover. */
 function Viewers({ viewers, compact }: { viewers: Participant[]; compact?: boolean }) {
   const names = viewers.map((p) => (p.isLocal ? "você" : p.name || p.identity));
   const shown = compact ? [] : viewers.slice(0, VIEWER_AVATARS);
   const label = `Assistindo: ${listFormat.format(names)}`;
   return (
     <Pill title={label}>
-      <Eye className="size-3.5 shrink-0" aria-label={label} />
+      <Eye className="size-4 shrink-0" aria-label={label} />
       {shown.length > 0 && (
         <div className="flex -space-x-1.5" aria-hidden>
           {shown.map((p) => (
-            <Avatar key={p.identity} name={p.name || p.identity} image={discordAvatar(p)} size="xs" className="ring-2 ring-black/70" />
+            <Avatar
+              key={p.identity}
+              name={p.name || p.identity}
+              seed={p.identity}
+              image={discordAvatar(p)}
+              size="xs"
+              className="ring-2 ring-surface"
+            />
           ))}
         </div>
       )}
-      <span className="tabular-nums" aria-hidden>
+      <span className="font-mono tabular-nums" aria-hidden>
         {viewers.length}
       </span>
     </Pill>
@@ -124,18 +132,18 @@ function ScreenStats({ track, isLocal }: { track: Track; isLocal: boolean }) {
   // Dynacast pauses every layer of a screen nobody is watching.
   else if (stats.bitrate === 0) text = isLocal ? "Ninguém assistindo · envio pausado" : "Nada chegando";
   else
-    text = [
+    text = `${isLocal ? "Enviando" : "Recebendo"} ${[
       stats.width ? `${stats.width}×${stats.height}` : null,
       `${Math.round(stats.fps)} fps`,
       formatBitrate(stats.bitrate),
     ]
       .filter(Boolean)
-      .join(" · ");
+      .join(" · ")}`;
   return (
     <Pill>
-      <Activity className="size-3.5 shrink-0" />
+      <Activity className="size-4 shrink-0" />
       <span className="truncate tabular-nums" title={isLocal ? "O que você está enviando" : "O que está chegando pra você"}>
-        {isLocal ? "Enviando" : "Recebendo"} {text}
+        {text}
       </span>
     </Pill>
   );
@@ -149,7 +157,7 @@ function IconButton({
 }: {
   onClick: () => void;
   label: string;
-  /** Set on toggles: lit Blurple while on. */
+  /** Set on toggles: lit grape while on. */
   active?: boolean;
   children: ReactNode;
 }) {
@@ -160,7 +168,7 @@ function IconButton({
         onClick();
       }}
       onDoubleClick={(e) => e.stopPropagation()}
-      className={`grid size-9 place-items-center rounded-full text-ink backdrop-blur-md transition ${active ? "bg-blurple hover:brightness-110" : "bg-black/65 hover:bg-black/85"}`}
+      className={`grid size-9 place-items-center rounded-full transition duration-200 ease-out-expo hover:-translate-y-px active:translate-y-px ${active ? "border-[1.5px] border-accent-hi bg-accent text-on-accent hover:bg-accent-hi" : "scrim text-ink hover:bg-surface-hi"}`}
       aria-label={label}
       aria-pressed={active}
       title={label}
@@ -182,7 +190,7 @@ function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkToo
     <div
       role="toolbar"
       aria-label="Desenhar na tela"
-      className="flex items-center gap-0.5 rounded-full bg-black/70 p-1 backdrop-blur-md"
+      className="scrim flex items-center gap-0.5 rounded-full p-1"
       onDoubleClick={(e) => e.stopPropagation()}
     >
       <span
@@ -190,7 +198,7 @@ function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkToo
         style={{ background: ink.color }}
         title="Sua cor: é assim que os outros veem seus desenhos"
       />
-      <span className="hidden pr-1.5 text-xs whitespace-nowrap text-ink/70 @2xl:inline">
+      <span className="hidden pr-1.5 text-xs font-bold whitespace-nowrap text-ink @2xl:inline">
         Arraste pra desenhar · clique pra pingar
       </span>
       {INK_TOOLS.map(({ tool: value, icon: Icon, label }) => (
@@ -201,7 +209,7 @@ function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkToo
           aria-label={label}
           title={label}
           onClick={() => onChange(value)}
-          className={`grid size-8 place-items-center rounded-full transition ${tool === value ? "bg-blurple text-ink" : "text-ink/80 hover:bg-white/15 hover:text-ink"}`}
+          className={`grid size-8 place-items-center rounded-full transition ${tool === value ? "bg-accent text-on-accent" : "text-soft hover:bg-surface-hi hover:text-ink"}`}
         >
           <Icon className="size-4" />
         </button>
@@ -212,7 +220,7 @@ function InkToolbar({ tool, onChange }: { tool: InkTool; onChange: (tool: InkToo
         aria-label="Parar de desenhar"
         title="Parar de desenhar (Esc)"
         onClick={() => onChange(null)}
-        className="grid size-8 place-items-center rounded-full text-ink/80 transition hover:bg-white/15 hover:text-ink"
+        className="grid size-8 place-items-center rounded-full text-soft transition hover:bg-surface-hi hover:text-ink"
       >
         <X className="size-4" />
       </button>
@@ -271,31 +279,70 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
     const mic = participant.getTrackPublication(Track.Source.Microphone);
     const cameraOn = camera?.track && !camera.isMuted;
     const micOn = mic && !mic.isMuted;
+    const badge = "grid size-6.5 shrink-0 place-items-center rounded-full";
     return (
       <div
         ref={ref}
         onDoubleClick={onTogglePin}
-        className={`group relative size-full animate-pop overflow-hidden rounded-lg border-2 bg-surface transition-[border-color,box-shadow] duration-200 ${participant.isSpeaking && micOn
-          ? "border-blurple shadow-[0_0_28px_-4px_rgb(88_101_242/0.7)]"
-          : "border-line"
-          }`}
+        style={personStyle(participant.identity)}
+        // person-frame and person-speaking both set the border: never on together.
+        className={`group @container relative size-full animate-pop overflow-hidden bg-surface transition-[border-color,box-shadow] duration-200 ${pinned ? "rounded-lg" : "rounded-md"} ${participant.isSpeaking && micOn ? "person-speaking border-2" : "person-frame shadow-sticker"}`}
       >
         {cameraOn ? (
           <VideoView track={camera.track!} mirror={isLocal} fit="cover" />
         ) : (
-          <div className="grid size-full place-items-center bg-[radial-gradient(circle_at_50%_40%,rgb(88_101_242/0.28),transparent_70%)]">
-            <Avatar name={name} image={discordAvatar(participant)} size={compact ? "sm" : "lg"} />
+          // pb-4: centred in the space above the name tag, so it clears it on short tiles.
+          <div className="grid size-full place-items-center bg-[color-mix(in_srgb,var(--p)_5%,var(--color-surface))] pb-4">
+            <Avatar
+              name={name}
+              seed={participant.identity}
+              image={discordAvatar(participant)}
+              className="@max-[12rem]:size-9 @max-[12rem]:text-sm @sm:size-24 @sm:text-3xl"
+            />
           </div>
         )}
-        <div className={`${overlayBase} bottom-2 left-2 max-w-[calc(100%-1rem)]`}>
-          <Pill>
-            {/* In the Activity the voice is Discord's: a mic-off badge on almost everyone would just be noise. */}
-            {!micOn && !inDiscord && <MicOff className="size-3.5 shrink-0 text-danger" />}
-            <span className="truncate">{isLocal ? `${name} (você)` : name}</span>
-            <ConnectionBars quality={participant.connectionQuality} />
-          </Pill>
+        <div className={`${overlayBase} top-2 left-2 max-w-[calc(100%-1rem)]`}>
+          <ConnectionBars quality={participant.connectionQuality} />
+          {!cameraOn && (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-soft" title="Câmera desligada">
+              <VideoOff className="size-3.5 shrink-0" />
+              <span className="sr-only truncate @min-[12rem]:not-sr-only">câmera desligada</span>
+            </span>
+          )}
         </div>
-        <div className={`${overlayBase} top-2 right-2 left-2 flex-wrap justify-end ${hoverOnly}`}>
+        <div className={`${overlayBase} right-2 bottom-2 left-2 justify-between`}>
+          <span className={personTagClass}>
+            <span className="truncate">{name}</span>
+            {isLocal && <span className="shrink-0 font-sans text-xs font-medium">(você)</span>}
+          </span>
+          <span className="flex shrink-0 gap-1">
+            {participant.isScreenShareEnabled && (
+              <span role="img" aria-label="Compartilhando tela" title="Compartilhando tela" className={`${badge} scrim text-ink`}>
+                <MonitorUp className="size-3.5" />
+              </span>
+            )}
+            {/* In the Activity the voice is Discord's: a mic badge on everyone would just be noise. */}
+            {!inDiscord &&
+              (micOn ? (
+                <span role="img" aria-label="Microfone ligado" title="Microfone ligado" className={`${badge} scrim text-ink`}>
+                  <Mic className="size-3.5" />
+                </span>
+              ) : (
+                <span
+                  role="img"
+                  aria-label="Microfone desligado"
+                  title="Microfone desligado"
+                  className={`${badge} bg-danger text-on-accent`}
+                >
+                  <MicOff className="size-3.5" strokeWidth={2.6} />
+                </span>
+              ))}
+          </span>
+        </div>
+        {/* Spans the tile's width: let the top-left chips underneath keep their tooltips. */}
+        <div
+          className={`${overlayBase} pointer-events-none top-2 right-2 left-2 flex-wrap justify-end *:pointer-events-auto ${hoverOnly}`}
+        >
           {!isLocal && mic && <VolumeControl participant={participant} pub={mic} label={`microfone de ${name}`} />}
           <IconButton onClick={onTogglePin} label={pinned ? "Desafixar" : "Fixar"}>
             {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
@@ -314,20 +361,31 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const watching = isLocal || (video as RemoteTrackPublication).isDesired;
   const showing = watching && !!video.track;
   const tool = showing && !compact ? inkTool : null;
+  // The sharer's filled tag: top-left beside "Ao vivo" on roomy tiles, alone at the bottom on narrow ones.
+  const nameTag = (
+    <span className={`person-tag flex max-w-full min-w-0 items-center truncate rounded-full ${CHIP}`}>
+      <MonitorUp className="size-4 shrink-0" />
+      <span className="truncate">{title}</span>
+      {audio && <Volume2 className="size-3.5 shrink-0" aria-label="com áudio" />}
+    </span>
+  );
   return (
     <div
       ref={ref}
       onDoubleClick={onTogglePin}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group @container relative size-full animate-pop overflow-hidden rounded-lg bg-black ${fullscreen.filling ? FILL_CLASS : ""}`}
+      // A transmitter's screen wears its owner's colour, like its "Tela de …" name.
+      style={personStyle(castOwnerOf(participant) ?? participant.identity)}
+      // In native fullscreen too: the tile's rim and corners would frame the picture.
+      className={`group @container relative size-full animate-pop overflow-hidden border-2 border-line bg-canvas shadow-float ${pinned ? "rounded-lg" : "rounded-md"} ${fullscreen.active ? FILL_CLASS : ""}`}
     >
       {!watching ? (
-        <div className="relative grid size-full place-items-center bg-[radial-gradient(circle_at_50%_45%,rgb(88_101_242/0.3),transparent_70%)]">
+        <div className="relative grid size-full place-items-center bg-[color-mix(in_srgb,var(--p)_5%,var(--color-surface))]">
           {preview && (
             <>
               <img src={preview} alt="" draggable={false} className="absolute inset-0 size-full object-contain" />
-              <div className="absolute inset-0 bg-black/40 transition group-hover:bg-black/55" />
+              <div className="absolute inset-0 bg-canvas/40 transition group-hover:bg-canvas/55" />
             </>
           )}
           <button
@@ -336,9 +394,11 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
               watchScreen(tile, true);
             }}
             onDoubleClick={(e) => e.stopPropagation()}
-            className={`type-link-sm relative flex items-center gap-2 rounded-full bg-blurple text-ink shadow-float transition duration-200 ease-out-expo hover:brightness-110 active:scale-95 ${compact ? "h-8 px-3 text-xs" : "h-11 px-5"}`}
+            className="type-link-sm relative flex h-11 items-center gap-2 rounded-full border-2 border-accent-hi bg-accent px-5 text-on-accent shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px hover:bg-accent-hi active:translate-y-px active:shadow-none @max-xs:h-7 @max-xs:gap-1.5 @max-xs:px-3 @max-xs:text-xs"
           >
-            <Play className={compact ? "size-3.5" : "size-4"} /> {compact ? "Assistir" : "Ver transmissão"}
+            <Play className="size-4 @max-xs:size-3.5" />
+            <span className="@max-xs:hidden">Ver transmissão</span>
+            <span className="hidden @max-xs:inline">Assistir</span>
           </button>
         </div>
       ) : video.track ? (
@@ -351,21 +411,31 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
       {showing && <InkLayer screen={video.trackSid} aspect={aspect} tool={tool} />}
       <div className={`${overlayBase} top-2 left-2 ${tool ? "max-w-[calc(50%-1rem)]" : "max-w-[calc(100%-1rem)]"}`}>
         <div className="flex min-w-0 flex-col items-start gap-1.5">
-          <Pill>
+          <div className="flex max-w-full min-w-0 items-center gap-1.5">
+            <div className="hidden min-w-0 @xs:flex">{nameTag}</div>
+            {/* Not on narrow tiles: it shows exactly when the Assistir button does, and they're crowded. */}
             {!isLocal && !watching && (
-              <span className="shrink-0 rounded-xs bg-danger px-1 text-[10px] leading-4 font-bold tracking-wide uppercase">
+              <span
+                className={`flex shrink-0 items-center rounded-full border-[1.5px] border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger text-on-accent @max-xs:hidden ${CHIP}`}
+              >
+                <span className="size-[7px] animate-pulse rounded-full bg-current motion-reduce:animate-none" />
                 Ao vivo
               </span>
             )}
-            <MonitorUp className="size-3.5 shrink-0" />
-            <span className="truncate">{title}</span>
-            {audio && <Volume2 className="size-3.5 shrink-0 text-ink/75" aria-label="com áudio" />}
             <ConnectionBars quality={participant.connectionQuality} />
-          </Pill>
-          {viewers.length > 0 && <Viewers viewers={viewers} compact={compact} />}
-          {hovered && !compact && watching && video.track && <ScreenStats track={video.track} isLocal={isLocal} />}
+            {viewers.length > 0 && (
+              <div className="min-w-0 @xs:hidden">
+                <Viewers viewers={viewers} compact />
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full min-w-0 flex-wrap items-start gap-1.5 @xs:flex">
+            {viewers.length > 0 && <Viewers viewers={viewers} />}
+            {hovered && !compact && watching && video.track && <ScreenStats track={video.track} isLocal={isLocal} />}
+          </div>
         </div>
       </div>
+      <div className={`${overlayBase} bottom-2 left-2 max-w-[calc(100%-1rem)] @xs:hidden`}>{nameTag}</div>
       {tool && (
         <div className={`${overlayBase} top-2 right-2`}>
           <InkToolbar tool={tool} onChange={setInkTool} />
@@ -386,7 +456,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
               const track = (video as LocalTrackPublication).track;
               if (track) void participant.unpublishTrack(track);
             }}
-            className="type-link-sm flex h-9 items-center gap-1.5 rounded-full bg-danger px-3.5 text-ink transition hover:brightness-110"
+            className="type-link-sm flex h-9 items-center gap-1.5 rounded-full border-[1.5px] border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger px-3.5 text-on-accent transition duration-200 ease-out-expo hover:-translate-y-px hover:brightness-110 active:translate-y-px"
           >
             <X className="size-4" /> Parar
           </button>

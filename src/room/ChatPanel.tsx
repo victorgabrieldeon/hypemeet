@@ -10,7 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Avatar, Spinner } from "../components/ui";
+import { Avatar, cardClass, Spinner } from "../components/ui";
+import { personStyle } from "../lib/color";
 import { MAX_TEXT, prepareImage, type ChatMessage, type ChatState, type RoomChat } from "./chat";
 import { PollCard, PollComposer } from "./Poll";
 
@@ -34,7 +35,7 @@ function Linkified({ text }: { text: string }) {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blurple-hi underline decoration-blurple-hi/40 underline-offset-2 hover:decoration-blurple-hi"
+        className="font-bold text-accent-hi underline decoration-[1.5px] underline-offset-3 transition hover:text-ink"
       >
         {url}
       </a>,
@@ -50,23 +51,23 @@ const formatTime = (time: number) => new Date(time).toLocaleTimeString("pt-BR", 
 function MessageImage({ image, onOpen, onLoad }: { image: ChatMessage["image"]; onOpen: (url: string) => void; onLoad: () => void }) {
   if (image === "loading")
     return (
-      <div className="mt-1 grid h-32 w-48 place-items-center rounded-md bg-surface text-soft">
+      <div className="grid h-32 w-48 place-items-center rounded-md border-2 border-line bg-surface text-soft">
         <Spinner className="size-5" />
       </div>
     );
   if (image === "lost" || !image)
     return (
-      <p className="mt-1 flex items-center gap-1.5 text-xs text-soft">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-soft">
         <ImageOff className="size-3.5" /> A imagem não chegou
       </p>
     );
   return (
-    <button type="button" onClick={() => onOpen(image.url)} className="mt-1 block max-w-full" title="Ampliar">
+    <button type="button" onClick={() => onOpen(image.url)} className="block max-w-full" title="Ampliar">
       <img
         src={image.url}
         alt="Imagem enviada no chat"
         onLoad={onLoad}
-        className="max-h-60 max-w-full rounded-md object-contain transition hover:brightness-110"
+        className="max-h-60 max-w-full rounded-md border-2 border-line object-contain transition hover:brightness-110"
       />
     </button>
   );
@@ -164,16 +165,16 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
       aria-label="Chat da sala"
       onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
       onDrop={onDrop}
-      className={`absolute inset-0 z-30 flex-col overflow-hidden rounded-lg border border-line bg-panel md:static md:w-[22rem] md:shrink-0 ${open ? "flex animate-fade-in" : "hidden"}`}
+      className={`absolute inset-0 z-30 flex-col overflow-hidden ${cardClass} md:static md:w-[22rem] md:shrink-0 xl:w-[26rem] ${open ? "flex animate-fade-in" : "hidden"}`}
     >
-      <header className="flex items-center justify-between gap-2 border-b border-line py-2 pr-2 pl-4">
-        <h2 className="type-link">Chat</h2>
+      <header className="flex h-[68px] shrink-0 items-center justify-between gap-2 border-b-[1.5px] border-surface-hi pr-3.5 pl-5">
+        <h2 className="type-heading-sm">Chat</h2>
         <button
           type="button"
           onClick={onClose}
           aria-label="Fechar chat"
           title="Fechar chat"
-          className="grid size-9 place-items-center rounded-sm text-soft transition hover:bg-surface-hi hover:text-ink"
+          className="grid size-10 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface hover:text-ink active:translate-y-px"
         >
           <X className="size-5" />
         </button>
@@ -185,44 +186,64 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
           const list = e.currentTarget;
           stick.current = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
         }}
-        className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3"
+        className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [mask-image:linear-gradient(to_bottom,transparent,black_1rem)]"
       >
-        <p className="mx-auto mb-3 max-w-60 text-center text-xs text-soft">
+        {/* With messages, it and they sit at the bottom like a conversation; an auto margin, not justify-end, keeps the top scrollable. */}
+        <p className={`mx-auto mb-4 max-w-64 text-center text-xs font-medium text-soft ${messages.length ? "mt-auto" : ""}`}>
           As mensagens vão direto pra quem está na sala e somem quando todo mundo sair.
         </p>
         {messages.length === 0 && (
-          <p className="m-auto text-center text-sm text-soft">Ninguém falou nada ainda. Cola um link, uma imagem, faz uma enquete…</p>
+          <p className="m-auto max-w-64 text-center text-sm font-medium text-soft">Ninguém falou nada ainda. Cola um link, uma imagem, faz uma enquete…</p>
         )}
         {messages.map((message, i) => {
           const prev = messages[i - 1];
           const grouped = prev?.from === message.from && message.time - prev.time < GROUP_MS;
+          const mine = message.from === chat.identity;
           const body = (
-            <div className={`min-w-0 text-[15px] leading-snug break-words whitespace-pre-wrap ${message.failed ? "opacity-60" : ""}`}>
-              {message.poll ? (
-                <PollCard
-                  message={{ ...message, poll: message.poll }}
-                  me={chat.identity}
-                  onVote={(choices) => chat.vote(message.id, choices)}
-                  onClosePoll={() => chat.closePoll(message.id)}
-                />
-              ) : (
-                message.text && <Linkified text={message.text} />
-              )}
-              {message.image && <MessageImage image={message.image} onOpen={setViewing} onLoad={toBottom} />}
-              {message.failed && <p className="mt-0.5 text-xs text-danger">Não enviada</p>}
+            <div className={`flex w-full min-w-0 flex-col gap-1.5 ${mine ? "items-end" : "items-start"}`}>
+              {/* Dim only the message: the "Não enviada" label below has to keep its contrast. */}
+              <div className={`flex w-full min-w-0 flex-col gap-1.5 ${mine ? "items-end" : "items-start"} ${message.failed ? "opacity-60" : ""}`}>
+                {message.poll ? (
+                  <PollCard
+                    message={{ ...message, poll: message.poll }}
+                    me={chat.identity}
+                    onVote={(choices) => chat.vote(message.id, choices)}
+                    onClosePoll={() => chat.closePoll(message.id)}
+                  />
+                ) : (
+                  message.text && (
+                    // Neutral, with a breath of the sender's colour; ours is grape.
+                    <p
+                      className={`max-w-[calc(100%-1.5rem)] border px-3.5 py-2.5 text-[15px] leading-[1.4] font-medium wrap-anywhere whitespace-pre-wrap text-ink ${
+                        mine
+                          ? "rounded-[16px_16px_6px_16px] border-[color-mix(in_srgb,var(--color-accent)_50%,var(--color-surface))] bg-[color-mix(in_srgb,var(--color-accent)_28%,var(--color-surface))]"
+                          : "rounded-[16px_16px_16px_6px] border-[color-mix(in_srgb,var(--p)_30%,var(--color-surface))] bg-[color-mix(in_srgb,var(--p)_4%,var(--color-surface))]"
+                      }`}
+                    >
+                      <Linkified text={message.text} />
+                    </p>
+                  )
+                )}
+                {message.image && <MessageImage image={message.image} onOpen={setViewing} onLoad={toBottom} />}
+              </div>
+              {message.failed && <p className="px-0.5 text-xs font-bold text-danger">Não enviada</p>}
             </div>
           );
           return grouped ? (
-            <div key={message.id} className="mt-1 pl-12">
+            <div key={message.id} style={personStyle(message.from)} className={`mt-1.5 ${mine ? "pr-12" : "pl-12"}`}>
               {body}
             </div>
           ) : (
-            <div key={message.id} className={`flex gap-3 ${i > 0 ? "mt-4" : ""}`}>
-              <Avatar name={message.name} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="flex items-baseline gap-2">
-                  <span className="truncate text-sm font-semibold">{message.name}</span>
-                  <span className="shrink-0 text-xs text-soft">{formatTime(message.time)}</span>
+            <div
+              key={message.id}
+              style={personStyle(message.from)}
+              className={`flex items-start gap-3 ${mine ? "flex-row-reverse" : ""} ${i > 0 ? "mt-4" : ""}`}
+            >
+              <Avatar name={message.name} seed={message.from} size="sm" />
+              <div className={`flex min-w-0 flex-1 flex-col ${mine ? "items-end" : "items-start"}`}>
+                <p className="mb-1.5 flex max-w-full items-baseline gap-2 px-0.5">
+                  <span className="truncate font-display text-sm font-extrabold text-(--p)">{message.name}</span>
+                  <span className="shrink-0 text-xs font-medium text-soft">{formatTime(message.time)}</span>
                 </p>
                 {body}
               </div>
@@ -231,7 +252,7 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
         })}
       </div>
 
-      <div className="border-t border-line p-3">
+      <div className="px-3.5 pt-1 pb-3.5">
         {writingPoll ? (
           <PollComposer
             onCreate={(question, options, multiple) => {
@@ -249,9 +270,9 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
             {(pending || preparing) && (
               <div className="relative mb-2 inline-block">
                 {pending ? (
-                  <img src={pending.url} alt="Imagem a enviar" className="max-h-28 rounded-md ring-1 ring-line" />
+                  <img src={pending.url} alt="Imagem a enviar" className="max-h-28 rounded-md border-2 border-line" />
                 ) : (
-                  <div className="grid size-20 place-items-center rounded-md bg-surface text-soft">
+                  <div className="grid size-20 place-items-center rounded-md border-2 border-line bg-surface text-soft">
                     <Spinner className="size-5" />
                   </div>
                 )}
@@ -260,20 +281,33 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
                     type="button"
                     onClick={() => setPending(null)}
                     aria-label="Remover imagem"
-                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-surface-hi text-ink ring-2 ring-panel transition hover:bg-danger"
+                    className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full border-2 border-panel bg-surface-hi text-ink transition hover:bg-danger hover:text-on-accent"
                   >
                     <X className="size-3.5" />
                   </button>
                 )}
               </div>
             )}
-            <div className="flex items-end gap-1.5 rounded-md bg-surface-hi p-1.5 transition focus-within:shadow-[0_0_0_4px_rgb(88_101_242/0.15)]">
+            {/* Half the one-line height as radius: a pill that stays a rounded box as the text grows. */}
+            <div className="flex items-end gap-1 rounded-[28px] border-2 border-line bg-surface py-1.5 pr-1.5 pl-4 transition has-[textarea:focus]:border-accent">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={draft}
+                maxLength={MAX_TEXT}
+                placeholder="Mensagem"
+                aria-label="Mensagem"
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                className="field-sizing-content max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2 pr-1 text-[15px] font-medium text-ink outline-none placeholder:text-soft"
+              />
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 aria-label="Enviar imagem"
                 title="Enviar imagem (ou cole/arraste aqui)"
-                className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface hover:text-ink"
+                className="grid size-10 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
               >
                 <ImagePlus className="size-5" />
               </button>
@@ -282,7 +316,7 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
                 onClick={() => setWritingPoll(true)}
                 aria-label="Criar enquete"
                 title="Criar enquete"
-                className="grid size-9 shrink-0 place-items-center rounded-sm text-soft transition hover:bg-surface hover:text-ink"
+                className="grid size-10 shrink-0 place-items-center rounded-full text-soft transition hover:-translate-y-px hover:bg-surface-hi hover:text-ink active:translate-y-px"
               >
                 <ChartBarBig className="size-5" />
               </button>
@@ -296,27 +330,15 @@ export function ChatPanel({ chat, state, open, onClose, onError }: ChatPanelProp
                   e.target.value = "";
                 }}
               />
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={draft}
-                maxLength={MAX_TEXT}
-                placeholder="Mensagem"
-                aria-label="Mensagem"
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={onKeyDown}
-                onPaste={onPaste}
-                className="field-sizing-content max-h-32 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] text-ink outline-none placeholder:text-soft/70"
-              />
               <button
                 type="button"
                 onClick={send}
                 disabled={!draft.trim() && !pending}
                 aria-label="Enviar"
                 title="Enviar (Enter)"
-                className="grid size-9 shrink-0 place-items-center rounded-sm bg-blurple text-ink transition hover:brightness-110 disabled:bg-transparent disabled:text-soft/50"
+                className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-accent-hi bg-accent text-on-accent transition hover:-translate-y-px hover:bg-accent-hi active:translate-y-px disabled:translate-y-0 disabled:border-line disabled:bg-surface-hi disabled:text-soft"
               >
-                <SendHorizontal className="size-5" />
+                <SendHorizontal className="size-[18px]" />
               </button>
             </div>
           </>

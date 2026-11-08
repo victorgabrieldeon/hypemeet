@@ -1,75 +1,101 @@
 import type { LucideIcon } from "lucide-react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { personStyle } from "../lib/color";
 
 type Variant = "primary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
- primary:
-  "bg-linear-to-b from-[#6873ff] to-blurple text-ink shadow-[0_8px_24px_-8px_rgb(88_101_242/0.8),inset_0_1px_0_rgb(255_255_255/0.18)] hover:brightness-110",
- ghost: "border border-line bg-surface text-ink hover:bg-surface-hi",
- danger: "bg-danger text-ink hover:brightness-110",
+ primary: "border-accent-hi bg-accent text-on-accent hover:bg-accent-hi",
+ ghost: "border-line bg-surface text-ink hover:bg-surface-hi",
+ danger: "border-[color-mix(in_srgb,var(--color-danger)_55%,white)] bg-danger text-on-accent hover:brightness-110",
 };
 
-/** Classes of <Button>, for links that must look like one. */
-export function buttonClass({ variant = "ghost", square = false }: { variant?: Variant; square?: boolean } = {}) {
- return `type-link inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-md transition duration-200 ease-out-expo active:translate-y-px disabled:opacity-50 ${square ? "w-12" : "px-5"} ${VARIANTS[variant]}`;
+type Size = "md" | "sm";
+
+const SIZES: Record<Size, { box: string; square: string; pad: string }> = {
+ md: { box: "type-link h-12", square: "w-12", pad: "px-5" },
+ sm: { box: "type-link-sm h-10", square: "w-10", pad: "px-4" },
+};
+
+/** Classes of <Button>, for links that must look like one. Pill stickers that lift on hover. */
+export function buttonClass({
+ variant = "ghost",
+ size = "md",
+ square = false,
+}: { variant?: Variant; size?: Size; square?: boolean } = {}) {
+ const s = SIZES[size];
+ return `${s.box} inline-flex shrink-0 items-center justify-center gap-2 rounded-full border-2 shadow-sticker transition duration-200 ease-out-expo hover:-translate-y-px active:translate-y-px active:shadow-none disabled:translate-y-0 disabled:opacity-50 ${square ? s.square : s.pad} ${VARIANTS[variant]}`;
 }
 
-/** Pill-shaped link in the top bar of the home and download pages. */
+/** Pill link in the top bar of the home and download pages. */
 export const headerLinkClass =
- "type-link-sm flex h-11 items-center gap-2 rounded-md border border-line bg-surface/70 px-4 text-soft transition hover:bg-surface-hi hover:text-ink";
+ "type-link-sm sticker flex h-11 items-center gap-2 rounded-full bg-surface px-4 text-ink transition hover:-translate-y-px hover:bg-surface-hi active:translate-y-px active:shadow-none";
+
+/** Small neutral pill: room code, counts, metadata. */
+export const chipClass =
+ "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border-[1.5px] border-line bg-surface px-3 text-[13px] font-bold text-ink";
+
+/** Pill laid over video or a shared screen (dark, blurred, readable on anything). */
+export const scrimClass = "scrim inline-flex shrink-0 items-center gap-1.5 rounded-full text-ink";
+
+/** Someone's filled name tag; pair with style={personStyle(identity)}. */
+export const personTagClass =
+ "person-tag inline-flex h-6.5 max-w-full items-center gap-1.5 truncate rounded-full px-2.5 font-display text-sm leading-none font-extrabold";
+
+/** Keyboard key, e.g. the push-to-talk binding. */
+export const kbdClass =
+ "inline-grid h-5.5 min-w-5.5 place-items-center rounded-[7px] border-[1.5px] border-line bg-surface px-1.5 font-mono text-xs text-ink shadow-[0_2px_0_var(--color-line)]";
+
+/** Unread / count badge on a control. */
+export const countClass =
+ "grid h-5.5 min-w-5.5 place-items-center rounded-full border-2 border-canvas bg-accent px-1.5 text-xs leading-none font-extrabold text-on-accent";
 
 export function Button({
  variant = "ghost",
+ size = "md",
  square = false,
  className = "",
  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; /** icon-only, 1:1 */ square?: boolean }) {
- return <button {...props} className={`${buttonClass({ variant, square })} ${className}`} />;
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; /** icon-only, 1:1 */ square?: boolean }) {
+ return <button {...props} className={`${buttonClass({ variant, size, square })} ${className}`} />;
 }
 
-export function LogoMark({ className = "size-9" }: { className?: string }) {
+/** The grape "H" sticker (public/favicon.svg). */
+export function LogoMark({ className = "size-10" }: { className?: string }) {
  return <img src="/favicon.svg" alt="" className={`shrink-0 ${className}`} />;
 }
 
-/** HYPE in white, MEET in Blurple — the wordmark split from the brand reference. */
-export function Wordmark({ className = "" }: { className?: string }) {
+/** "Hype" plus "Meet" on a tilted grape sticker; sizes with the font size. */
+function Wordmark({ className = "" }: { className?: string }) {
  return (
-  <span className={`font-display font-extrabold tracking-[-0.01em] uppercase ${className}`}>
-   Hype<span className="text-blurple-hi">Meet</span>
+  <span className={`inline-flex items-center font-display font-extrabold tracking-[-0.03em] ${className}`}>
+   Hype
+   <span className="ml-[0.16em] inline-block -rotate-3 rounded-[0.38em] border-2 border-accent-hi bg-accent px-[0.36em] pt-[0.08em] pb-[0.18em] text-on-accent shadow-sticker">
+    Meet
+   </span>
   </span>
  );
 }
 
 export function Logo({ className = "" }: { className?: string }) {
- return (
-  <div className={`flex items-center gap-3 ${className}`}>
-   <LogoMark className="size-10" />
-   <Wordmark className="text-2xl" />
-  </div>
- );
+ return <Wordmark className={`text-[1.75rem] leading-none ${className}`} />;
 }
-
-/** Violet → Blurple family only, so avatars never introduce a second accent. */
-const AVATAR_FILLS = [
- "bg-linear-to-br from-[#7457ff] to-blurple",
- "bg-linear-to-br from-blurple to-[#3d47c9]",
- "bg-linear-to-br from-[#9a6bff] to-[#5b3fd6]",
- "bg-linear-to-br from-[#4c5bd4] to-[#2b2f7a]",
-];
 
 export function Avatar({
  name,
+ seed,
  image,
  size = "md",
  shape = "circle",
  className = "",
 }: {
  name: string;
+ /** What picks the colour (a participant's identity, a room's code); defaults to the name. */
+ seed?: string;
  /** Photo to show instead of the initials (e.g. the Discord avatar). */
  image?: string;
  size?: "xs" | "sm" | "md" | "lg";
- /** square = server-icon style, used for rooms. */
+ /** circle = a person (sticker blob in their colour); square = a room (tonal stamp). */
  shape?: "circle" | "square";
  className?: string;
 }) {
@@ -80,9 +106,6 @@ export function Avatar({
    .slice(0, size === "xs" ? 1 : 2)
    .map((p) => p[0]!.toUpperCase())
    .join("") || "?";
- let hash = 0;
- for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
- const fill = AVATAR_FILLS[Math.abs(hash) % AVATAR_FILLS.length];
  const sizes = { xs: "size-6 text-[0.625rem]", sm: "size-9 text-sm", md: "size-12 text-base", lg: "size-24 text-3xl" };
  if (image)
   return (
@@ -93,9 +116,14 @@ export function Avatar({
     className={`shrink-0 bg-surface-hi object-cover ${shape === "square" ? "rounded-md" : "rounded-full"} ${sizes[size]} ${className}`}
    />
   );
+ const look =
+  shape === "square"
+   ? "rounded-blob border-2 border-[color-mix(in_srgb,var(--p)_34%,var(--color-surface))] bg-[color-mix(in_srgb,var(--p)_16%,var(--color-surface))] text-(--p)"
+   : "rounded-blob bg-(--p) text-on-accent";
  return (
   <div
-   className={`grid shrink-0 place-items-center font-display font-bold text-ink ${shape === "square" ? "rounded-md" : "rounded-full"} ${fill} ${sizes[size]} ${className}`}
+   style={personStyle(seed ?? name)}
+   className={`grid shrink-0 place-items-center font-display font-extrabold ${look} ${sizes[size]} ${className}`}
   >
    {initials}
   </div>
@@ -110,48 +138,35 @@ export function Spinner({ className = "size-5" }: { className?: string }) {
  );
 }
 
-/**
- * Inset panel holding one input: tracked-caps label, optional leading icon, optional trailing
- * control (e.g. the submit arrow). `header` sits at the label row's right edge.
- */
+/** One labelled input: bold label above, optional leading icon. */
 export function Field({
  label,
  htmlFor,
  icon: Icon,
- header,
- trailing,
  children,
 }: {
  label: string;
  htmlFor: string;
  icon?: LucideIcon;
- header?: ReactNode;
- trailing?: ReactNode;
  children: ReactNode;
 }) {
  return (
-  <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3 pt-4">
-   <div className="flex min-h-5 items-center justify-between gap-3 px-1">
-    <label htmlFor={htmlFor} className="type-label text-soft">
-     {label}
-    </label>
-    {header}
-   </div>
-   <div className="flex gap-2">
-    <div className={`relative min-w-0 flex-1 ${Icon ? "[&>input]:pl-11" : ""}`}>
-     {Icon && (
-      <Icon className="pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-soft" />
-     )}
-     {children}
-    </div>
-    {trailing}
+  <div className="flex flex-col gap-2">
+   <label htmlFor={htmlFor} className="px-0.5 text-sm font-bold text-ink">
+    {label}
+   </label>
+   <div className={`relative ${Icon ? "[&>input]:pl-11" : ""}`}>
+    {Icon && (
+     <Icon className="pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-soft" />
+    )}
+    {children}
    </div>
   </div>
  );
 }
 
 export const inputClass =
- "h-12 w-full rounded-md border border-transparent bg-surface-hi px-4 text-[15px] text-ink placeholder:text-soft/70 outline-none transition focus:border-blurple/70 focus:shadow-[0_0_0_4px_rgb(88_101_242/0.15)]";
+ "h-13 w-full rounded-md border-2 border-line bg-surface px-4 text-base font-medium text-ink placeholder:text-soft outline-none transition focus:border-accent";
 
-/** The glowing card that floats over the aurora on the home and lobby screens. */
-export const glowCardClass = "rounded-xl border border-white/[0.06] bg-panel/90 shadow-glow backdrop-blur-xl";
+/** The panel that holds the home, lobby and Activity forms. */
+export const cardClass = "rounded-xl border-2 border-line bg-panel shadow-float";
