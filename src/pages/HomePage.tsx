@@ -1,9 +1,11 @@
-import { ArrowRight, Download, Trash2, UserRound } from "lucide-react";
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { ArrowRight, Download, Menu, Trash2, UserRound } from "lucide-react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useShell, useWideNav } from "../components/AppShell";
 import { UpdateButton } from "../components/UpdateButton";
 import { Avatar, Button, Field, Logo, Spinner, cardClass, headerLinkClass, inputClass } from "../components/ui";
 import { api, type PresentPerson } from "../lib/api";
+import { useSession } from "../lib/auth";
 import { formatCode, normalizeCode } from "../lib/code";
 import { PERSON_COLORS } from "../lib/color";
 import { IS_DESKTOP_APP } from "../lib/downloads";
@@ -22,7 +24,7 @@ function timeAgo(ts: number): string {
 
 /** --p for a fixed sticker colour (the person-* utilities and the classes below read it). */
 const tint = (color: string) => ({ "--p": color }) as CSSProperties;
-const [, BUBBLEGUM, MINT, SUN] = PERSON_COLORS;
+const [, , MINT, SUN] = PERSON_COLORS;
 
 const PRESENCE_AVATARS = 3;
 
@@ -57,14 +59,23 @@ type Mode = "create" | "join";
 
 export function HomePage() {
   const navigate = useNavigate();
+  const openNav = useShell()?.openNav;
+  const discordName = useSession()?.user?.name;
   const savedRooms = useSavedRooms();
-  const presence = usePresence(savedRooms.map((r) => r.code));
+  const wide = useWideNav();
+  // From lg the list below is hidden and the sidebar shows (and polls) the same rooms.
+  const presence = usePresence(wide ? [] : savedRooms.map((r) => r.code));
   const [nickname, setNickname] = useState(loadNickname);
   const [mode, setMode] = useState<Mode>("create");
   const [roomName, setRoomName] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Signed in with Discord and no nickname of your own yet: start from the Discord name.
+  useEffect(() => {
+    if (discordName && !loadNickname()) setNickname((n) => n || discordName);
+  }, [discordName]);
 
   const persistNickname = () => saveNickname(nickname.trim());
   const hasRooms = savedRooms.length > 0;
@@ -117,7 +128,12 @@ export function HomePage() {
   return (
     <div className="min-h-full overflow-x-clip">
       <header className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-12 sm:pt-8 sm:pb-6">
-        <Logo />
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={openNav} className={`${headerLinkClass} lg:hidden`} aria-label="Abrir menu" title="Abrir menu">
+            <Menu className="size-4" />
+          </button>
+          <Logo />
+        </div>
         {IS_DESKTOP_APP ? (
           <UpdateButton />
         ) : (
@@ -128,13 +144,10 @@ export function HomePage() {
         )}
       </header>
 
-      {/* Returning visitors get the form and their rooms side by side; newcomers just the form, centred. */}
-      <main
-        className={`mx-auto grid max-w-[1440px] justify-items-center gap-10 px-5 pt-4 pb-16 sm:px-12 lg:min-h-[calc(100svh-6.5rem)] lg:content-center lg:py-4 ${hasRooms ? "lg:grid-cols-[minmax(0,520px)_minmax(0,500px)] lg:items-start lg:justify-center lg:gap-16" : ""
-          }`}
-      >
+      {/* The form, centred; below lg (no sidebar) returning visitors get their rooms under it. */}
+      <main className="mx-auto grid max-w-[1440px] justify-items-center gap-10 px-5 pt-4 pb-16 sm:px-12 lg:min-h-[calc(100svh-6.5rem)] lg:content-center lg:py-4">
         <section
-          className={`${cardClass} relative flex w-full animate-pop flex-col gap-5 p-6 sm:p-9 ${hasRooms ? "max-w-[520px]" : "max-w-[600px]"}`}
+          className={`${cardClass} relative flex w-full animate-pop flex-col gap-5 p-6 sm:p-9 ${hasRooms ? "max-w-[520px] lg:max-w-[600px]" : "max-w-[600px]"}`}
         >
           {/* Decoration in the page margin. */}
           <svg
@@ -151,7 +164,7 @@ export function HomePage() {
           </svg>
 
           <h1
-            className={`mb-1 font-display text-[26px] leading-[1.12] font-extrabold tracking-[-0.02em] text-balance ${hasRooms ? "sm:text-[31px]" : "sm:text-[42px]"}`}
+            className={`mb-1 font-display text-[26px] leading-[1.12] font-extrabold tracking-[-0.02em] text-balance ${hasRooms ? "sm:text-[31px] lg:text-[42px]" : "sm:text-[42px]"}`}
           >
             Crie uma sala, mande o código pra galera e compartilhe quantas telas quiser —{" "}
             <span className="relative z-0 whitespace-nowrap before:absolute before:-inset-x-1 before:bottom-[-5px] before:-z-10 before:h-[9px] before:rounded-[5px] before:bg-accent/85">
@@ -221,29 +234,17 @@ export function HomePage() {
         </section>
 
         {hasRooms && (
-          <section
-            aria-labelledby="salas-titulo"
-            className="relative flex w-full max-w-[520px] min-w-0 animate-fade-in flex-col gap-5 lg:max-w-none"
-          >
-            {/* Decoration in the page margin. */}
-            <span
-              aria-hidden
-              style={tint(BUBBLEGUM)}
-              className="person-tag pointer-events-none absolute top-8.5 -right-25 hidden rotate-8 rounded-[16px_16px_16px_5px] px-3 pt-1.5 pb-2 font-display text-[22px] leading-none font-extrabold shadow-sticker xl:block"
-            >
-              gg!
-            </span>
+          <section aria-labelledby="salas-titulo" className="flex w-full max-w-[520px] min-w-0 animate-fade-in flex-col gap-5 lg:hidden">
             <h2
               id="salas-titulo"
               className="mt-0.5 ml-1 flex items-center gap-3 font-display text-[26px] leading-none font-extrabold tracking-[-0.02em] sm:text-[30px]"
             >
-              Suas salas
+              Seus grupos
               <span className="grid h-7 min-w-7 place-items-center rounded-full bg-surface-hi px-2 font-sans text-sm font-extrabold tracking-normal text-ink">
                 {savedRooms.length}
               </span>
             </h2>
-            {/* Scrolls on desktop beside the form; the padding keeps the cards' shadows and hover lift inside the box. */}
-            <ul className="flex flex-col gap-4 lg:-m-3 lg:max-h-[min(40rem,calc(100svh-12rem))] lg:overflow-y-auto lg:p-3 lg:scrollbar-thin">
+            <ul className="flex flex-col gap-4">
               {savedRooms.map((room) => (
                 <li
                   key={room.code}

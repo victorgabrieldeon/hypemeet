@@ -5,3 +5,24 @@ services:
     command: --dev --bind 0.0.0.0
     network_mode: host
     restart: unless-stopped
+
+  # Dev database (DATABASE_URL defaults to it). Host port 5433, so it doesn't clash with a local Postgres on 5432.
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: hypemeet
+      POSTGRES_PASSWORD: hypemeet
+      POSTGRES_DB: hypemeet
+    ports:
+      - "5433:5432"
+    volumes:
+      - hypemeet-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hypemeet -d hypemeet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  hypemeet-pg:

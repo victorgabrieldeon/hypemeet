@@ -3,7 +3,7 @@ import { personTagClass } from "../components/ui";
 import { personStyle } from "../lib/color";
 import { castOwnerOf } from "./cast";
 import { VideoView } from "./media";
-import type { TileModel } from "./model";
+import { nameOf, type TileModel } from "./model";
 import { floatableTrack } from "./pip";
 import { ReactionLayer } from "./reactions";
 import { PipButton } from "./Tile";
@@ -23,7 +23,7 @@ export function PipStage({ tile }: { tile: TileModel | null }) {
         </span>
       </div>
     );
-  const name = tile.participant.name || tile.participant.identity;
+  const name = nameOf(tile.participant);
   return (
     <div className="relative size-full overflow-hidden bg-canvas">
       <VideoView key={tile.id} track={track} fit="contain" />

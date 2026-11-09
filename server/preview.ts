@@ -54,9 +54,11 @@ function metaTags(m: Meta): string {
 export function createLinkPreviews(opts: {
   distDir: string;
   livekit: RoomServiceClient;
-  findRoom: (code: string) => Room | null;
+  findRoom: (code: string) => Promise<Room | null>;
 }) {
   const presence = createPreviewPresence(opts.livekit);
+  // Who's in a Discord server's channel is for that server's members, not for whoever has the link.
+  const peopleIn = async (room: Room) => (room.discord ? [] : presence.people(room.code));
   let shell: Promise<string> | null = null;
   const indexHtml = () => (shell ??= Bun.file(join(opts.distDir, "index.html")).text());
 
@@ -100,9 +102,9 @@ export function createLinkPreviews(opts: {
     },
 
     async roomPage(req: Request, code: string): Promise<Response> {
-      const room = opts.findRoom(code);
+      const room = await opts.findRoom(code);
       if (!room) return page(genericMeta(req), "HypeMeet");
-      const people = await presence.people(room.code);
+      const people = await peopleIn(room);
       const base = publicOrigin(req);
       // The version pins this snapshot: WhatsApp/Discord cache images by URL, so a new crowd
       // must mean a new URL or the old faces stick around.
@@ -120,9 +122,9 @@ export function createLinkPreviews(opts: {
     },
 
     async roomImage(code: string): Promise<Response> {
-      const room = opts.findRoom(code);
+      const room = await opts.findRoom(code);
       if (!room) return new Response("Sala não encontrada", { status: 404 });
-      const people = await presence.people(room.code);
+      const people = await peopleIn(room);
       return png(await render({ name: room.name, code: room.code, people }));
     },
 

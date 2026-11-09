@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type CSSProperties,
 } from "react";
-import { buildTiles, type TileModel } from "./model";
+import { buildTiles, nameOf, type TileModel } from "./model";
 
 /** The only emojis accepted off the wire: a peer can't push arbitrary text onto everyone's screen. */
 export const REACTIONS = ["🔥", "😂", "😮", "👏", "❤️", "💀", "🎉", "👀"] as const;
@@ -105,7 +105,7 @@ export function useReactions(room: Room): Reactions {
       // The tile may be gone by now (screen stopped): land on the sender's camera instead.
       const exists = buildTiles(room).some((t) => t.id === msg.target);
       const target = exists ? msg.target : `${participant.identity}:camera`;
-      store.add(target, msg.emoji, participant.name || participant.identity);
+      store.add(target, msg.emoji, nameOf(participant));
     };
     room.on(RoomEvent.DataReceived, onData);
     return () => {
@@ -122,7 +122,7 @@ export function useReactions(room: Room): Reactions {
       sentAt.push(now);
       const local = room.localParticipant;
       // Peers don't get our own data echoed back, so show it locally right away.
-      store.add(target, emoji, local.name || local.identity);
+      store.add(target, emoji, nameOf(local));
       const payload = new TextEncoder().encode(JSON.stringify({ emoji, target } satisfies WireReaction));
       // Lossy: a dropped reaction doesn't matter, a late one would.
       void local.publishData(payload, { reliable: false, topic: TOPIC }).catch(() => {});
@@ -188,7 +188,7 @@ export function ReactionLayer({ tileId, compact }: { tileId: string; compact?: b
 /** "na tela de Ana", "na sua câmera"… */
 function targetLabel(tile: TileModel): string {
   const { participant } = tile;
-  const name = participant.name || participant.identity;
+  const name = nameOf(participant);
   const what = tile.kind === "camera" ? "câmera" : tile.number ? `tela ${tile.number}` : "tela";
   return participant.isLocal ? `na sua ${what}` : `na ${what} de ${name}`;
 }

@@ -7,6 +7,8 @@
  *   base64url(JSON { plugin, id, name, exp }) "." base64url(HMAC-SHA256(secret, first part))
  */
 
+import { isTransmitter, nicknameOf } from "./identity";
+
 export interface Pass {
   /** The plugin it was issued for: another one's pass is no good to it. */
   plugin: string;
@@ -52,12 +54,14 @@ export function createPasses(secret: string, now = () => Date.now()) {
 
 export type Passes = ReturnType<typeof createPasses>;
 
-/** What a room token says about its holder (livekit-server-sdk's ClaimGrants, the part read here). */
+/**
+ * What a room token says about its holder (livekit-server-sdk's ClaimGrants, the part read here). A refreshed token
+ * carries the name and attributes the client set, so who they are comes from `sub` (server/identity.ts).
+ */
 export interface RoomClaims {
   sub?: string;
   name?: string;
   video?: { room?: string };
-  attributes?: Record<string, string>;
 }
 
 /**
@@ -67,9 +71,9 @@ export interface RoomClaims {
 export async function passForToken(
   token: unknown,
   plugin: string,
-  deps: { verify: (token: string) => Promise<RoomClaims>; roomExists: (code: string) => boolean; passes: Passes },
+  deps: { verify: (token: string) => Promise<RoomClaims>; roomExists: (code: string) => Promise<boolean>; passes: Passes },
 ): Promise<string | null> {
   const claims = typeof token === "string" && token ? await deps.verify(token).catch(() => null) : null;
-  if (!claims?.sub || !claims.video?.room || !deps.roomExists(claims.video.room) || claims.attributes?.castFor) return null;
-  return deps.passes.issue(plugin, claims.sub, claims.name || claims.sub.split("#")[0]!);
+  if (!claims?.sub || !claims.video?.room || !(await deps.roomExists(claims.video.room)) || isTransmitter(claims.sub)) return null;
+  return deps.passes.issue(plugin, claims.sub, nicknameOf(claims.sub, claims.name));
 }

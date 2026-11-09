@@ -1,5 +1,6 @@
-import { RoomEvent, type ByteStreamReader, type Participant, type RemoteParticipant, type Room, type TextStreamReader } from "livekit-client";
+import { RoomEvent, type ByteStreamReader, type RemoteParticipant, type Room, type TextStreamReader } from "livekit-client";
 import { remotePeople } from "./cast";
+import { nameOf } from "./model";
 
 /**
  * Room chat, sent peer to peer over LiveKit's data channel: nothing goes through our server or is
@@ -83,8 +84,6 @@ export interface ChatState {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-
-const nameOf = (participant: Participant) => participant.name || participant.identity;
 
 function parse(json: string): unknown {
   try {
@@ -385,7 +384,7 @@ export class RoomChat {
     this.receive({
       id,
       from: identity,
-      name: sender ? nameOf(sender) : identity,
+      name: nameOf(sender ?? { identity }),
       time: Date.now(),
       text: (attributes.text ?? "").slice(0, MAX_TEXT),
       image: "loading",

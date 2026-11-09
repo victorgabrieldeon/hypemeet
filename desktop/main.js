@@ -399,6 +399,74 @@ ipcMain.on("ptt:listen", (event, on) => {
   if (isServerFrame(event.senderFrame)) ptt.listen(on);
 });
 
+// ---- Discord login -------------------------------------------------------------------------
+
+/** Discord's own pages: its login, 2FA and consent screen live there. */
+const isDiscordUrl = (url) => {
+  try {
+    return new URL(url).origin === "https://discord.com";
+  } catch {
+    return false;
+  }
+};
+
+/** @type {BrowserWindow | null} */
+let loginWindow = null;
+
+/**
+ * Discord's login runs in a child window without the preload, so a third-party page never gets the
+ * app's bridges. It shares the default session: the server's cookies land where the main window reads
+ * them. Once the flow is back on the server, the main window takes over.
+ */
+function openDiscordLogin(url) {
+  if (loginWindow) return loginWindow.focus();
+  const window = new BrowserWindow({
+    parent: mainWindow,
+    modal: true,
+    width: 500,
+    height: 800,
+    minWidth: 400,
+    minHeight: 500,
+    title: "Entrar com o Discord",
+    backgroundColor: BACKGROUND,
+    icon: ICON,
+    autoHideMenuBar: true,
+    show: false,
+    webPreferences: { contextIsolation: true, sandbox: true },
+  });
+  loginWindow = window;
+  window.setMenu(null);
+  window.once("ready-to-show", () => window.show());
+  window.on("closed", () => {
+    if (loginWindow === window) loginWindow = null;
+  });
+
+  const { webContents } = window;
+  webContents.setWindowOpenHandler(({ url: target }) => {
+    if (/^https?:\/\//.test(target)) shell.openExternal(target);
+    return { action: "deny" };
+  });
+  const follow = (event, target) => {
+    // Server pages load here too (did-navigate below hands them over); anything else goes to the browser.
+    if (isDiscordUrl(target) || isServerUrl(target)) return;
+    event.preventDefault();
+    if (/^https?:\/\//.test(target)) shell.openExternal(target);
+  };
+  // Back on the server past the callback: only once the page has loaded is its session cookie surely stored.
+  webContents.on("did-navigate", (_event, target) => {
+    if (!isServerUrl(target) || new URL(target).pathname.startsWith("/api/auth/")) return;
+    window.close();
+    mainWindow?.loadURL(target).catch(() => {});
+  });
+  // A beforeunload on Discord's page would otherwise silently block closing the window.
+  webContents.on("will-prevent-unload", (event) => event.preventDefault());
+  webContents.on("will-navigate", follow);
+  webContents.on("will-redirect", (event, target, _inPlace, isMainFrame) => {
+    if (isMainFrame) follow(event, target);
+  });
+  window.loadURL(url).catch(() => {});
+}
+
 // ---- App -----------------------------------------------------------------------------------
 
 function buildMenu() {
@@ -461,6 +529,12 @@ function createMainWindow() {
     return { action: "deny" };
   });
   webContents.on("will-navigate", (event, url) => {
+    // The whole Discord login runs in its own window from the server's first step on, so the state cookie it
+    // sets and the callback that checks it happen in the same flow.
+    if (isServerUrl(url) && new URL(url).pathname === "/api/auth/discord") {
+      event.preventDefault();
+      return openDiscordLogin(url);
+    }
     if (isServerUrl(url) || url.startsWith(PAGES_URL)) return;
     event.preventDefault();
     if (/^https?:\/\//.test(url)) shell.openExternal(url);

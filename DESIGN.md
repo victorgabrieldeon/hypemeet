@@ -118,10 +118,29 @@ woff2).
 
 ## Layout
 
+- **Moldura (`AppShell`):** em volta da home e da sala, no jeito do Discord. Trilho de 72px (`canvas`)
+  com o "H" (Grupos), um fio e os servidores do Discord de quem entrou (ícone num quadrado `rounded-md`
+  ou `Avatar` quadrado; servidor sem o bot fica apagado); o selecionado ganha a pílula uva na borda
+  esquerda. Barra lateral de 256px (`panel`, fio de 2px à direita): cabeçalho de 56px com o nome, a
+  lista e o painel da conta embaixo.
+- **Barra lateral:** em Grupos, "Criar ou entrar" e "Seus grupos" (as salas salvas); num servidor, os
+  canais de voz na ordem do Discord, com as categorias em `type-label`. Linha atual = `surface-hi` +
+  `aria-current` (no canal, o alto-falante fica `accent-hi`); canal sem acesso = cadeado, apagado e desabilitado.
+  Embaixo da linha, quem está ali: num canal, primeiro quem está na call do Discord (avatar, nome e o
+  microfone/fone cortado em `soft` quando mutado/ensurdecido, que é escolha da pessoa, não perigo; o "H"
+  pequeno marca quem também está na sala do HypeMeet), depois quem está só no HypeMeet; até 5 no total,
+  depois "+N". Sem o Gateway do bot, só a sala aparece. Servidor sem o bot: texto curto e "Adicionar ao
+  servidor" (primário) para quem pode.
+- **Painel da conta:** avatar do Discord, nome, `@usuário` e o ícone de sair (neutro). Visitante vê
+  "Entrar com o Discord" (primário) quando o login está configurado.
+- **Gaveta:** abaixo de `lg` (a sala com o chat aberto não cabe ao lado da barra), trilho e barra lateral
+  viram uma gaveta por cima do `scrim` (fecha no fundo, no Esc e ao navegar; o resto fica `inert`). A home
+  abre pelo botão de menu do cabeçalho; a sala, pelo "H" do cabeçalho (`useShell().openNav()`).
 - **Home:** card de criar/entrar (manchete em Bricolage, apelido, alternância Criar/Entrar, botão
-  primário largo) e, para quem volta, "Suas salas" ao lado, com selo, código, tempo e quem está lá
-  agora. Quem chega pela primeira vez vê só o card, centralizado. No celular, uma coluna.
-- **Sala:** cabeçalho (o "H", nome, código copiável, rostos de quem está na sala + contagem,
+  primário largo), centralizado; as salas salvas ficam na barra lateral. Abaixo de `lg`, "Seus grupos"
+  vem embaixo do card, com selo, código, tempo e quem está lá agora.
+- **Sala:** cabeçalho (o "H", que na moldura abre a gaveta e some a partir de `lg`, onde o trilho já o
+  mostra; nome, código copiável, rostos de quem está na sala + contagem,
   "Convidar") → palco (tela fixada grande e a fileira das outras câmeras embaixo, dividindo a largura;
   ou a grade que maximiza os tiles, 16:9 no desktop e até quadrados num palco em pé, como no celular) →
   chat ancorado à direita (352px, 416px a partir de `xl`) → dock centralizado embaixo do palco.

@@ -13,8 +13,12 @@ const TOPIC = "cast";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** Identity of the person this connection transmits for; null for people. */
-export const castOwnerOf = (participant: Participant): string | null => participant.attributes[CAST_FOR] || null;
+/**
+ * Identity of the person this connection transmits for; null for people. Only identities the server minted for
+ * transmitters count: anyone can write castFor on themselves and would vanish from the people while still heard.
+ */
+export const castOwnerOf = (participant: Participant): string | null =>
+  /#tx-[0-9a-f]{8}$/.test(participant.identity) ? participant.attributes[CAST_FOR] || null : null;
 
 export const isTransmitter = (participant: Participant) => castOwnerOf(participant) !== null;
 

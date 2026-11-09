@@ -1,6 +1,7 @@
 import { RoomEvent, RpcError, type Participant, type RemoteParticipant, type Room } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { remotePeople } from "./cast";
+import { nameOf } from "./model";
 
 /**
  * Watch party ("Assistir junto"): everyone plays the same YouTube video or local file on their own
@@ -241,7 +242,7 @@ export function useWatchParty(room: Room): WatchControls {
   const dispatch = useCallback(
     async (action: WatchAction) => {
       const { party, isHost } = latest.current;
-      if (!party || isHost) return apply(action, local.name || local.identity);
+      if (!party || isHost) return apply(action, nameOf(local));
       await local.performRpc({
         destinationIdentity: party.host.identity,
         method: RPC_ACTION,
@@ -258,7 +259,7 @@ export function useWatchParty(room: Room): WatchControls {
       const action = parseAction(payload);
       if (!action) throw new RpcError(2, "invalid watch party action");
       const caller = room.remoteParticipants.get(callerIdentity);
-      await apply(action, caller?.name || callerIdentity.split("#")[0]!);
+      await apply(action, nameOf(caller ?? { identity: callerIdentity }));
       return "";
     });
     return () => {

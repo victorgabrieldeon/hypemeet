@@ -14,7 +14,8 @@ export default defineConfig({
     // Testing the Discord Activity: Discord's proxy reaches the dev server through a cloudflared tunnel.
     allowedHosts: [".trycloudflare.com"],
     proxy: {
-      "/api": "http://localhost:3001",
+      // xfwd: the API builds Discord's login redirect from X-Forwarded-Host (this page's origin, not :3001).
+      "/api": { target: "http://localhost:3001", xfwd: true },
       // LiveKit signaling rides the page's own origin (ws:// or wss://), so it works from any device
       // without mixed-content errors or exposing port 7880. Media still flows over UDP 7882.
       "/rtc": { target: "http://localhost:7880", ws: true },

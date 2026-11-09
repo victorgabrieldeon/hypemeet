@@ -1,4 +1,4 @@
-import { ConnectionState, Track, type Room } from "livekit-client";
+import { ConnectionState, DisconnectReason, RoomEvent, Track, type Participant, type Room } from "livekit-client";
 import {
   Blocks,
   Check,
@@ -18,10 +18,12 @@ import {
   VideoOff,
   Volume2,
   WifiOff,
+  type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useShell } from "../components/AppShell";
 import { Avatar, Button, cardClass, chipClass, countClass, kbdClass, LogoMark, Spinner } from "../components/ui";
-import type { RoomInfo } from "../lib/api";
+import type { Moderation, RoomInfo } from "../lib/api";
 import { formatCode } from "../lib/code";
 import { assignPersonColors } from "../lib/color";
 import { cameraBlocked, inDiscord, screenCaptureBlocked } from "../lib/discord";
@@ -34,6 +36,7 @@ import { DeviceMenu, MenuChevron, MenuSection, MenuToggle, useDismiss } from "./
 import {
   buildTiles,
   discordAvatar,
+  nameOf,
   SCREEN_AUDIO_COPY,
   startScreenShare,
   useRoomVersion,
@@ -43,6 +46,7 @@ import {
   type TileModel,
 } from "./model";
 import { canSuppressNoise, useNoiseFilter } from "./noise";
+import { mayPublish, PeoplePanel } from "./People";
 import { PushToTalkSection, usePushToTalk } from "./pushToTalk";
 import { InkProvider } from "./ink";
 import { ReactionBar, ReactionsProvider, reactionTarget, useReactions } from "./reactions";
@@ -72,6 +76,7 @@ function ControlButton({
   onClick,
   label,
   busy,
+  disabled,
   expanded,
   children,
   tone = "toggle",
@@ -81,6 +86,7 @@ function ControlButton({
   onClick: () => void;
   label: string;
   busy?: boolean;
+  disabled?: boolean;
   /** Set when the button toggles a popover. */
   expanded?: boolean;
   children: ReactNode;
@@ -99,7 +105,7 @@ function ControlButton({
   return (
     <button
       onClick={onClick}
-      disabled={busy}
+      disabled={busy || disabled}
       aria-label={label}
       aria-expanded={expanded}
       title={label}
@@ -108,6 +114,13 @@ function ControlButton({
       {busy ? <Spinner className="size-5" /> : children}
     </button>
   );
+}
+
+/** One way to invite from "Convidar"; a returned string gets copied. */
+export interface InviteOption {
+  label: string;
+  icon: LucideIcon;
+  run: () => Promise<string | void>;
 }
 
 interface RoomViewProps {
@@ -119,10 +132,10 @@ interface RoomViewProps {
   info: RoomInfo;
   initialDevices: { mic: boolean; camera: boolean };
   onLeave: () => void;
-  /** The room's link for "Convidar". Default: this site's /r/<code>. */
-  inviteUrl?: string;
-  /** Replaces copying the link (the Discord Activity opens Discord's own invite dialog). */
-  onInvite?: () => void;
+  /** Turns "Convidar" into a menu of these. Default: copy this site's /r/<code>. */
+  invites?: InviteOption[];
+  /** What our Discord permissions let us do to others here (a Discord channel's room with the bot). */
+  moderation?: Moderation;
   /** Where screens and the camera can't be captured (the Discord Activity): opens a browser transmitter for us. */
   onCast?: (withCamera: boolean) => Promise<void>;
   /** Where YouTube's player can't load (the Discord Activity): the server's relay of a video. */
@@ -132,13 +145,17 @@ interface RoomViewProps {
   onRejoin: () => void;
 }
 
-export function RoomView({ room, token, chat, previews, info, initialDevices, onLeave, onRejoin, inviteUrl, onInvite, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
+export function RoomView({ room, token, chat, previews, info, initialDevices, onLeave, onRejoin, invites, moderation, onCast, youTubeStream, discordPip = false }: RoomViewProps) {
   useRoomVersion(room);
   useScreenAudioCleanup(room);
   useSubscriptions(room);
   useViewingAttribute(room);
   useRoomSounds(room);
+  const shell = useShell();
   const local = room.localParticipant;
+  const canSpeak = mayPublish(local.permissions, Track.Source.Microphone);
+  const canVideo = mayPublish(local.permissions, Track.Source.Camera);
+  const canScreen = mayPublish(local.permissions, Track.Source.ScreenShare);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<"mic" | "camera" | "screen" | null>(null);
   const [screenPrefs, setScreenPrefs] = useState(loadScreenPrefs);
@@ -200,6 +217,13 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
   };
   const [toast, setToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const peopleRef = useRef<HTMLDivElement>(null);
+  useDismiss(peopleRef, peopleOpen, () => setPeopleOpen(false));
+  const [invitesOpen, setInvitesOpen] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const invitesRef = useRef<HTMLDivElement>(null);
+  useDismiss(invitesRef, invitesOpen, () => setInvitesOpen(false));
   const chatState = useSyncExternalStore(chat.subscribe, chat.getSnapshot);
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -216,7 +240,7 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
     setToast({ text: `Não deu pra ativar a supressão de ruído: ${(err as Error)?.message ?? err}`, tone: "error" });
   });
   const ptt = usePttState();
-  usePushToTalk(local, ptt, (e) => setToast({ text: deviceError(e, "o microfone"), tone: "error" }));
+  usePushToTalk(local, canSpeak ? ptt : null, (e) => setToast({ text: deviceError(e, "o microfone"), tone: "error" }));
 
   useEffect(() => {
     if (!toast) return;
@@ -230,14 +254,38 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
     return () => clearTimeout(id);
   }, [copied]);
 
+  // useRoomVersion doesn't follow permissions: re-render on them here, and react to our own mic being taken or given back.
+  const [, bumpPermissions] = useReducer((n: number) => n + 1, 0);
+  const [disconnectReason, setDisconnectReason] = useState<DisconnectReason>();
+  useEffect(() => {
+    const onPermissions = (prev: Participant["permissions"], participant: Participant) => {
+      bumpPermissions();
+      // A connection's first permissions come without previous ones: nothing was taken.
+      if (participant !== room.localParticipant || !prev) return;
+      const had = mayPublish(prev, Track.Source.Microphone);
+      const has = mayPublish(participant.permissions, Track.Source.Microphone);
+      if (had && !has) {
+        const mic = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+        // Unpublished, not just muted: unmuting it later (push-to-talk too) would skip LiveKit's publish permission check.
+        if (mic) void room.localParticipant.unpublishTrack(mic).catch(() => undefined);
+        setToast({ text: "Um moderador silenciou você", tone: "info" });
+      } else if (!had && has) setToast({ text: "Você pode falar de novo", tone: "info" });
+    };
+    room.on(RoomEvent.ParticipantPermissionsChanged, onPermissions).on(RoomEvent.Disconnected, setDisconnectReason);
+    return () => {
+      room.off(RoomEvent.ParticipantPermissionsChanged, onPermissions).off(RoomEvent.Disconnected, setDisconnectReason);
+    };
+  }, [room]);
+
   // Turn on the devices chosen in the lobby once (guarded against StrictMode's double effect).
   const devicesApplied = useRef(false);
   useEffect(() => {
     if (devicesApplied.current) return;
     devicesApplied.current = true;
-    if (initialDevices.mic)
+    // Picked in the lobby before the room's permissions were known.
+    if (initialDevices.mic && mayPublish(local.permissions, Track.Source.Microphone))
       local.setMicrophoneEnabled(true).catch((e) => setToast({ text: deviceError(e, "o microfone"), tone: "error" }));
-    if (initialDevices.camera)
+    if (initialDevices.camera && mayPublish(local.permissions, Track.Source.Camera))
       local.setCameraEnabled(true).catch((e) => setToast({ text: deviceError(e, "a câmera"), tone: "error" }));
   }, [local, initialDevices]);
 
@@ -270,6 +318,7 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
   const state = room.state;
 
   async function toggleMic() {
+    if (!micOn && !canSpeak) return setToast({ text: "Sem permissão para falar", tone: "error" });
     setBusy("mic");
     try {
       await local.setMicrophoneEnabled(!micOn);
@@ -338,13 +387,25 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
     Promise.all(targets).catch(() => setToast({ text: "Não deu pra parar a transmissão", tone: "error" }));
   }
 
-  async function copy(kind: "code" | "link") {
-    const text = kind === "code" ? formatCode(info.code) : (inviteUrl ?? `${location.origin}/r/${info.code}`);
+  async function copy(text: string, done: () => void) {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(kind);
+      done();
     } catch {
       setToast({ text: `Copie manualmente: ${text}`, tone: "info" });
+    }
+  }
+
+  async function invite(run: InviteOption["run"]) {
+    setInvitesOpen(false);
+    setInviting(true);
+    try {
+      const text = await run();
+      if (text) await copy(text, () => setToast({ text: "Copiado", tone: "info" }));
+    } catch (e) {
+      setToast({ text: (e as Error).message, tone: "error" });
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -368,13 +429,26 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
       <RoomAudio room={room} />
 
       <header className={`flex items-center gap-2.5 sm:gap-3.5 ${discordPip ? "hidden" : ""}`}>
-        <LogoMark className="size-10 -rotate-3 max-sm:hidden" />
+        {shell ? (
+          // In the site's frame the "H" opens the drawer; from lg the rail already shows it.
+          <button
+            type="button"
+            onClick={shell.openNav}
+            aria-label="Abrir navegação"
+            title="Abrir navegação"
+            className="shrink-0 rounded-md transition hover:-translate-y-px active:translate-y-px lg:hidden"
+          >
+            <LogoMark className="size-10 -rotate-3" />
+          </button>
+        ) : (
+          <LogoMark className="size-10 -rotate-3 max-sm:hidden" />
+        )}
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3.5">
           <h1 className="max-w-full truncate font-display text-2xl leading-tight font-extrabold tracking-[-0.02em]">
             {info.name}
           </h1>
           <button
-            onClick={() => copy("code")}
+            onClick={() => copy(formatCode(info.code), () => setCopied("code"))}
             className={`${chipClass} pr-1 transition hover:bg-surface-hi`}
             title="Copiar código"
           >
@@ -384,38 +458,87 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
             </span>
           </button>
         </div>
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <span className="flex h-11 items-center gap-2 rounded-full border-2 border-line bg-surface px-3.5 font-display text-[17px] font-extrabold sm:pl-2">
-            <span aria-hidden className="mr-0.5 hidden -space-x-1 sm:flex">
-              {people.slice(0, 4).map((p) => (
-                <Avatar
-                  key={p.identity}
-                  name={p.name || p.identity}
-                  seed={p.identity}
-                  image={discordAvatar(p)}
-                  size="xs"
-                  className="ring-2 ring-surface"
-                />
-              ))}
-              {people.length > 4 && (
-                <span className="grid size-6 place-items-center rounded-full bg-surface-hi font-sans text-[10px] font-bold ring-2 ring-surface">
-                  +{people.length - 4}
-                </span>
+        {/* `relative` here, not per button: the popovers hang from the header's right edge and stay on screen on phones. */}
+        <div className="relative flex shrink-0 items-center gap-2 sm:gap-3">
+          <div ref={peopleRef} className="contents">
+            <button
+              onClick={() => setPeopleOpen(!peopleOpen)}
+              aria-expanded={peopleOpen}
+              title="Pessoas"
+              className="group flex h-11 items-center gap-2 rounded-full border-2 border-line bg-surface px-3.5 font-display text-[17px] font-extrabold transition hover:bg-surface-hi sm:pl-2"
+            >
+              <span aria-hidden className="mr-0.5 hidden -space-x-1 sm:flex">
+                {people.slice(0, 4).map((p) => (
+                  <Avatar
+                    key={p.identity}
+                    name={nameOf(p)}
+                    seed={p.identity}
+                    image={discordAvatar(p)}
+                    size="xs"
+                    className="ring-2 ring-surface group-hover:ring-surface-hi"
+                  />
+                ))}
+                {people.length > 4 && (
+                  <span className="grid size-6 place-items-center rounded-full bg-surface-hi font-sans text-[10px] font-bold ring-2 ring-surface group-hover:ring-surface-hi">
+                    +{people.length - 4}
+                  </span>
+                )}
+              </span>
+              <Users className="size-[18px] text-soft" /> {people.length}
+              <span className="sr-only">{people.length === 1 ? " pessoa na sala" : " pessoas na sala"}</span>
+            </button>
+            {peopleOpen && (
+              <PeoplePanel
+                room={room}
+                token={token}
+                moderation={moderation}
+                onError={(text) => setToast({ text, tone: "error" })}
+              />
+            )}
+          </div>
+          <div ref={invitesRef} className="contents">
+            <Button
+              variant="primary"
+              className="h-11! px-[11px]! sm:px-4.5!"
+              onClick={
+                invites
+                  ? () => setInvitesOpen(!invitesOpen)
+                  : () => copy(`${location.origin}/r/${info.code}`, () => setCopied("link"))
+              }
+              disabled={inviting}
+              aria-expanded={invites ? invitesOpen : undefined}
+              aria-label={copied === "link" ? "Link copiado" : "Convidar"}
+              title={copied === "link" ? "Link copiado" : "Convidar"}
+            >
+              {inviting ? (
+                <Spinner className="size-[18px]" />
+              ) : copied === "link" ? (
+                <Check className="size-[18px]" />
+              ) : (
+                <UserPlus className="size-[18px]" />
               )}
-            </span>
-            <Users className="size-[18px] text-soft" /> {people.length}
-            <span className="sr-only">{people.length === 1 ? " pessoa na sala" : " pessoas na sala"}</span>
-          </span>
-          <Button
-            variant="primary"
-            className="h-11! px-[11px]! sm:px-4.5!"
-            onClick={onInvite ?? (() => copy("link"))}
-            aria-label={copied === "link" ? "Link copiado" : "Convidar"}
-            title={copied === "link" ? "Link copiado" : "Convidar"}
-          >
-            {copied === "link" ? <Check className="size-[18px]" /> : <UserPlus className="size-[18px]" />}
-            <span className="hidden sm:inline">{copied === "link" ? "Link copiado" : "Convidar"}</span>
-          </Button>
+              <span className="hidden sm:inline">{copied === "link" ? "Link copiado" : "Convidar"}</span>
+            </Button>
+            {invitesOpen && invites && (
+              <div
+                role="menu"
+                aria-label="Convidar"
+                className="absolute top-full right-0 z-40 mt-2 w-[min(18rem,calc(100vw-1.5rem))] animate-pop rounded-lg border-2 border-line bg-panel p-2 shadow-float"
+              >
+                {invites.map(({ label, icon: Icon, run }) => (
+                  <button
+                    key={label}
+                    role="menuitem"
+                    onClick={() => void invite(run)}
+                    className="flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm font-semibold text-soft transition hover:bg-surface-hi hover:text-ink"
+                  >
+                    <Icon className="size-4 shrink-0" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -506,7 +629,7 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
         {/* In the Activity the voice is the Discord channel's. */}
         {!inDiscord && (
           <div className="relative">
-            <ControlButton on={micOn} busy={busy === "mic"} onClick={toggleMic} label={micOn ? "Desligar microfone" : ptt?.enabled && ptt.binding ? `Ligar microfone (ou segure ${ptt.binding})` : "Ligar microfone"}>
+            <ControlButton on={micOn} busy={busy === "mic"} disabled={!canSpeak} onClick={toggleMic} label={!canSpeak ? "Sem permissão para falar" : micOn ? "Desligar microfone" : ptt?.enabled && ptt.binding ? `Ligar microfone (ou segure ${ptt.binding})` : "Ligar microfone"}>
               {micOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
             </ControlButton>
             <MenuChevron label="Microfone e saída de áudio">
@@ -542,8 +665,9 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
             tone="neutral"
             on={cameraOn}
             busy={busy === "camera"}
+            disabled={!canVideo}
             onClick={toggleCamera}
-            label={cameraOn ? "Desligar câmera" : cameraBlocked ? "Ligar câmera pelo navegador" : "Ligar câmera"}
+            label={!canVideo ? "Sem permissão de vídeo" : cameraOn ? "Desligar câmera" : cameraBlocked ? "Ligar câmera pelo navegador" : "Ligar câmera"}
           >
             {cameraOn ? <Video className="size-5" /> : <VideoOff className="size-5" />}
           </ControlButton>
@@ -563,8 +687,9 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
             tone="plain"
             on={sendingCount > 0}
             expanded={screensOpen}
+            disabled={!canScreen}
             onClick={() => setScreensOpen(!screensOpen)}
-            label="Transmissões de tela"
+            label={canScreen ? "Transmissões de tela" : "Sem permissão de vídeo"}
           >
             <MonitorUp className="size-5" />
             {sendingCount > 0 && (
@@ -740,7 +865,7 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
           <PhoneOff className="size-5" />
           <span className="hidden sm:inline">Sair</span>
         </button>
-        {ptt?.enabled && ptt.binding && (
+        {canSpeak && ptt?.enabled && ptt.binding && (
           <span className="ml-1.5 hidden items-center gap-1.5 text-[13px] font-semibold whitespace-nowrap text-soft lg:inline-flex">
             Segure <kbd className={kbdClass}>{ptt.binding}</kbd> para falar
           </span>
@@ -772,7 +897,11 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
             </div>
             <div>
               <h2 className="type-heading-sm">Você saiu da sala</h2>
-              <p className="mt-1.5 text-soft">A conexão caiu ou foi encerrada.</p>
+              <p className="mt-1.5 text-soft">
+                {disconnectReason === DisconnectReason.PARTICIPANT_REMOVED
+                  ? "Um moderador desconectou você."
+                  : "A conexão caiu ou foi encerrada."}
+              </p>
             </div>
             <div className="flex w-full gap-2">
               <Button className="flex-1" onClick={onLeave}>

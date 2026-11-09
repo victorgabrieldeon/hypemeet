@@ -7,6 +7,7 @@ RUN bun run build
 
 FROM oven/bun:1.4-slim
 WORKDIR /app
+# DB_PATH: the SQLite file of before Postgres, still read once to import it (server/db.ts).
 ENV NODE_ENV=production PORT=3001 DB_PATH=/app/data/hypemeet.db
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production

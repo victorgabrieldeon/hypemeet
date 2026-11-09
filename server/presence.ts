@@ -1,4 +1,5 @@
 import { ParticipantInfo_State, type RoomServiceClient } from "livekit-server-sdk";
+import { nicknameOf } from "./identity";
 
 // Who's in a room right now, for link previews. Crawlers hit the page and its og:image back to back
 // (and Discord/WhatsApp often fetch twice), so answers are cached for a few seconds.
@@ -18,7 +19,7 @@ export function createPreviewPresence(livekit: RoomServiceClient) {
       const names = participants
         .filter((p) => p.state !== ParticipantInfo_State.DISCONNECTED)
         .sort((a, b) => Number(a.joinedAt - b.joinedAt))
-        .map((p) => p.name || p.identity.split("#")[0]!);
+        .map((p) => nicknameOf(p.identity, p.name));
       // One person with two tabs is two participants with the same name.
       return [...new Set(names)];
     } catch {

@@ -1,5 +1,7 @@
 # Production stack (Dokploy). Env: LIVEKIT_DOMAIN, LIVEKIT_NODE_IP, LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
-# and for the Discord Activity: DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, PUBLIC_URL (optional);
+# POSTGRES_PASSWORD (the database's; URL-safe characters only, it goes into DATABASE_URL),
+# and for Discord (the Activity and login on the site): DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, PUBLIC_URL (optional);
+# DISCORD_BOT_TOKEN (optional): lists the servers' voice channels, syncs their permissions and moderates in Discord.
 # PLUGINS (optional): base URLs of plugins the rooms can open, comma-separated.
 # YTDLP_COOKIES (optional): a YouTube cookies.txt for the Activity's YouTube relay, e.g. /app/data/youtube-cookies.txt.
 # Domains (HTTPS via Traefik): app → port 3001, livekit → port 7880 (signaling over wss).
@@ -12,8 +14,10 @@ services:
       LIVEKIT_URL: wss://${LIVEKIT_DOMAIN}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      DATABASE_URL: postgres://hypemeet:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/hypemeet
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       PLUGINS: ${PLUGINS:-}
       YTDLP_COOKIES: ${YTDLP_COOKIES:-}
@@ -21,8 +25,27 @@ services:
     dns:
       - 1.1.1.1
       - 8.8.8.8
+    # The SQLite file of before Postgres (imported once on startup, then left alone) and the yt-dlp cookies.
     volumes:
       - hypemeet-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hypemeet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: hypemeet
+    volumes:
+      - hypemeet-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hypemeet -d hypemeet"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   livekit:
     image: livekit/livekit-server:v1.13.7
@@ -44,3 +67,4 @@ services:
 
 volumes:
   hypemeet-data:
+  hypemeet-pg:

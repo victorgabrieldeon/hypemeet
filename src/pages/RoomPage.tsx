@@ -1,15 +1,16 @@
 import { Room } from "livekit-client";
-import { ArrowLeft, ArrowRight, Mic, MicOff, UserRound, Video, VideoOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Link2, Mic, MicOff, Ticket, UserRound, Video, VideoOff } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Field, Logo, Spinner, cardClass, chipClass, inputClass } from "../components/ui";
-import { api, type JoinGrant, type RoomInfo } from "../lib/api";
+import { Avatar, Button, Field, Logo, Spinner, cardClass, chipClass, inputClass } from "../components/ui";
+import { api, ApiError, type JoinGrant, type RoomInfo } from "../lib/api";
+import { reloadSession, signIn, useSession } from "../lib/auth";
 import { formatCode, normalizeCode } from "../lib/code";
 import { loadNickname, rememberRoom, saveNickname } from "../lib/storage";
 import { deviceRoomOptions } from "../room/devices";
 import { RoomChat } from "../room/chat";
 import { ScreenPreviews } from "../room/previews";
-import { RoomView } from "../room/RoomView";
+import { RoomView, type InviteOption } from "../room/RoomView";
 import { VolumeProvider } from "../room/volume";
 import { playCue } from "../room/sounds";
 
@@ -81,21 +82,33 @@ export function RoomPage() {
       <Lobby
         info={phase.info}
         onJoined={(grant, devices) => {
-          rememberRoom(grant.room);
+          // A server channel lives in its server's sidebar, not in "Seus grupos".
+          if (!grant.room.discord) rememberRoom(grant.room);
           setPhase({ step: "live", info: grant.room, grant, devices });
         }}
       />
     );
   }
 
+  const { grant } = phase;
   return (
     <LiveRoom
-      key={phase.grant.token}
+      key={grant.token}
       info={phase.info}
-      grant={phase.grant}
+      grant={grant}
       devices={phase.devices}
       onLeave={() => navigate("/")}
       onRejoin={() => setPhase({ step: "lobby", info: phase.info })}
+      invites={
+        grant.room.discord
+          ? [
+              { label: "Copiar link do site", icon: Link2, run: async () => `${location.origin}/r/${grant.room.code}` },
+              ...(grant.moderation?.invite
+                ? [{ label: "Copiar convite do Discord", icon: Ticket, run: () => api.discordInvite(grant.token).then((r) => r.url) }]
+                : []),
+            ]
+          : undefined
+      }
     />
   );
 }
@@ -107,6 +120,9 @@ function Lobby({
   info: RoomInfo;
   onJoined: (grant: JoinGrant, devices: { mic: boolean; camera: boolean }) => void;
 }) {
+  const session = useSession();
+  // A server channel's room: you join as your Discord account, so no nickname.
+  const user = info.discord ? session?.user : null;
   const [nickname, setNickname] = useState(loadNickname);
   const [mic, setMic] = useState(false);
   const [camera, setCamera] = useState(false);
@@ -115,14 +131,16 @@ function Lobby({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const name = nickname.trim();
+    const name = user ? user.name : nickname.trim();
     if (!name) return setError("Escolha um apelido");
-    saveNickname(name);
+    if (!user) saveNickname(name);
     setJoining(true);
     setError(null);
     try {
       onJoined(await api.joinRoom(info.code, name), { mic, camera });
     } catch (err) {
+      // The session ended (signed out elsewhere): asking again brings back the "Entrar com o Discord" button.
+      if (err instanceof ApiError && err.status === 401) reloadSession();
       setError((err as Error).message);
       setJoining(false);
     }
@@ -148,43 +166,72 @@ function Lobby({
       <h1 className="-mt-2 font-display text-[clamp(1.75rem,1.3rem+2vw,2.25rem)] leading-tight font-extrabold tracking-[-0.02em] break-words">
         {info.name}
       </h1>
-      <form onSubmit={onSubmit} className="flex flex-col gap-3">
-        <Field label="Seu apelido" htmlFor="lobby-nickname" icon={UserRound}>
-          <input
-            id="lobby-nickname"
-            autoFocus={!nickname}
-            className={inputClass}
-            value={nickname}
-            maxLength={32}
-            placeholder="Como a galera vai te ver"
-            onChange={(e) => setNickname(e.target.value)}
-          />
-        </Field>
-        <div className="flex gap-2">
-          <button type="button" className={toggleClass(mic)} onClick={() => setMic(!mic)} aria-pressed={mic}>
-            {mic ? <Mic className="size-4" /> : <MicOff className="size-4" />} Microfone
-          </button>
-          <button type="button" className={toggleClass(camera)} onClick={() => setCamera(!camera)} aria-pressed={camera}>
-            {camera ? <Video className="size-4" /> : <VideoOff className="size-4" />} Câmera
-          </button>
+      {info.discord && !session ? (
+        <div className="grid place-items-center py-4 text-soft">
+          <Spinner className="size-6" />
         </div>
-        {error && (
-          <p role="alert" className="px-1 text-sm font-medium text-danger">
-            {error}
+      ) : info.discord && !user ? (
+        <div className="flex flex-col gap-5">
+          <p className="text-soft">
+            {session?.login
+              ? "Este canal é de um servidor do Discord. Entre com o Discord pra participar."
+              : "Este canal é de um servidor do Discord, mas este HypeMeet não tem o login com o Discord configurado."}
           </p>
-        )}
-        <Button
-          type="submit"
-          variant="primary"
-          className="mt-2 h-15! pr-2 pl-6 font-display text-lg font-extrabold"
-          disabled={joining}
-        >
-          Entrar na sala
-          <span className="ml-auto grid size-10.5 place-items-center rounded-full bg-on-accent text-accent-hi">
-            {joining ? <Spinner className="size-5" /> : <ArrowRight className="size-5.5" strokeWidth={2.6} />}
-          </span>
-        </Button>
-      </form>
+          {session?.login && (
+            <Button variant="primary" onClick={() => signIn()}>
+              Entrar com o Discord
+            </Button>
+          )}
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} className="flex flex-col gap-3">
+          {user ? (
+            <div className="flex flex-col gap-2">
+              <p className="px-0.5 text-sm font-bold text-ink">Você entra como</p>
+              <div className="flex h-13 items-center gap-3 rounded-md border-2 border-line bg-surface px-3">
+                <Avatar name={user.name} seed={user.id} image={user.avatarUrl ?? undefined} size="xs" />
+                <span className="truncate font-semibold text-ink">{user.name}</span>
+              </div>
+            </div>
+          ) : (
+            <Field label="Seu apelido" htmlFor="lobby-nickname" icon={UserRound}>
+              <input
+                id="lobby-nickname"
+                autoFocus={!nickname}
+                className={inputClass}
+                value={nickname}
+                maxLength={32}
+                placeholder="Como a galera vai te ver"
+                onChange={(e) => setNickname(e.target.value)}
+              />
+            </Field>
+          )}
+          <div className="flex gap-2">
+            <button type="button" className={toggleClass(mic)} onClick={() => setMic(!mic)} aria-pressed={mic}>
+              {mic ? <Mic className="size-4" /> : <MicOff className="size-4" />} Microfone
+            </button>
+            <button type="button" className={toggleClass(camera)} onClick={() => setCamera(!camera)} aria-pressed={camera}>
+              {camera ? <Video className="size-4" /> : <VideoOff className="size-4" />} Câmera
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className="px-1 text-sm font-medium text-danger">
+              {error}
+            </p>
+          )}
+          <Button
+            type="submit"
+            variant="primary"
+            className="mt-2 h-15! pr-2 pl-6 font-display text-lg font-extrabold"
+            disabled={joining}
+          >
+            Entrar na sala
+            <span className="ml-auto grid size-10.5 place-items-center rounded-full bg-on-accent text-accent-hi">
+              {joining ? <Spinner className="size-5" /> : <ArrowRight className="size-5.5" strokeWidth={2.6} />}
+            </span>
+          </Button>
+        </form>
+      )}
     </CenteredCard>
   );
 }
@@ -196,8 +243,7 @@ export function LiveRoom({
   onLeave,
   onRejoin,
   connectErrorExtra,
-  inviteUrl,
-  onInvite,
+  invites,
   onCast,
   youTubeStream,
   discordPip,
@@ -209,8 +255,7 @@ export function LiveRoom({
   onRejoin: () => void;
   /** Shown under the error when the room can't connect. */
   connectErrorExtra?: ReactNode;
-  inviteUrl?: string;
-  onInvite?: () => void;
+  invites?: InviteOption[];
   onCast?: (withCamera: boolean) => Promise<void>;
   youTubeStream?: (videoId: string) => string;
   /** Discord has the Activity in its picture-in-picture (see RoomView). */
@@ -278,7 +323,7 @@ export function LiveRoom({
 
   return (
     <VolumeProvider>
-      <RoomView room={session.room} token={grant.token} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} inviteUrl={inviteUrl} onInvite={onInvite} onCast={onCast} youTubeStream={youTubeStream} discordPip={discordPip} />
+      <RoomView room={session.room} token={grant.token} chat={session.chat} previews={session.previews} info={info} initialDevices={devices} onLeave={onLeave} onRejoin={onRejoin} invites={invites} moderation={grant.moderation} onCast={onCast} youTubeStream={youTubeStream} discordPip={discordPip} />
     </VolumeProvider>
   );
 }

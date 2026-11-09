@@ -36,7 +36,7 @@ import { castOwnerOf } from "./cast";
 import { useInk, type InkTool } from "./ink";
 import { InkLayer } from "./InkLayer";
 import { VideoView } from "./media";
-import { discordAvatar, volumeKey, watchScreen, type TileModel } from "./model";
+import { discordAvatar, nameOf, volumeKey, watchScreen, type TileModel } from "./model";
 import { closePip, floatableTrack, openPip, pipSupported, usePipTile } from "./pip";
 import { useScreenPreview } from "./previews";
 import { ConnectionBars, formatBitrate, useVideoStats } from "./quality";
@@ -97,7 +97,7 @@ const listFormat = new Intl.ListFormat("pt-BR");
 
 /** Who's watching a screen: an eye, the first faces stacked (not when compact) and the count; names on hover. */
 function Viewers({ viewers, compact }: { viewers: Participant[]; compact?: boolean }) {
-  const names = viewers.map((p) => (p.isLocal ? "você" : p.name || p.identity));
+  const names = viewers.map((p) => (p.isLocal ? "você" : nameOf(p)));
   const shown = compact ? [] : viewers.slice(0, VIEWER_AVATARS);
   const label = `Assistindo: ${listFormat.format(names)}`;
   return (
@@ -108,7 +108,7 @@ function Viewers({ viewers, compact }: { viewers: Participant[]; compact?: boole
           {shown.map((p) => (
             <Avatar
               key={p.identity}
-              name={p.name || p.identity}
+              name={nameOf(p)}
               seed={p.identity}
               image={discordAvatar(p)}
               size="xs"
@@ -256,7 +256,7 @@ export function Tile({ tile, pinned, compact, onTogglePin }: TileProps) {
   const [hovered, setHovered] = useState(false);
   const { participant } = tile;
   const isLocal = participant.isLocal;
-  const name = participant.name || participant.identity;
+  const name = nameOf(participant);
   // Screen tiles only: the picture's aspect (to line ink up with it) and the tool in hand, if drawing.
   const [aspect, setAspect] = useState<number | null>(null);
   const [inkTool, setInkTool] = useState<InkTool | null>(null);

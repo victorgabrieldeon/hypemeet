@@ -36,9 +36,11 @@ test("pass: tampered, another secret, another identity or plugin", async () => {
 
 test("pass for a room token: only a valid one, of a room that exists, not a transmitter", async () => {
   const tokens: Record<string, RoomClaims> = {
-    ok: { sub: "Ana#1234", name: "Ana", video: { room: "abc-defg-hij" } },
-    gone: { sub: "Ana#1234", name: "Ana", video: { room: "old-room-xyz" } },
-    cast: { sub: "Ana#tx-1", name: "Ana", video: { room: "abc-defg-hij" }, attributes: { castFor: "Ana#1234" } },
+    ok: { sub: "Ana#1234abcd", name: "Ana", video: { room: "abc-defg-hij" } },
+    // Renamed itself after joining: the refreshed token carries the new name.
+    renamed: { sub: "Ana#1234abcd.400000", name: "Victor", video: { room: "abc-defg-hij" } },
+    gone: { sub: "Ana#1234abcd", name: "Ana", video: { room: "old-room-xyz" } },
+    cast: { sub: "Ana#tx-1234abcd", name: "Ana", video: { room: "abc-defg-hij" } },
   };
   const deps = {
     verify: async (t: string) => {
@@ -46,12 +48,13 @@ test("pass for a room token: only a valid one, of a room that exists, not a tran
       if (!claims) throw new Error("invalid token");
       return claims;
     },
-    roomExists: (code: string) => code === "abc-defg-hij",
+    roomExists: async (code: string) => code === "abc-defg-hij",
     passes,
   };
   clock = 1_000_000;
   const pass = await passForToken("ok", "bt3", deps);
   expect(await passes.verify(pass!)).toMatchObject({ plugin: "bt3", name: "Ana" });
+  expect(await passes.verify((await passForToken("renamed", "bt3", deps))!)).toMatchObject({ id: "Ana#1234abcd.400000", name: "Ana" });
   expect(await passForToken("forged", "bt3", deps)).toBeNull();
   expect(await passForToken("gone", "bt3", deps)).toBeNull();
   expect(await passForToken("cast", "bt3", deps)).toBeNull();
