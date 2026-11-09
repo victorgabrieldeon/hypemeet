@@ -1,5 +1,15 @@
-import { HeadphoneOff, Lock, LogOut, MicOff, Plus, Trash2, Volume2 } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, HeadphoneOff, Lock, LogOut, MicOff, Plus, Star, StarOff, Trash2, Volume2 } from "lucide-react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { api, ApiError, type Guild, type PresentPerson, type VoiceMember } from "../lib/api";
 import { reloadSession, signIn, signOut, useSession } from "../lib/auth";
@@ -275,17 +285,21 @@ function RailItem({
   label,
   selected,
   dim = false,
+  dropTarget = false,
   onClick,
   children,
+  ...rest
 }: {
   label: string;
   selected: boolean;
   dim?: boolean;
+  /** A dragged server would land here. */
+  dropTarget?: boolean;
   onClick: () => void;
   children: ReactNode;
-}) {
+} & Omit<HTMLAttributes<HTMLDivElement>, "onClick" | "children">) {
   return (
-    <div className="group relative flex w-full shrink-0 justify-center">
+    <div {...rest} className={`group relative flex w-full shrink-0 justify-center ${dropTarget ? "before:absolute before:-top-1.5 before:h-0.5 before:w-10 before:rounded-full before:bg-accent-hi" : ""}`}>
       <span
         aria-hidden
         className={`absolute top-1/2 left-0 w-1 -translate-y-1/2 rounded-r-full bg-accent transition-all ${selected ? "h-10" : "h-0 group-hover:h-5"}`}
@@ -304,6 +318,47 @@ function RailItem({
   );
 }
 
+/** `id` moved before `beforeId` (null: to the end) with that favourite flag; favourites stay on top. */
+function moveBefore(list: Guild[], id: string, beforeId: string | null, favorite: boolean): Guild[] {
+  const moved = list.find((g) => g.id === id);
+  if (!moved || id === beforeId) return list;
+  const rest = list.filter((g) => g.id !== id);
+  const at = beforeId ? rest.findIndex((g) => g.id === beforeId) : -1;
+  rest.splice(at < 0 ? rest.length : at, 0, { ...moved, favorite });
+  return rest.toSorted((a, b) => Number(b.favorite) - Number(a.favorite));
+}
+
+/** A small menu pinned beside the rail (fixed: the rail scrolls and would clip it). Escape or a click outside closes it. */
+function RailMenu({ at, label, onClose, children }: { at: { x: number; y: number }; label: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("button, a")?.focus();
+    const onPointer = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label={label}
+      style={{ left: at.x, top: Math.min(at.y, innerHeight - 220) }}
+      className="fixed z-[60] flex w-60 animate-pop flex-col gap-0.5 rounded-lg border-2 border-line bg-panel p-2 shadow-float"
+    >
+      <p className="type-label truncate px-3 pt-1.5 pb-2 text-soft">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+const menuItemClass =
+  "flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm font-semibold text-soft transition hover:bg-surface-hi hover:text-ink disabled:pointer-events-none disabled:opacity-40";
+
 /** Discord-like frame around the home and room pages: servers rail, sidebar, user panel. */
 export function AppShell() {
   const location = useLocation();
@@ -314,6 +369,9 @@ export function AppShell() {
   // A guild id, or null for home (Grupos).
   const [selected, setSelected] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [menu, setMenu] = useState<{ id: string | null; x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState<{ id: string; over: string | null } | null>(null);
+  const [reload, setReload] = useState(0);
   const wide = useWideNav();
   const navRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -344,7 +402,30 @@ export function AppShell() {
       cancelled = true;
       window.removeEventListener("focus", load);
     };
-  }, [userId]);
+  }, [userId, reload]);
+
+  // The rail shows servers HypeMeet knows (bot or rooms); the rest only in "+", to add the bot.
+  const shown = guilds.filter((g) => g.bot || g.rooms);
+  const addable = guilds.filter((g) => !g.bot && !g.rooms && g.addUrl);
+  const arrange = (next: Guild[]) => {
+    setGuilds(next);
+    const kept = next.filter((g) => g.bot || g.rooms);
+    // Didn't save → the server's order comes back.
+    api
+      .saveGuildPrefs({ order: kept.map((g) => g.id), favorites: kept.filter((g) => g.favorite).map((g) => g.id) })
+      .catch(() => setReload((n) => n + 1));
+  };
+  const step = (g: Guild, by: -1 | 1) => {
+    const group = shown.filter((x) => x.favorite === g.favorite);
+    const i = group.findIndex((x) => x.id === g.id);
+    const target = group[i + by];
+    if (!target) return;
+    if (by < 0) return arrange(moveBefore(guilds, g.id, target.id, g.favorite));
+    const after = shown[shown.indexOf(target) + 1];
+    arrange(moveBefore(guilds, g.id, after && after.favorite === g.favorite ? after.id : null, g.favorite));
+  };
+  const menuGuild = menu?.id ? shown.find((g) => g.id === menu.id) : undefined;
+  const menuGroup = menuGuild ? shown.filter((x) => x.favorite === menuGuild.favorite) : [];
 
   // Entering a server channel's room shows that server; only on a new code, so browsing the rail sticks.
   useEffect(() => {
@@ -396,12 +477,64 @@ export function AppShell() {
             <RailItem label="Grupos" selected={!guild} onClick={() => setSelected(null)}>
               <LogoMark className="size-12" />
             </RailItem>
-            {guilds.length > 0 && <hr className="my-0.5 h-0.5 w-8 shrink-0 rounded-full border-0 bg-line" />}
-            {guilds.map((g) => (
-              <RailItem key={g.id} label={g.name} selected={g.id === guild?.id} dim={!g.bot} onClick={() => setSelected(g.id)}>
-                <Avatar name={g.name} seed={g.id} image={g.iconUrl ?? undefined} shape="square" />
-              </RailItem>
+            {shown.map((g, i) => (
+              <div key={g.id} className="contents">
+                {/* One line under Grupos, and another between the favourites and the rest. */}
+                {(i === 0 || g.favorite !== shown[i - 1]!.favorite) && (
+                  <hr className="my-0.5 h-0.5 w-8 shrink-0 rounded-full border-0 bg-line" />
+                )}
+                <RailItem
+                  label={g.favorite ? `${g.name} (favorito)` : g.name}
+                  selected={g.id === guild?.id}
+                  dim={!g.bot}
+                  dropTarget={!!dragging && dragging.over === g.id && dragging.id !== g.id}
+                  onClick={() => setSelected(g.id)}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragging({ id: g.id, over: null });
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragging) return;
+                    e.preventDefault();
+                    if (dragging.over !== g.id) setDragging({ ...dragging, over: g.id });
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    // Dropped among the favourites makes it one, and the other way round.
+                    if (dragging) arrange(moveBefore(guilds, dragging.id, g.id, g.favorite));
+                    setDragging(null);
+                  }}
+                  onDragEnd={() => setDragging(null)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const box = e.currentTarget.getBoundingClientRect();
+                    setMenu({ id: g.id, x: box.right + 6, y: box.top });
+                  }}
+                >
+                  <Avatar name={g.name} seed={g.id} image={g.iconUrl ?? undefined} shape="square" />
+                </RailItem>
+              </div>
             ))}
+            {addable.length > 0 && (
+              <button
+                type="button"
+                aria-label="Adicionar o HypeMeet a um servidor"
+                title="Adicionar o HypeMeet a um servidor"
+                aria-haspopup="menu"
+                aria-expanded={menu?.id === null}
+                onClick={(e) => {
+                  const box = e.currentTarget.getBoundingClientRect();
+                  setMenu(menu?.id === null ? null : { id: null, x: box.right + 6, y: box.top });
+                }}
+                className="mt-1 grid size-12 shrink-0 place-items-center rounded-md border-2 border-dashed border-line text-soft transition hover:-translate-y-px hover:border-accent-hi hover:text-accent-hi"
+              >
+                <Plus className="size-5" />
+              </button>
+            )}
+            {shown.length > 1 && (
+              <p className="sr-only">Arraste os servidores pra reordenar, ou abra o menu deles (botão direito ou tecla de menu).</p>
+            )}
           </div>
           <div className="flex w-64 min-w-0 flex-col border-r-2 border-line bg-panel">
             <div className="flex h-14 shrink-0 items-center border-b-2 border-line px-4">
@@ -419,6 +552,40 @@ export function AppShell() {
             <UserPanel />
           </div>
         </nav>
+        {menu && menu.id === null && (
+          <RailMenu at={menu} label="Adicionar o HypeMeet" onClose={() => setMenu(null)}>
+            {addable.map((g) => (
+              <a key={g.id} role="menuitem" href={g.addUrl!} target="_blank" rel="noreferrer" className={menuItemClass} onClick={() => setMenu(null)}>
+                <Avatar name={g.name} seed={g.id} image={g.iconUrl ?? undefined} shape="square" size="xs" />
+                <span className="truncate">{g.name}</span>
+              </a>
+            ))}
+          </RailMenu>
+        )}
+        {menuGuild && menu && (
+          <RailMenu at={menu} label={menuGuild.name} onClose={() => setMenu(null)}>
+            <button
+              type="button"
+              role="menuitem"
+              className={menuItemClass}
+              onClick={() => {
+                setMenu(null);
+                // A new favourite goes to the end of the favourites; an old one to the top of the rest.
+                const firstOther = shown.find((x) => !x.favorite && x.id !== menuGuild.id);
+                arrange(moveBefore(guilds, menuGuild.id, firstOther?.id ?? null, !menuGuild.favorite));
+              }}
+            >
+              {menuGuild.favorite ? <StarOff className="size-4" /> : <Star className="size-4" />}
+              {menuGuild.favorite ? "Tirar dos favoritos" : "Favoritar"}
+            </button>
+            <button type="button" role="menuitem" className={menuItemClass} disabled={menuGroup[0]?.id === menuGuild.id} onClick={() => step(menuGuild, -1)}>
+              <ArrowUp className="size-4" /> Mover pra cima
+            </button>
+            <button type="button" role="menuitem" className={menuItemClass} disabled={menuGroup.at(-1)?.id === menuGuild.id} onClick={() => step(menuGuild, 1)}>
+              <ArrowDown className="size-4" /> Mover pra baixo
+            </button>
+          </RailMenu>
+        )}
         {/* A div, not <main>: pages bring their own landmark. */}
         <div inert={navOpen} className="min-w-0 flex-1 overflow-y-auto">
           <Outlet />

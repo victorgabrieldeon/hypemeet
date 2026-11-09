@@ -121,7 +121,9 @@ woff2).
 - **Moldura (`AppShell`):** em volta da home e da sala, no jeito do Discord. Trilho de 72px (`canvas`)
   com o "H" (Grupos), um fio e os servidores do Discord de quem entrou (ícone num quadrado `rounded-md`
   ou `Avatar` quadrado; servidor sem o bot fica apagado); o selecionado ganha a pílula uva na borda
-  esquerda. Barra lateral de 256px (`panel`, fio de 2px à direita): cabeçalho de 56px com o nome, a
+  esquerda. Só entram servidores com o bot ou com salas; os favoritos vêm em cima, separados por outro
+  fio. Arrastar reordena (um fio uva marca onde cai); o botão direito ou a tecla de menu abre Favoritar /
+  Mover pra cima / Mover pra baixo. Um "+" tracejado no fim lista os servidores onde dá pra adicionar o bot. Barra lateral de 256px (`panel`, fio de 2px à direita): cabeçalho de 56px com o nome, a
   lista e o painel da conta embaixo.
 - **Barra lateral:** em Grupos, "Criar ou entrar" e "Seus grupos" (as salas salvas); num servidor, os
   canais de voz na ordem do Discord, com as categorias em `type-label`. Linha atual = `surface-hi` +

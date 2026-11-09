@@ -436,8 +436,12 @@ criadas aqui por código):
   registro de auditoria).
 - **Convidar**: no site, copia o link da sala ou, com **Criar convite**, um convite `discord.gg` que abre a
   atividade do HypeMeet no canal. Na atividade, o convite do próprio Discord ou o link do site.
-- **Servidor sem o bot**: aparece apagado, com "O HypeMeet ainda não está em …" e **Adicionar ao servidor**
-  pra quem é dono ou tem **Administrador** ou **Gerenciar servidor**.
+- **Quais servidores aparecem**: só os que têm o bot ou já têm salas no HypeMeet. Os outros onde você pode
+  adicionar o bot (dono, **Administrador** ou **Gerenciar servidor**) ficam no **+** do fim do trilho.
+- **Ordem e favoritos**: arraste os servidores no trilho, ou use o botão direito (ou a tecla de menu) pra
+  **Favoritar** e **Mover pra cima/baixo**. Os favoritos ficam em cima. Fica salvo na sua conta (banco),
+  então vale em qualquer aparelho.
+- **Servidor com salas mas sem o bot** (o bot saiu): aparece apagado, com "O HypeMeet ainda não está em …".
 
 ### Configurar
 

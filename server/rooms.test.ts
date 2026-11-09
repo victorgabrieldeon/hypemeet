@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { importSqlite, readSqlite } from "./db";
-import { ChannelMismatch, openRoomStore } from "./rooms";
+import { ChannelMismatch, openRoomStore, orderGuilds, parseGuildPrefs } from "./rooms";
 import { testDatabase } from "./testdb";
 
 const PG = !!process.env.DATABASE_URL;
@@ -128,4 +128,34 @@ test.skipIf(!PG)("postgres: simultaneous first joins of a channel land in one ro
   expect(d.discord).toEqual({ guildId: "900000", channelId: "777777" });
   expect((await rooms.get(open.code))?.discord).toBeNull();
   expect((await db.sql`SELECT count(*)::int AS n FROM rooms`)[0].n).toBe(count + 1);
+});
+
+test("servers: favourites first, then the saved order, then the bot's, then Discord's", () => {
+  const g = (id: string, bot = false) => ({ id, bot });
+  const list = [g("10001"), g("10002", true), g("10003"), g("10004", true), g("10005")];
+  const out = orderGuilds(list, { order: ["10005", "10001"], favorites: ["10003"] });
+  expect(out.map((x) => x.id)).toEqual(["10003", "10005", "10001", "10002", "10004"]);
+  expect(out.map((x) => x.favorite)).toEqual([true, false, false, false, false]);
+});
+
+test("server prefs: only lists of ids get through", () => {
+  expect(parseGuildPrefs({ order: ["10001", "10001"], favorites: [] })).toEqual({ order: ["10001"], favorites: [] });
+  for (const bad of [null, {}, { order: ["x"], favorites: [] }, { order: [], favorites: "10001" }, { order: Array(201).fill("10001"), favorites: [] }])
+    expect(parseGuildPrefs(bad)).toBeNull();
+});
+
+test.skipIf(!PG)("server prefs and servers with rooms (postgres)", async () => {
+  const db = await testDatabase();
+  try {
+    const store = openRoomStore(db.sql);
+    expect(await store.guildPrefs("400000")).toEqual({ order: [], favorites: [] });
+    await store.setGuildPrefs("400000", { order: ["10001"], favorites: ["10002"] });
+    await store.setGuildPrefs("400000", { order: ["10002", "10001"], favorites: [] });
+    expect(await store.guildPrefs("400000")).toEqual({ order: ["10002", "10001"], favorites: [] });
+    await store.forDiscordChannel("555551", "Geral", "777771", true);
+    await store.forDiscordChannel("555552", "Livre", null, false);
+    expect([...(await store.guildsWithRooms())]).toEqual(["777771"]);
+  } finally {
+    await db.drop();
+  }
 });

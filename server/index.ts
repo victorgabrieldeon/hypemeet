@@ -11,7 +11,7 @@ import { createPasses, passForToken } from "./pass";
 import { canManageGuild, has, moderationOf, P, publishSources } from "./permissions";
 import { createPlugins } from "./plugins";
 import { createLinkPreviews, publicOrigin } from "./preview";
-import { ChannelMismatch, NAME_MAX, openRoomStore, type Room } from "./rooms";
+import { ChannelMismatch, NAME_MAX, openRoomStore, orderGuilds, parseGuildPrefs, type Room } from "./rooms";
 import { createYouTubeRelay } from "./youtube";
 
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -281,20 +281,46 @@ Bun.serve({
     "/api/auth/discord": { GET: (req) => auth.login(req) },
     "/api/auth/discord/callback": { GET: (req) => auth.callback(req) },
     "/api/auth/logout": { POST: (req) => auth.logout(req) },
-    // The signed-in person's Discord servers: the bot's first, then Discord's order.
+    // The signed-in person's Discord servers, in the order they arranged (orderGuilds).
     "/api/discord/guilds": {
       async GET(req) {
         const session = await auth.signedIn(req);
         if (!session) return error("Entre com o Discord", 401);
         try {
-          const [list, botIds] = await Promise.all([discord.userGuilds(session.user.id, session.accessToken), discord.botGuildIds()]);
+          const [list, botIds, withRooms, prefs] = await Promise.all([
+            discord.userGuilds(session.user.id, session.accessToken),
+            discord.botGuildIds(),
+            rooms.guildsWithRooms(),
+            rooms.guildPrefs(session.user.id),
+          ]);
           const guilds = list.map((g) => {
             const bot = botIds.has(g.id);
-            return { id: g.id, name: g.name, iconUrl: guildIconUrl(g), bot, addUrl: discord.bot && !bot && canManageGuild(g) ? discord.botInviteUrl(g.id) : null };
+            return {
+              id: g.id,
+              name: g.name,
+              iconUrl: guildIconUrl(g),
+              bot,
+              rooms: withRooms.has(g.id),
+              addUrl: discord.bot && !bot && canManageGuild(g) ? discord.botInviteUrl(g.id) : null,
+            };
           });
-          return json(guilds.sort((a, b) => Number(b.bot) - Number(a.bot)));
+          return json(orderGuilds(guilds, prefs));
         } catch (err) {
           return sessionFailure(req, err, "discord guilds");
+        }
+      },
+    },
+    "/api/discord/guilds/prefs": {
+      async PUT(req) {
+        const session = await auth.signedIn(req);
+        if (!session) return error("Entre com o Discord", 401);
+        const prefs = parseGuildPrefs(await readJson(req));
+        if (!prefs) return error("Pedido inválido", 400);
+        try {
+          await rooms.setGuildPrefs(session.user.id, prefs);
+          return json({ ok: true });
+        } catch (err) {
+          return failure(err, "guild prefs");
         }
       },
     },

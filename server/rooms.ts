@@ -32,6 +32,38 @@ function randomCode(): string {
   return code;
 }
 
+export interface GuildPrefs {
+  order: string[];
+  favorites: string[];
+}
+
+const SNOWFLAKE = /^\d{5,25}$/;
+/** A posted GuildPrefs, or null when it isn't one. Capped: nobody is in more than 200 servers. */
+export function parseGuildPrefs(body: unknown): GuildPrefs | null {
+  const ids = (v: unknown) =>
+    Array.isArray(v) && v.length <= 200 && v.every((id) => typeof id === "string" && SNOWFLAKE.test(id)) ? [...new Set(v as string[])] : null;
+  const b = body as Partial<Record<keyof GuildPrefs, unknown>> | null;
+  const order = ids(b?.order);
+  const favorites = ids(b?.favorites);
+  return order && favorites ? { order, favorites } : null;
+}
+
+/** Favourites first, then the saved order, then the rest (the bot's first), each group keeping what came before. */
+export function orderGuilds<T extends { id: string; bot: boolean }>(list: T[], prefs: GuildPrefs): (T & { favorite: boolean })[] {
+  const favorites = new Set(prefs.favorites);
+  const position = new Map(prefs.order.map((id, i) => [id, i]));
+  const rank = (g: T) => position.get(g.id) ?? Infinity;
+  return list
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) =>
+      Number(favorites.has(b.g.id)) - Number(favorites.has(a.g.id)) ||
+      rank(a.g) - rank(b.g) ||
+      Number(b.g.bot) - Number(a.g.bot) ||
+      a.i - b.i,
+    )
+    .map(({ g }) => ({ ...g, favorite: favorites.has(g.id) }));
+}
+
 /** Rooms in Postgres (schema: server/db.ts). */
 export function openRoomStore(sql: SQL) {
   async function create(db: SQL, name: string): Promise<Room> {
@@ -98,6 +130,21 @@ export function openRoomStore(sql: SQL) {
     async setMuted(code: string, discordId: string, muted: boolean) {
       if (muted) await sql`INSERT INTO room_mutes (code, discord_id) VALUES (${code}, ${discordId}) ON CONFLICT DO NOTHING`;
       else await sql`DELETE FROM room_mutes WHERE code = ${code} AND discord_id = ${discordId}`;
+    },
+    /** Servers with at least one channel room (only bot-verified guild ids are ever stored). */
+    async guildsWithRooms(): Promise<Set<string>> {
+      const rows = await sql<{ guildId: string }[]>`SELECT DISTINCT guild_id AS "guildId" FROM discord_channels WHERE guild_id IS NOT NULL`;
+      return new Set(rows.map((r) => r.guildId));
+    },
+    async guildPrefs(userId: string): Promise<GuildPrefs> {
+      const [row] = await sql<{ order: string; favorites: string }[]>`SELECT guild_order AS "order", favorites FROM guild_prefs WHERE user_id = ${userId}`;
+      return row ? { order: JSON.parse(row.order), favorites: JSON.parse(row.favorites) } : { order: [], favorites: [] };
+    },
+    async setGuildPrefs(userId: string, prefs: GuildPrefs) {
+      const order = JSON.stringify(prefs.order);
+      const favorites = JSON.stringify(prefs.favorites);
+      await sql`INSERT INTO guild_prefs (user_id, guild_order, favorites) VALUES (${userId}, ${order}, ${favorites})
+        ON CONFLICT (user_id) DO UPDATE SET guild_order = ${order}, favorites = ${favorites}`;
     },
     async isMuted(code: string, discordId: string): Promise<boolean> {
       return (await sql`SELECT 1 FROM room_mutes WHERE code = ${code} AND discord_id = ${discordId}`).length > 0;
