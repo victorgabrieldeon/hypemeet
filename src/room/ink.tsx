@@ -1,6 +1,7 @@
 import { RoomEvent, type RemoteParticipant, type Room } from "livekit-client";
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { personColor } from "../lib/color";
+import { nameOf } from "./model";
 
 /**
  * Ink: freehand strokes, arrows and click pings drawn over a screen tile, seen by everyone watching
@@ -180,7 +181,7 @@ export class InkStore {
       return;
     }
     const color = personColor(participant.identity);
-    const name = participant.name || participant.identity;
+    const name = nameOf(participant);
     const now = performance.now();
     if (msg.t === "ping") {
       this.ink(msg.s).pings.push({ x: msg.x / SCALE, y: msg.y / SCALE, color, name, at: now });

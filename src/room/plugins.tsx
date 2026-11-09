@@ -16,7 +16,7 @@ import { api, type PluginInfo, type RoomInfo } from "../lib/api";
 import { inDiscord } from "../lib/discord";
 import { isTransmitter, remotePeople } from "./cast";
 import { FILL_CLASS, useFullscreen } from "./fullscreen";
-import { discordAvatar } from "./model";
+import { discordAvatar, nameOf } from "./model";
 
 /**
  * Plugins (sdk/hypemeet-plugin.ts): pages on their own origin, embedded in an iframe and bridged to
@@ -127,7 +127,7 @@ export function usePlugins(room: Room): Plugins {
     info,
     people: everyone.map((p) => ({
       identity: p.identity,
-      name: p.name || p.identity,
+      name: nameOf(p),
       avatar: discordAvatar(p),
       since: (p === local ? mine : openedBy(p))[info.id] ?? null,
     })),

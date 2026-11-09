@@ -9,6 +9,8 @@
     "dev:web": "vite",
     "dev:lan": "LAN=1 concurrently -k -n api,web -c magenta,cyan \"bun --watch server/index.ts\" \"vite\"",
     "livekit": "docker compose up -d livekit",
+    "db": "docker compose up -d postgres",
+    "infra": "docker compose up -d",
     "build": "tsc -b && vite build",
     "start": "NODE_ENV=production bun server/index.ts",
     "typecheck": "tsc -b",

@@ -372,12 +372,22 @@ export function useSubscriptions(room: Room) {
 }
 
 /**
- * The Discord avatar the server puts on people who came in through the Activity. Only Discord's CDN
- * counts: anyone can rewrite their own attributes, and an arbitrary URL would leak every viewer's IP.
+ * The name to show: the nickname the server put in the identity (`<nickname>#<8 hex>[.<Discord id>]`, transmitters
+ * `<nickname>#tx-<8 hex>`). participant.name is only a fallback, since anyone can rewrite their own.
+ */
+export const nameOf = (participant: { identity: string; name?: string }): string =>
+  /^(.*)#(?:tx-)?[0-9a-f]{8}(?:\.\d{5,25})?$/.exec(participant.identity)?.[1] ||
+  participant.name ||
+  participant.identity;
+
+/**
+ * The Discord avatar the server puts on people who came in through Discord. Only that account's avatar on
+ * Discord's CDN counts: anyone can rewrite their own attributes, and an arbitrary URL would leak every viewer's IP.
  */
 export function discordAvatar(participant: Participant): string | undefined {
+  const id = /#[0-9a-f]{8}\.(\d{5,25})$/.exec(participant.identity)?.[1];
   const url = participant.attributes.avatar;
-  return url?.startsWith("https://cdn.discordapp.com/avatars/") ? url : undefined;
+  return id && url?.startsWith(`https://cdn.discordapp.com/avatars/${id}/`) ? url : undefined;
 }
 
 /** Our own choice is read directly; others' from their attribute (published by useViewingAttribute). */

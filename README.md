@@ -1,9 +1,11 @@
 # HypeMeet
 
-Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + código da sala.
+Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + código da sala. Quem entra
+com o Discord também vê os canais de voz dos seus servidores.
 
 - **Criar sala** com nome → gera código `ABC-DEF` pra mandar pra galera.
-- **Salas salvas**: toda sala que você cria/entra aparece no topo da home (localStorage do navegador).
+- **Salas salvas**: toda sala que você cria/entra aparece em **Grupos**, na barra da esquerda (localStorage
+  do navegador). As salas de canal do Discord ficam no servidor delas.
 - **Várias telas ao mesmo tempo** por pessoa, cada uma com seu próprio áudio.
 - **Volume por stream, só pra você**: mutar ou ajustar de 0–200% cada tela e cada microfone.
 - **Central de transmissões** (botão de tela na barra): lista cada tela que você está mandando, com
@@ -52,6 +54,10 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 - **Atividade do Discord**: abre dentro do Discord pelo 🚀 do canal de voz, com o nome e a foto de
   cada um, na sala daquele canal. A tela e a câmera saem de um transmissor no navegador e aparecem como
   suas, e a tela cheia ocupa a atividade inteira (veja [Atividade do Discord](#atividade-do-discord)).
+- **Servidores do Discord no site**: entrando com o Discord, a barra da esquerda mostra seus servidores e,
+  em cada um, os canais de voz e quem está na sala de cada canal (a mesma da atividade). A sala segue as
+  permissões do canal: falar, vídeo, silenciar, ensurdecer, desconectar e convidar (veja
+  [Servidores do Discord no site](#servidores-do-discord-no-site)).
 - **Plugins** (botão de blocos na barra): apps de outros domínios que a sala abre junto, num iframe. Quem
   abre vira um tile pra todo mundo; cada um entra se quiser. O plugin só enxerga quem está na sala e
   conversa com as cópias dele nos outros navegadores por um tópico próprio do data channel (veja
@@ -67,20 +73,29 @@ Salas para transmitir tela(s) e câmera com áudio. Dark, sem conta: apelido + c
 | --- | --- |
 | Mídia | [LiveKit](https://livekit.io) (SFU) — `livekit-client` no browser |
 | Front | Vite + React 19 + TypeScript + Tailwind v4 |
-| API | Bun (`server/index.ts`) + SQLite (`bun:sqlite`) — salas e tokens |
+| API | Bun (`server/index.ts`) + Postgres (o cliente que já vem no Bun, `Bun.SQL`) — salas, canais e sessões |
 | Design | "Adesivo Noite": tokens em `src/index.css`, kit em `src/components/ui.tsx`; regras em [DESIGN.md](DESIGN.md) |
 
-A API só guarda `código → nome` e emite tokens LiveKit; vídeo/áudio vão direto browser ⇄ LiveKit.
+A API só guarda `código → nome` (mais o canal do Discord das salas de canal e as sessões de quem entra
+com o Discord) e emite tokens LiveKit; vídeo/áudio vão direto browser ⇄ LiveKit.
 
 ## Rodando local
 
-Requisitos: Bun ≥ 1.2, Docker.
+Requisitos: Bun ≥ 1.4, Docker.
 
 ```bash
 bun install
-bun run livekit   # sobe livekit-server em modo dev (devkey/secret) na 7880
+bun run infra     # sobe o livekit-server em modo dev (devkey/secret) na 7880 e o Postgres na 5433
 bun run dev       # API na 3001 + Vite na 5173
 ```
+
+Só o banco: `bun run db`; só o LiveKit: `bun run livekit`. Sem `DATABASE_URL`, a API usa o Postgres do
+`docker-compose.yml` (`postgres://hypemeet:hypemeet@localhost:5433/hypemeet`; a 5433 é pra não brigar com um
+Postgres local na 5432) e cria as tabelas sozinha. Sem o banco no ar, ela não sobe.
+
+`bun test` roda sem banco. Com `DATABASE_URL` apontando pra um Postgres, roda também os testes contra ele, cada
+um num schema temporário (`test_…`) que é apagado no fim:
+`DATABASE_URL=postgres://hypemeet:hypemeet@localhost:5433/hypemeet bun test`.
 
 Abra http://localhost:5173.
 
@@ -100,7 +115,8 @@ passa pelo próprio Vite (`/rtc` → 7880), então só a mídia precisa da UDP 7
 bun run build
 LIVEKIT_URL=wss://livekit.seudominio.com \
 LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... \
-PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa subir sem as 3 variáveis
+DATABASE_URL=postgres://... \
+PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa subir sem essas 4 variáveis
 ```
 
 | Variável | Padrão | |
@@ -109,10 +125,12 @@ PORT=3001 bun run start      # serve a API e o front buildado (dist/); recusa su
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | dev: `devkey` / `secret` | Mesmas chaves do servidor LiveKit. Obrigatórias em produção |
 | `LIVEKIT_HOST` | `LIVEKIT_URL` (dev: `http://localhost:7880`) | URL que o servidor usa para consultar a API do LiveKit (quem está online). Em produção dá para apontar direto para a rede interna, ex. `http://livekit:7880` |
 | `PORT` | `3001` | |
-| `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite das salas |
-| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Liga a [atividade do Discord](#atividade-do-discord). Sem elas, `/api/discord/*` responde 503 |
+| `DATABASE_URL` | dev: `postgres://hypemeet:hypemeet@localhost:5433/hypemeet` | Postgres das salas, dos canais do Discord e das sessões. Obrigatória em produção |
+| `DB_PATH` | `data/hypemeet.db` | Arquivo SQLite de antes do Postgres, copiado uma vez pro banco (veja [Banco de dados](#banco-de-dados)) |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | — | Ligam a [atividade do Discord](#atividade-do-discord) e o login com o Discord no site. Sem elas, `/api/discord/*` responde 503 e o site não oferece o login |
+| `DISCORD_BOT_TOKEN` | — | Token do bot que lista os canais de voz dos [servidores do Discord](#servidores-do-discord-no-site), sincroniza as permissões, mostra quem está na call (pelo [Gateway](#gateway)) e modera no Discord. Sem ele, os servidores aparecem sem canais |
 | `PLUGINS` | — | Endereços dos [plugins](#plugins) que as salas podem abrir, separados por vírgula (ex. `https://draw.exemplo.com`) |
-| `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) |
+| `PUBLIC_URL` | origem do pedido | Endereço do site (ex. `https://meet.exemplo.com`), usado nos links que saem da atividade do Discord (transmissor, "Abrir fora do Discord", convite) e no redirect do login com o Discord (`<PUBLIC_URL>/api/auth/discord/callback`, igual ao cadastrado no portal) |
 | `YTDLP_COOKIES` | — | `cookies.txt` de uma conta do YouTube pro [YouTube no Discord](#atividade-do-discord) (ex. `/app/data/youtube-cookies.txt`). O yt-dlp reescreve o arquivo: tem que dar pra gravar |
 | `YTDLP_PATH` | `yt-dlp` | Onde está o yt-dlp (a imagem Docker já traz, junto com o deno) |
 
@@ -123,8 +141,9 @@ Guia: https://docs.livekit.io/home/self-hosting/deployment/
 ### Dokploy (`docker-compose.prod.yml`)
 
 Exemplo de deploy (projeto `hypemeet` no Dokploy, compose ligado ao repo
-GitHub, branch `main`). O stack sobe o app (`Dockerfile`, SQLite no volume `hypemeet-data`) e um
-LiveKit próprio:
+GitHub, branch `main`). O stack sobe o app (`Dockerfile`), o Postgres (volume `hypemeet-pg`) e um
+LiveKit próprio. O app só sobe depois que o Postgres responde (healthcheck), e o volume `hypemeet-data`
+continua: tem o SQLite antigo (de onde veio a cópia) e os cookies do yt-dlp.
 
 | Serviço | Domínio (HTTPS pelo Traefik) | Portas no host |
 | --- | --- | --- |
@@ -132,8 +151,33 @@ LiveKit próprio:
 | `livekit` | `livekit.exemplo.com` → 7880 (sinalização `wss://`) | 7881/tcp e 7882/udp (mídia) |
 
 Variáveis do compose no Dokploy: `LIVEKIT_DOMAIN`, `LIVEKIT_NODE_IP` (IP público do servidor),
-`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres). As portas 7881/tcp e 7882/udp precisam
-estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio não chegam.
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` (≥ 32 caracteres) e `POSTGRES_PASSWORD` (senha do banco, só com
+letras, números, `-` e `_`: ela entra no `DATABASE_URL`, que o compose monta sozinho). Sem `POSTGRES_PASSWORD`
+o compose nem sobe. O Postgres não abre porta no host: só o app fala com ele, pela rede do stack. As portas
+7881/tcp e 7882/udp precisam estar abertas no firewall do servidor; sem elas a sala abre mas vídeo/áudio não
+chegam.
+
+A senha fica gravada no volume na primeira subida: trocar `POSTGRES_PASSWORD` depois não troca a do banco.
+Pra trocar, mude no banco também (`ALTER USER hypemeet PASSWORD '…'`, pelo terminal do container no Dokploy).
+
+### Banco de dados
+
+O servidor cria as tabelas quando faltam (`server/db.ts`): `rooms`, `discord_channels`, `sessions` (só o
+SHA-256 do cookie) e `meta`.
+
+**Vindo do SQLite** (antes do Postgres): na primeira subida com o Postgres, se o arquivo `DB_PATH` existir, o
+servidor copia salas, canais do Discord e sessões pro banco numa transação só, anota em `meta`
+(`sqlite_imported`) e escreve no log quantas linhas vieram (`imported … 112/112 rooms, …`). Ele só lê o arquivo
+(modo somente leitura), nunca muda nem apaga; depois da cópia ele não é mais usado, e o que já está no Postgres
+não é sobrescrito. Pra copiar de novo (ex. o arquivo mudou depois da cópia), apague a marca:
+`DELETE FROM meta WHERE key = 'sqlite_imported'` e reinicie; linhas repetidas são ignoradas.
+
+**Backup**: `pg_dump`, do host (num cron, por exemplo) ou pelo terminal do container `postgres` no Dokploy:
+
+```bash
+docker exec <container do postgres> pg_dump -U hypemeet hypemeet > hypemeet-$(date +%F).sql
+cat hypemeet-2026-11-08.sql | docker exec -i <container do postgres> psql -U hypemeet hypemeet   # restaurar num banco vazio
+```
 
 ## Plugins
 
@@ -185,9 +229,13 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
 - **Entra direto**, sem lobby, com o nome e a foto do Discord. A foto aparece também pra quem está no
   site ou no app.
 - **Uma sala por canal de voz**: todo mundo do canal cai na mesma sala, criada na primeira vez que alguém
-  abre a atividade ali. É uma sala normal, com código, então dá pra entrar também pelo site ou pelo app
-  desktop.
-- **Convidar** abre o convite do próprio Discord; **Sair** fecha a atividade.
+  abre a atividade ali (ou o canal no site). Num servidor é a sala do canal no site e no app desktop, onde
+  entrar pede login com o Discord e acesso ao canal (veja
+  [Servidores do Discord no site](#servidores-do-discord-no-site)); numa DM é uma sala normal, com código.
+- **Permissões do canal**: sem **Vídeo** no canal, o transmissor não manda câmera nem tela. Quem pode
+  silenciar, ensurdecer ou desconectar no canal faz o mesmo pela lista de pessoas (o número de pessoas no
+  topo), na sala e na call do Discord.
+- **Convidar** oferece o convite do próprio Discord e o link da sala no site; **Sair** fecha a atividade.
 - **Transmitir tela**: o Discord não deixa a atividade capturar a tela, então o botão de tela abre um
   **transmissor no navegador**. Você escolhe a tela lá e ela aparece na sala como sua, com o mesmo nome.
   O painel de tela da atividade lista o que está no ar e tem **Parar** / **Parar todas**. Deixe a aba
@@ -222,7 +270,10 @@ O HypeMeet também roda **dentro do Discord** como atividade (o 🚀 do canal de
 Tudo em https://discord.com/developers/applications → seu app:
 
 1. **OAuth2**: copie o *Client ID* e o *Client Secret* (vão nas variáveis abaixo). Em **Redirects**
-   adicione `https://127.0.0.1`: o Discord exige um redirect cadastrado, mesmo sem usar.
+   adicione os do login no site, exatamente assim: `<PUBLIC_URL>/api/auth/discord/callback` (ex.
+   `https://meet.exemplo.com/api/auth/discord/callback`) e, pro dev,
+   `http://localhost:5173/api/auth/discord/callback`. A atividade não usa redirect, mas o Discord exige ao
+   menos um cadastrado.
 2. **Activities → Settings**: ative as atividades e marque as plataformas (Desktop, Web, Mobile). A
    atividade só aparece nas plataformas marcadas.
 3. **Activities → URL Mappings**. A ordem importa: o mais específico em cima.
@@ -239,9 +290,13 @@ Tudo em https://discord.com/developers/applications → seu app:
    - **Installation Contexts**: marque **User Install** (usar em qualquer lugar) e/ou **Guild Install**
      (adicionar a servidores).
    - **Install Link**: *Discord Provided Link*.
-   - **Default Install Settings**: só o escopo `applications.commands`. Não precisa de `bot` nem de
-     permissões (com `bot`, a tela de instalação passa a pedir coisas como "Enviar mensagens").
-5. Opcional: ícone e descrição em **General Information** e a capa da atividade em **Activities → Art
+   - **Default Install Settings**: só o escopo `applications.commands`, sem `bot` nem permissões (com
+     `bot`, a tela de instalação passa a pedir coisas como "Enviar mensagens"). O bot entra à parte, pelo
+     link de cada servidor (passo 5).
+5. **Bot**, pros [servidores no site](#servidores-do-discord-no-site) (a atividade sozinha não usa):
+   **Reset Token** e copie o token, que vai em `DISCORD_BOT_TOKEN`. Não precisa de nenhum *Privileged
+   Gateway Intent*. Com **Public Bot** desligado, só você consegue adicionar o bot a servidores.
+6. Opcional: ícone e descrição em **General Information** e a capa da atividade em **Activities → Art
    Assets** (é o que aparece na lista do 🚀).
 
 ### Variáveis no servidor
@@ -250,11 +305,15 @@ Tudo em https://discord.com/developers/applications → seu app:
 | --- | --- |
 | `DISCORD_CLIENT_ID` | *Client ID* do app |
 | `DISCORD_CLIENT_SECRET` | *Client Secret* do app. Nunca vai pro git: local fica no `.env` (ignorado), em produção nas variáveis do Dokploy |
-| `PUBLIC_URL` | Endereço do site, ex. `https://meet.exemplo.com`. Usado nos links que saem da atividade (transmissor, "Abrir fora do Discord", convite copiado): lá dentro o pedido chega pelo proxy do Discord, então o servidor não sabe o próprio endereço |
+| `DISCORD_BOT_TOKEN` | Token do bot (passo 5). Segredo como o de cima. Só pros [servidores no site](#servidores-do-discord-no-site); com ele o servidor abre uma conexão com o [Gateway](#gateway) |
+| `PUBLIC_URL` | Endereço do site, ex. `https://meet.exemplo.com`. Usado nos links que saem da atividade (transmissor, "Abrir fora do Discord", convite copiado): lá dentro o pedido chega pelo proxy do Discord, então o servidor não sabe o próprio endereço. Também monta o redirect do login no site, `<PUBLIC_URL>/api/auth/discord/callback`; sem ela, vale a origem do pedido |
 
 No Dokploy elas já estão no `docker-compose.prod.yml`; é só preencher e fazer redeploy. Sem as duas
-primeiras, `/api/discord/*` responde 503 ("A atividade do Discord não está configurada no servidor").
-Se o segredo vazar, gere outro em **OAuth2 → Reset Secret** e troque a variável.
+primeiras, `/api/discord/*` responde 503 ("A atividade do Discord não está configurada no servidor") e o
+site não oferece o login. Sem `DISCORD_BOT_TOKEN`, o login e a lista de servidores funcionam, mas os
+servidores aparecem sem canais ("O HypeMeet ainda não está em …") e sem o link pra adicionar o bot.
+Se o segredo vazar, gere outro em **OAuth2 → Reset Secret** e troque a variável; o token do bot, em
+**Bot → Reset Token**.
 
 ### Instalar e abrir
 
@@ -271,14 +330,15 @@ pela verificação do Discord pode ser adicionado em **App Testers** no portal. 
 
 **Permissões que aparecem pra quem abre.** Na primeira vez o Discord pede login com os escopos
 `identify` (nome, avatar e banner) e `guilds` ("saber em quais servidores você está"), este usado pra
-tentar ler o nome do canal. Pedidos como "enviar mensagens" não vêm do HypeMeet: vêm da configuração de
+tentar ler o nome do canal (no login do site, pra listar seus servidores). Pedidos como "enviar mensagens" não vêm do HypeMeet: vêm da configuração de
 instalação (veja o passo 4 acima). Pra ver a tela de permissões de novo depois de mudar algo:
 Configurações → **Aplicativos autorizados** → HypeMeet → **Desautorizar**, e abra a atividade outra vez.
 
 ### Testar local
 
-1. Crie o `.env` com `DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET` (ignorado pelo git).
-2. `bun run livekit` e `bun run dev`.
+1. Crie o `.env` (ignorado pelo git) com `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` e, pros servidores
+   no site, `DISCORD_BOT_TOKEN`.
+2. `bun run infra` e `bun run dev`.
 3. Abra um túnel até o Vite: `cloudflared tunnel --url http://localhost:5173`. Ele imprime um endereço
    `https://<algo>.trycloudflare.com` (o Vite aceita esses hosts: `allowedHosts` no `vite.config.ts`).
 4. Ponha esse endereço no `.env` como `PUBLIC_URL` (pro link do transmissor abrir no túnel) e reinicie
@@ -293,6 +353,11 @@ Configurações → **Aplicativos autorizados** → HypeMeet → **Desautorizar*
 O endereço do túnel muda toda vez que ele reinicia. Ao terminar, volte o mapping `/` pra produção:
 enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
 
+**Login no site em dev.** Sem `PUBLIC_URL`, entre por http://localhost:5173: o redirect usa a origem do
+pedido (`http://localhost:5173/api/auth/discord/callback`). Com `PUBLIC_URL` no túnel (passo 4), o login
+volta pelo túnel: entre pelo endereço dele e cadastre `<túnel>/api/auth/discord/callback` nos
+**Redirects**. Começando em localhost, a volta cai no túnel sem o cookie do login e falha.
+
 ### Como funciona por dentro
 
 - **Detecção** (`src/lib/discord.ts`): o Discord serve a página em `https://<client id>.discordsays.com`
@@ -303,10 +368,11 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
   `wss://<client id>.discordsays.com/livekit` (mapping `/livekit`).
 - **Login**: `sdk.ready()` → `authorize` (consentimento só na primeira vez) → `/api/discord/token` troca o
   código pelo token de acesso (precisa do segredo, por isso no servidor) → `authenticate` →
-  `/api/discord/join` confere o token na API do Discord, acha ou cria a sala do canal (tabela
-  `discord_channels`) e devolve a entrada na sala, com a foto no atributo `avatar` do participante. Os
-  outros clientes só mostram a foto se ela vier de `cdn.discordapp.com/avatars/`: qualquer um edita os
-  próprios atributos, e uma URL qualquer vazaria o IP de quem olha.
+  `/api/discord/join` confere o token na API do Discord (e, num servidor, o acesso ao canal), acha ou cria
+  a sala do canal (tabela `discord_channels`) e devolve a entrada na sala, com as permissões do canal e a
+  foto no atributo `avatar` do participante. Os outros clientes só mostram a foto se ela vier de
+  `cdn.discordapp.com/avatars/`: qualquer um edita os próprios atributos, e uma URL qualquer vazaria o IP
+  de quem olha.
 - **Transmissor** (`src/room/cast.ts`, `src/pages/CastPage.tsx`): a atividade pede um link em `/api/cast`
   provando quem é com o próprio token da sala. O servidor devolve `/transmitir#t=<token>`: um token
   LiveKit que **só publica tela e câmera**, vale 15 min pra abrir e leva o atributo `castFor` com a
@@ -350,6 +416,101 @@ enquanto ele apontar pro túnel, a atividade só abre com a sua máquina ligada.
 | O plugin não aparece no botão de plugins da atividade | Falta o mapping `/plugins/<id>` (acima do `/`), ou o plugin não está na raiz do domínio dele |
 | A sala não conecta e o console fala de `RTCPeerConnection` | O proxy do Discord injeta `RTCPeerConnection = null` nas páginas das atividades (visto em 28/10/2026). Sem WebRTC não há LiveKit (nem o data channel que o Drawspace usa). Use **Abrir fora do Discord** |
 
+## Servidores do Discord no site
+
+**Entrar com o Discord** (embaixo da barra lateral) é opcional: sem conta, tudo segue com apelido. Entrando,
+a barra da esquerda mostra seus servidores do Discord abaixo do **H**, que leva aos **Grupos** (as salas
+criadas aqui por código):
+
+- **Canais de voz**: num servidor com o bot do HypeMeet, a barra lista os canais de voz que você vê no
+  Discord, na ordem e nas categorias de lá. Embaixo de cada um, primeiro quem está na call do Discord (com
+  o microfone desligado / ensurdecido e um **H** em quem também está na sala do HypeMeet), depois quem só
+  está na sala. Canal em que você não pode conectar aparece com cadeado. A lista se atualiza a cada 15 s.
+- **Uma sala por canal**: a mesma que a [atividade](#atividade-do-discord) abre naquele canal, então quem
+  está no site, no app e no Discord se encontra. Entrar pede login com o Discord e **Ver canal** +
+  **Conectar** no canal; você entra com o nome e a foto do Discord.
+- **Permissões do canal na sala** (tabela abaixo), lidas pelo bot dos cargos e das permissões do canal.
+- **Moderação**: o número de pessoas no topo da sala abre a lista de quem está lá. Quem tem a permissão no
+  canal silencia / permite falar, ensurdece / tira o ensurdecimento e desconecta. Vale na sala e, se a
+  pessoa estiver na call daquele canal do Discord, lá também (pelo bot, com "HypeMeet: <quem moderou>" no
+  registro de auditoria).
+- **Convidar**: no site, copia o link da sala ou, com **Criar convite**, um convite `discord.gg` que abre a
+  atividade do HypeMeet no canal. Na atividade, o convite do próprio Discord ou o link do site.
+- **Servidor sem o bot**: aparece apagado, com "O HypeMeet ainda não está em …" e **Adicionar ao servidor**
+  pra quem é dono ou tem **Administrador** ou **Gerenciar servidor**.
+
+### Configurar
+
+1. No portal, os **Redirects** do login (passo 1 de [Configurar o app no Discord](#configurar-o-app-no-discord))
+   e o **Bot** (passo 5).
+2. No servidor, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_BOT_TOKEN` e `PUBLIC_URL` (veja
+   [Variáveis no servidor](#variáveis-no-servidor)).
+3. Adicione o bot a cada servidor pelo botão do site, que abre este link com o servidor já escolhido:
+
+   `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot&permissions=30409729&guild_id=<ID do servidor>&disable_guild_select=true`
+
+   `30409729` = **Ver canais**, **Conectar**, **Criar convite**, **Silenciar membros**, **Ensurdecer
+   membros** e **Mover membros**. O bot não lê nem manda mensagens e não entra na call: consulta o
+   servidor pela API, acompanha as calls pelo Gateway (abaixo) e aplica a moderação.
+
+### Gateway
+
+Com `DISCORD_BOT_TOKEN`, o servidor do HypeMeet mantém uma conexão com o Gateway do Discord em nome do bot
+(`server/gateway.ts`), com as intents **GUILDS** e **GUILD_VOICE_STATES**, nenhuma privilegiada. É dela que
+vem quem está na call de cada canal na barra, o estado de voz que a moderação e a entrada pela atividade
+consultam (sem ela, ou num servidor que ela ainda não carregou, o servidor pergunta pela API) e o aviso de
+que canais, cargos ou a lista de servidores do bot mudaram (o cache deles cai na hora). Mudança de cargo de
+um membro pediria a intent privilegiada **GUILD_MEMBERS**: essa segue esperando o cache de 30 s.
+
+É uma conexão por servidor do HypeMeet rodando, dev incluído (rodar o mesmo token em dois lugares abre
+duas). Cada reinício é um *Identify* novo, e o Discord limita a 1000 por dia por bot: passou disso, ele
+**reseta o token do bot** e derruba todas as conexões, produção incluída. Como o `bun run dev` reinicia a
+API a cada arquivo salvo, **não use o token de produção no dev**: deixe `DISCORD_BOT_TOKEN` fora do `.env`
+local ou crie um app/bot separado só pra desenvolver.
+
+### Permissões
+
+| No canal do Discord | Na sala |
+| --- | --- |
+| **Ver canal** | O canal aparece na lista |
+| **Ver canal** + **Conectar** | Entrar na sala |
+| **Falar** | Ligar o microfone |
+| **Vídeo** | Câmera e tela (inclusive pelo transmissor) |
+| **Silenciar membros** | Silenciar no servidor / Permitir falar |
+| **Ensurdecer membros** | Ensurdecer / Tirar ensurdecimento |
+| **Mover membros** | Desconectar |
+| **Criar convite** | Copiar convite do Discord |
+
+Dono do servidor e **Administrador** podem tudo. Quem está de castigo (timeout) só vê o canal, então não
+entra. O cálculo é o do Discord (`server/permissions.ts`): `@everyone` + cargos, depois as permissões do
+canal pra `@everyone`, pros cargos e pro membro.
+
+### Limites
+
+- **As permissões são lidas quando você entra**: mudou um cargo ou o canal no Discord, vale quando a pessoa
+  entrar de novo na sala. A moderação confere quem modera na hora (com até 1 min de cache: cargos do servidor ficam 60 s, canal e membro 30 s; com o [Gateway](#gateway) no ar, mudança de canal ou de cargo derruba o cache na hora e só a de cargo de um membro espera os 30 s).
+- **Canais privados**: a partir de 16/11/2026 o Discord só lista pro bot os canais que ele vê, então um
+  canal privado só aparece se o bot (ou um cargo dele) tiver **Ver canal** nele.
+- **Silenciar e ensurdecer no servidor valem no Discord inteiro**, em qualquer canal de voz daquele
+  servidor, até alguém desfazer (pelo HypeMeet ou pelo próprio Discord).
+- **Servidor sem o bot**: a atividade só confere se você é membro do servidor, mas sem o bot não dá pra
+  provar que o canal é mesmo de lá. Por isso a sala desse canal fica como uma sala comum: quem tem o código
+  entra pelo site com apelido, todo mundo fala e transmite e não há moderação. Quando o bot entra no
+  servidor, o canal ganha uma **sala nova** (código novo), fechada pelo Discord; a antiga continua
+  existindo como sala comum, então quem estava numa call nela fica lá até sair.
+- **Silenciado continua silenciado**: quem foi silenciado pelo HypeMeet entra de novo ainda sem microfone
+  (fica guardado no banco), e quem está com silenciar no servidor do Discord também.
+
+### Problemas comuns
+
+| Sintoma | O que é |
+| --- | --- |
+| "Invalid OAuth2 redirect_uri" no Discord | O callback não está nos **Redirects** do portal, ou não bate com `PUBLIC_URL` (`http`/`https`, porta) |
+| Um servidor aparece com "O HypeMeet ainda não está em …" | O bot não foi adicionado a ele; se forem todos, falta `DISCORD_BOT_TOKEN` no servidor |
+| "Você não tem acesso a este canal no Discord" | Falta **Ver canal** ou **Conectar** pra você naquele canal |
+| A moderação vale na sala mas dá erro sobre uma permissão do bot | O bot não tem **Silenciar**, **Ensurdecer** ou **Mover membros** naquele canal (as permissões do canal podem tirar) |
+| "O Discord não criou o convite" | O bot precisa de **Criar convite** no canal |
+
 ## App desktop (Windows / macOS / Linux)
 
 `desktop/` empacota o HypeMeet em Electron: o app abre o front do **seu servidor** (o mesmo de
@@ -374,6 +535,8 @@ produção ou do `dev:lan`) numa janela própria e adiciona o que a aba do naveg
   sala aberta (o `globalShortcut` do Electron não avisa quando a tecla é solta). No Linux depende do
   X11: no Wayland só pega as teclas com uma janela X11/XWayland em foco (a maioria dos jogos, Steam
   e Proton). No macOS pede a permissão de Acessibilidade.
+- **Entrar com o Discord** abre o login do Discord numa janela do app, sem acesso às funções do app; no
+  fim ela fecha, a página volta com você logado e a sessão fica salva no app. Fechar a janela cancela.
 - Segue rodando minimizado (sem throttling) e abre links externos no navegador.
 
 ```bash

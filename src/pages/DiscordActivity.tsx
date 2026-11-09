@@ -1,5 +1,5 @@
 import { Common, DiscordSDK, Events, RPCCloseCodes } from "@discord/embedded-app-sdk";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Link2, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Logo, Spinner, cardClass } from "../components/ui";
 import { api, type DiscordGrant } from "../lib/api";
@@ -45,7 +45,7 @@ async function joinChannelRoom(): Promise<DiscordGrant> {
     (c) => c.name ?? null,
     () => null, // DMs need another scope; the room is just called "Discord" then.
   );
-  const grant = await api.discordJoin({ accessToken, channelId, channelName });
+  const grant = await api.discordJoin({ accessToken, guildId: sdk.guildId, channelId, channelName });
   return { ...grant, url: proxiedLiveKitUrl(grant.url) };
 }
 
@@ -124,8 +124,10 @@ export function DiscordActivity() {
       devices={{ mic: false, camera: false }}
       onLeave={() => sdk.close(RPCCloseCodes.CLOSE_NORMAL, "Saiu da sala")}
       onRejoin={join}
-      inviteUrl={grant.webUrl}
-      onInvite={() => void sdk.commands.openInviteDialog().catch(() => undefined)}
+      invites={[
+        { label: "Convidar no Discord", icon: UserPlus, run: () => sdk.commands.openInviteDialog().then(() => undefined, () => undefined) },
+        { label: "Copiar link do site", icon: Link2, run: async () => grant.webUrl },
+      ]}
       onCast={async (withCamera) => {
         const { url } = await api.castLink(grant.token);
         await sdk.commands.openExternalLink({ url: withCamera ? `${url}&cam=1` : url });
