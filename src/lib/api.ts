@@ -72,6 +72,10 @@ export interface Guild {
   iconUrl: string | null;
   /** The HypeMeet bot is in it, so its voice channels can be listed. */
   bot: boolean;
+  /** HypeMeet already has rooms for its channels. The rail lists servers with the bot or rooms. */
+  rooms: boolean;
+  /** Pinned at the top of the rail by this person. */
+  favorite: boolean;
   /** Link that adds the bot to this server, when it's missing and you can add it (owner, admin or Manage Server). */
   addUrl: string | null;
 }
@@ -177,7 +181,10 @@ export const api = {
   /** Full-page navigation target: Discord's consent screen, then back to `next` (a path on this site). */
   loginUrl: (next: string) => `/api/auth/discord?next=${encodeURIComponent(next)}`,
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
+  /** Already in the person's order: favourites first. */
   guilds: () => request<Guild[]>("/api/discord/guilds"),
+  saveGuildPrefs: (prefs: { order: string[]; favorites: string[] }) =>
+    request<{ ok: true }>("/api/discord/guilds/prefs", { method: "PUT", body: JSON.stringify(prefs) }),
   guildChannels: (guildId: string) => request<GuildChannels>(`/api/discord/guilds/${encodeURIComponent(guildId)}/channels`),
   /** The voice channel's room (created on first use); needs VIEW_CHANNEL + CONNECT. Then join it at /r/<code>. */
   channelRoom: (guildId: string, channelId: string) =>

@@ -52,6 +52,12 @@ export async function migrate(sql: SQL) {
       discord_id TEXT NOT NULL,
       PRIMARY KEY (code, discord_id)
     );
+    -- How each signed-in person arranges their servers in the rail: JSON arrays of guild ids.
+    CREATE TABLE IF NOT EXISTS guild_prefs (
+      user_id TEXT PRIMARY KEY,
+      guild_order TEXT NOT NULL,
+      favorites TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
