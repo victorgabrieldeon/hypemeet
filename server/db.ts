@@ -35,6 +35,13 @@ export async function migrate(sql: SQL) {
       code TEXT NOT NULL REFERENCES rooms (code),
       guild_id TEXT
     );
+    -- The server the Activity said an unverified channel is in (the bot isn't there): only to list its room on the
+    -- site to that server's members, never to gate it. First claim wins.
+    CREATE TABLE IF NOT EXISTS discord_claims (
+      channel_id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS discord_claims_guild ON discord_claims (guild_id);
     -- Every room lookup joins on it.
     CREATE INDEX IF NOT EXISTS discord_channels_code ON discord_channels (code);
     -- Site sign-ins (server/auth.ts); id is the SHA-256 of the cookie.

@@ -155,6 +155,17 @@ test.skipIf(!PG)("server prefs and servers with rooms (postgres)", async () => {
     await store.forDiscordChannel("555551", "Geral", "777771", true);
     await store.forDiscordChannel("555552", "Livre", null, false);
     expect([...(await store.guildsWithRooms())]).toEqual(["777771"]);
+
+    // The Activity in a server without the bot: listed for that server, still ungated, first claim kept.
+    const open = await store.forDiscordChannel("555553", "Sem bot", "777772", false);
+    expect(open.discord).toBeNull();
+    await store.forDiscordChannel("555553", null, "777773", false);
+    expect([...(await store.guildsWithRooms())].sort()).toEqual(["777771", "777772"]);
+    expect(await store.claimedRooms("777772")).toEqual([{ channelId: "555553", code: open.code, name: "Sem bot" }]);
+    expect(await store.claimedRooms("777773")).toEqual([]);
+    // Once the bot vouches for it, the channel is gated and no longer a claimed room.
+    await store.forDiscordChannel("555553", null, "777772", true);
+    expect(await store.claimedRooms("777772")).toEqual([]);
   } finally {
     await db.drop();
   }

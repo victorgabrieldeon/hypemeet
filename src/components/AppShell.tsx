@@ -545,6 +545,12 @@ export function AppShell() {
                 <Groups roomCode={code} visible={wide || navOpen} />
               ) : guild.bot ? (
                 <Channels key={guild.id} guild={guild} roomCode={code} />
+              ) : guild.rooms ? (
+                // Without the bot: the rooms opened by the Activity there, and the offer to add it for the rest.
+                <>
+                  <Channels key={guild.id} guild={guild} roomCode={code} />
+                  <MissingBot guild={guild} />
+                </>
               ) : (
                 <MissingBot guild={guild} />
               )}
