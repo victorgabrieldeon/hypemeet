@@ -1,5 +1,5 @@
 import { Common, DiscordSDK, Events, RPCCloseCodes } from "@discord/embedded-app-sdk";
-import { ExternalLink, Link2, UserPlus } from "lucide-react";
+import { ExternalLink, Link2, MessageSquareShare, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button, Logo, Spinner, cardClass } from "../components/ui";
 import { api, type DiscordGrant } from "../lib/api";
@@ -126,6 +126,15 @@ export function DiscordActivity() {
       onRejoin={join}
       invites={[
         { label: "Convidar no Discord", icon: UserPlus, run: () => sdk.commands.openInviteDialog().then(() => undefined, () => undefined) },
+        {
+          // For whoever can't open the Activity: Discord's share sheet sends the room's site link to the call's chat (or anywhere).
+          label: "Mandar link no chat",
+          icon: MessageSquareShare,
+          run: () =>
+            sdk.commands
+              .shareLink({ message: `Não consegue abrir a atividade? Entre pelo site: ${grant.webUrl}` })
+              .then(() => undefined, () => grant.webUrl), // an older client without the sheet: copy it instead
+        },
         { label: "Copiar link do site", icon: Link2, run: async () => grant.webUrl },
       ]}
       onCast={async (withCamera) => {
