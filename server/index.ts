@@ -332,7 +332,26 @@ Bun.serve({
         const guildId = req.params.guild;
         if (!SNOWFLAKE.test(guildId)) return error("Servidor não encontrado", 404);
         try {
-          if (!(await discord.botGuildIds()).has(guildId)) return error("O HypeMeet não está neste servidor do Discord", 404);
+          // Without the bot there's no channel list: only the rooms the Activity opened there, for its members.
+          if (!(await discord.botGuildIds()).has(guildId)) {
+            const guild = (await discord.userGuilds(session.user.id, session.accessToken)).find((g) => g.id === guildId);
+            if (!guild) return error("Você não está neste servidor do Discord", 403);
+            const claimed = await rooms.claimedRooms(guildId);
+            const present = await presenceIn(claimed.map((r) => r.code)).catch((err) => {
+              console.error("presence lookup failed:", err);
+              return {} as Awaited<ReturnType<typeof presenceIn>>;
+            });
+            const items = claimed.map((r) => ({
+              kind: "voice" as const,
+              id: r.channelId,
+              name: r.name,
+              canConnect: true,
+              code: r.code,
+              voice: [],
+              people: present[r.code] ?? [],
+            }));
+            return json({ guild: { id: guild.id, name: guild.name, iconUrl: guildIconUrl(guild) }, items });
+          }
           const [guild, list, member] = await Promise.all([discord.guild(guildId), discord.channels(guildId), discord.member(guildId, session.user.id)]);
           if (!member) return error("Você não está neste servidor do Discord", 403);
           const voice = list

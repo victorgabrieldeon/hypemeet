@@ -82,6 +82,9 @@ export function openRoomStore(sql: SQL) {
         FROM discord_channels d JOIN rooms r ON r.code = d.code WHERE d.channel_id = ${channelId} FOR UPDATE OF d`
     )[0];
 
+  const claim = (db: SQL, channelId: string, guildId: string) =>
+    db`INSERT INTO discord_claims (channel_id, guild_id) VALUES (${channelId}, ${guildId}) ON CONFLICT DO NOTHING`;
+
   return {
     create: (name: string) => create(sql, name),
     async get(code: string): Promise<Room | null> {
@@ -103,7 +106,10 @@ export function openRoomStore(sql: SQL) {
           const created = await create(tx, name ?? "Discord");
           const [won] = await tx`INSERT INTO discord_channels (channel_id, code, guild_id) VALUES (${channelId}, ${created.code}, ${stored})
             ON CONFLICT DO NOTHING RETURNING code`;
-          if (won) return { ...created, discord: stored ? { guildId: stored, channelId } : null };
+          if (won) {
+            if (!stored && guildId) await claim(tx, channelId, guildId);
+            return { ...created, discord: stored ? { guildId: stored, channelId } : null };
+          }
           // Another first join got there first: its room is the channel's (a channel moved to a fresh room lands here too).
           await tx`DELETE FROM rooms WHERE code = ${created.code}`;
           row = (await channelRow(tx, channelId))!;
@@ -116,6 +122,7 @@ export function openRoomStore(sql: SQL) {
           return { ...fresh, discord: { guildId: stored, channelId } };
         }
         if (name && row.name !== name) await tx`UPDATE rooms SET name = ${name} WHERE code = ${row.code}`;
+        if (!row.guildId && guildId) await claim(tx, channelId, guildId);
         return toRoom({ ...row, name: name || row.name });
       });
     },
@@ -131,10 +138,17 @@ export function openRoomStore(sql: SQL) {
       if (muted) await sql`INSERT INTO room_mutes (code, discord_id) VALUES (${code}, ${discordId}) ON CONFLICT DO NOTHING`;
       else await sql`DELETE FROM room_mutes WHERE code = ${code} AND discord_id = ${discordId}`;
     },
-    /** Servers with at least one channel room (only bot-verified guild ids are ever stored). */
+    /** Servers with at least one channel room: bot-verified, or claimed by the Activity (claimedRooms). */
     async guildsWithRooms(): Promise<Set<string>> {
-      const rows = await sql<{ guildId: string }[]>`SELECT DISTINCT guild_id AS "guildId" FROM discord_channels WHERE guild_id IS NOT NULL`;
+      const rows = await sql<{ guildId: string }[]>`SELECT guild_id AS "guildId" FROM discord_channels WHERE guild_id IS NOT NULL
+        UNION SELECT c.guild_id FROM discord_claims c JOIN discord_channels d ON d.channel_id = c.channel_id WHERE d.guild_id IS NULL`;
       return new Set(rows.map((r) => r.guildId));
+    },
+    /** The ungated channel rooms the Activity opened in this server (without the bot), oldest first. */
+    async claimedRooms(guildId: string): Promise<{ channelId: string; code: string; name: string }[]> {
+      return sql`SELECT c.channel_id AS "channelId", r.code, r.name FROM discord_claims c
+        JOIN discord_channels d ON d.channel_id = c.channel_id AND d.guild_id IS NULL JOIN rooms r ON r.code = d.code
+        WHERE c.guild_id = ${guildId} ORDER BY r.created_at, r.code`;
     },
     async guildPrefs(userId: string): Promise<GuildPrefs> {
       const [row] = await sql<{ order: string; favorites: string }[]>`SELECT guild_order AS "order", favorites FROM guild_prefs WHERE user_id = ${userId}`;
