@@ -1,5 +1,5 @@
 import { RoomEvent, type Participant, type RemoteParticipant, type Room } from "livekit-client";
-import { Blocks, Maximize, Minimize, Minimize2, X } from "lucide-react";
+import { Blocks, Maximize, Minimize, Minimize2, PanelBottomClose, PanelBottomOpen, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isEnvelope,
@@ -157,11 +157,14 @@ interface PluginViewProps {
   onMinimize: () => void;
   onClose: () => void;
   onToast: (text: string, tone: "info" | "error") => void;
+  /** The strip of everyone else under a pinned plugin is hidden: the plugin gets the whole stage (video plugins). */
+  stripHidden?: boolean;
+  onToggleStrip?: () => void;
   className?: string;
 }
 
 /** A plugin's page and its bridge to the room. Lives outside the stage so pinning never reloads it. */
-export function PluginView({ room, info, token, session, onMinimize, onClose, onToast, className = "" }: PluginViewProps) {
+export function PluginView({ room, info, token, session, onMinimize, onClose, onToast, stripHidden = false, onToggleStrip, className = "" }: PluginViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   const plugin = session.info;
@@ -273,6 +276,17 @@ export function PluginView({ room, info, token, session, onMinimize, onClose, on
         >
           <X className="size-4" />
         </button>
+        {onToggleStrip && (
+          <button
+            onClick={onToggleStrip}
+            aria-label={stripHidden ? "Mostrar participantes" : "Esconder participantes"}
+            aria-pressed={stripHidden}
+            title={stripHidden ? "Mostrar participantes" : "Esconder participantes: o plugin fica com o palco todo"}
+            className={iconButton}
+          >
+            {stripHidden ? <PanelBottomOpen className="size-4" /> : <PanelBottomClose className="size-4" />}
+          </button>
+        )}
         <button onClick={onMinimize} aria-label="Minimizar" title="Minimizar" className={iconButton}>
           <Minimize2 className="size-4" />
         </button>
@@ -287,9 +301,10 @@ export function PluginView({ room, info, token, session, onMinimize, onClose, on
           title={plugin.name}
           // Its own origin keeps it away from the room's: what it can do is what the bridge above allows.
           sandbox={`allow-scripts ${opaque ? "" : "allow-same-origin "}allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads`}
-          // Games want controllers, sound without a click first, and full screen.
-          allow="clipboard-read; clipboard-write; gamepad; autoplay; fullscreen"
-          className="min-h-0 w-full flex-1 border-0 bg-white"
+          // Games want controllers, sound without a click first, and full screen; video plugins a floating window too.
+          allow="clipboard-read; clipboard-write; gamepad; autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+          className="min-h-0 w-full flex-1 border-0 bg-black"
         />
       ) : (
         <div className="grid min-h-0 flex-1 place-items-center bg-canvas p-4 text-center text-sm text-soft">
