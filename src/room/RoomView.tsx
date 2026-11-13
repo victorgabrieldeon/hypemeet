@@ -157,6 +157,8 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
   const canVideo = mayPublish(local.permissions, Track.Source.Camera);
   const canScreen = mayPublish(local.permissions, Track.Source.ScreenShare);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
+  // A pinned plugin can take the whole stage, the strip of everyone else hidden: video plugins like HypeTv.
+  const [stripHidden, setStripHidden] = useState(false);
   const [busy, setBusy] = useState<"mic" | "camera" | "screen" | null>(null);
   const [screenPrefs, setScreenPrefs] = useState(loadScreenPrefs);
   const [screensOpen, setScreensOpen] = useState(false);
@@ -588,9 +590,13 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
                   onMinimize={() => setPinnedId(null)}
                   onClose={() => closePlugin(session.info.id)}
                   onToast={(text, tone) => setToast({ text, tone })}
+                  stripHidden={stripHidden}
+                  onToggleStrip={() => setStripHidden((hidden) => !hidden)}
                   className={pinnedId === pluginTileId(session.info.id) ? "min-h-0 flex-1" : "hidden"}
                 />
               ))}
+            {/* Hidden, not unmounted: tiles keep their tracks and nobody's audio drops. */}
+            <div className={pinnedView && stripHidden ? "hidden" : "contents"}>
             {discordPip ? (
               !pinnedView && <PipStage tile={pipTile} />
             ) : (
@@ -612,6 +618,7 @@ export function RoomView({ room, token, chat, previews, info, initialDevices, on
                 </PreviewsProvider>
               </InkProvider>
             )}
+            </div>
           </div>
           <ChatPanel
             chat={chat}
